@@ -1,174 +1,175 @@
-# Issue テンプレート・抽出ルール詳細
+# Issue Template & Extraction Rules
 
-## Issue本文テンプレート
+## Issue Body Template
 
-以下のテンプレートに従いIssue本文を組み立てる。
-`{...}` は仕様書から抽出した値で置換する。セクションが存在しない場合はそのセクションごと省略する。
+Compose the issue body following this template.
+Replace `{...}` with values extracted from spec files. Omit entire sections if the source section doesn't exist.
 
 ```markdown
-## 概要
+## Overview
 
-**⚠️ 重要: 実装を開始する前に、必ず以下の仕様書を熟読してください。**
+**Warning: Read the spec documents thoroughly before starting implementation.**
 
-{requirement.mdの概要セクション}
+{Overview section from requirement.md}
 
-## 仕様書
+## Spec Documents
 
-`.specs/{FEATURE_DIR}/` ディレクトリ参照
+See `.specs/{FEATURE_DIR}/` directory
 
-- [要件定義書](../blob/{BRANCH}/.specs/{FEATURE_DIR}/requirement.md)
-- [設計書](../blob/{BRANCH}/.specs/{FEATURE_DIR}/design.md)
-- [タスクリスト](../blob/{BRANCH}/.specs/{FEATURE_DIR}/tasks.md)
+- [Requirements Document](../blob/{BRANCH}/.specs/{FEATURE_DIR}/requirement.md)
+- [Design Document](../blob/{BRANCH}/.specs/{FEATURE_DIR}/design.md)
+- [Task List](../blob/{BRANCH}/.specs/{FEATURE_DIR}/tasks.md)
 
-## 主な機能
+## Key Features
 
-{requirement.mdから主要機能を箇条書きで抽出}
-- 機能1
-- 機能2
-- 機能3
+{Extract major features as bullet list from requirement.md}
+- Feature 1
+- Feature 2
+- Feature 3
 
-## 実装チェックリスト
+## Implementation Checklist
 
-{tasks.mdのフェーズごとにグループ化}
+{Group by phase from tasks.md}
 
-### フェーズ1: {フェーズ名}（{期間}）
-- [ ] タスク1
-- [ ] タスク2
+### Phase 1: {Phase Name} ({Duration})
+- [ ] Task 1
+- [ ] Task 2
 
-### フェーズ2: {フェーズ名}（{期間}）
-- [ ] タスク1
-- [ ] タスク2
+### Phase 2: {Phase Name} ({Duration})
+- [ ] Task 1
+- [ ] Task 2
 
-## 技術スタック
+## Technology Stack
 
-{requirement.mdの技術要件から抽出}
-- 技術1
-- 技術2
+{Extract from tech requirements in requirement.md}
+- Tech 1
+- Tech 2
 
-## 完了条件
+## Definition of Done
 
-{tasks.mdの「完了の定義」から抽出。なければ以下のデフォルト}
-- [ ] すべての必須機能が実装されている
-- [ ] テストが通過している
-- [ ] コードレビューが完了している
+{Extract from "Definition of Done" in tasks.md. Use defaults if not found}
+- [ ] All required features are implemented
+- [ ] Tests are passing
+- [ ] Code review is complete
 
-## 注意事項
+## Notes
 
-{tasks.mdの「注意事項」から抽出。なければ省略}
+{Extract from "Notes" in tasks.md. Omit if not found}
 ```
 
-## Issueタイトル
+## Issue Title
 
 ```
 [Feature] {FEATURE_NAME}
 ```
 
-`FEATURE_NAME` の決定:
-1. requirement.md の最初の `# ` 行から抽出
-2. 「要件定義書」「要件定義」「Requirements」等の接尾辞を除去
-3. 先頭・末尾の空白をトリム
+Determining `FEATURE_NAME`:
+1. Extract from the first `# ` line in requirement.md
+2. Strip suffixes: `要件定義書`, `要件定義`, `仕様書`, `Requirements`, `Specification`, `Spec`, `Requirements Document`
+3. Trim leading/trailing whitespace
 
-例:
+Examples:
+- `# Member Management Requirements Document` → `[Feature] Member Management`
 - `# メンバー管理機能 要件定義書` → `[Feature] メンバー管理機能`
 - `# Authentication System Requirements` → `[Feature] Authentication System`
 
-## 抽出ルール
+## Extraction Rules
 
-### タイトル抽出
+### Title Extraction
 
-requirement.md の最初の `# ` で始まる行を取得し、以下のパターンを除去:
+Get the first line starting with `# ` in requirement.md and strip these patterns:
 - `要件定義書`, `要件定義`, `仕様書`
-- `Requirements`, `Specification`, `Spec`
+- `Requirements`, `Requirements Document`, `Specification`, `Spec`
 
-### 概要抽出
+### Overview Extraction
 
-requirement.md で `## 概要` または `## Overview` から次の `## ` までの内容を取得。
-見出し行自体は除外する。
+From requirement.md, get content between `## Overview` or `## 概要` and the next `## `.
+Exclude the heading line itself.
 
-### 主要機能抽出
+### Key Features Extraction
 
-requirement.md から以下のパターンにマッチする行を収集:
-- `### 1.`, `### 2.` ... のような番号付きセクション → セクション名を箇条書き化
-- `### 機能名` のようなセクション → セクション名を箇条書き化
+Collect lines from requirement.md matching these patterns:
+- `### 1.`, `### 2.` ... (numbered sections) → convert section name to bullet item
+- `### Feature Name` style sections → convert to bullet item
 
-例: `### 1. メンバー一覧画面` → `- メンバー一覧画面`
+Example: `### 1. Member List Screen` → `- Member List Screen`
 
-### フェーズ・タスク抽出
+### Phase & Task Extraction
 
-tasks.md から以下の構造を解析:
+Parse tasks.md for this structure:
 
 ```
-## フェーズ1: 基盤構築（1-2日）  ← フェーズ見出し
-### 1.1 型定義の作成             ← タスク見出し（チェックリスト項目に）
-- [ ] サブタスク1               ← 無視（粒度が細かすぎる）
+## Phase 1: Foundation (1-2 days)    ← Phase heading
+### 1.1 Create Type Definitions      ← Task heading (becomes checklist item)
+- [ ] Subtask 1                      ← Ignored (too granular)
 ```
 
-抽出方法:
-- `## フェーズ` または `## Phase` で始まる行 → フェーズ見出し
-- フェーズ内の `### ` で始まる行 → チェックリスト項目 `- [ ] {タスク名}`
-- `- [ ]` のサブタスクは含めない（Issue本文の肥大化を防ぐ）
+Extraction method:
+- Lines starting with `## Phase` or `## フェーズ` → phase headings
+- `### ` lines within a phase → checklist items `- [ ] {task name}`
+- `- [ ]` subtasks are NOT included (prevents issue body bloat)
 
-### 技術スタック抽出
+### Tech Stack Extraction
 
-requirement.md で以下のセクションを検索（優先順）:
-1. `## 技術要件`
-2. `## 技術スタック`
-3. `## Technology Stack`
-4. `## Technical Requirements`
+Search requirement.md for these sections (in priority order):
+1. `## Technology Stack`
+2. `## Technical Requirements`
+3. `## 技術要件`
+4. `## 技術スタック`
 
-セクション内の箇条書き項目をそのまま使用。
+Use bullet items from the section as-is.
 
-### 完了条件抽出
+### Done Criteria Extraction
 
-tasks.md で `## 完了の定義` または `## Definition of Done` セクションを検索。
-見つからない場合はデフォルト値を使用:
+Search tasks.md for `## Definition of Done` or `## 完了の定義` section.
+If not found, use defaults:
 
 ```markdown
-- [ ] すべての必須機能が実装されている
-- [ ] テストが通過している
-- [ ] コードレビューが完了している
+- [ ] All required features are implemented
+- [ ] Tests are passing
+- [ ] Code review is complete
 ```
 
-### 注意事項抽出
+### Notes Extraction
 
-tasks.md で `## 注意事項` または `## Notes` セクションを検索。
-見つからない場合はこのセクションを省略。
+Search tasks.md for `## Notes` or `## 注意事項` section.
+Omit this section entirely if not found.
 
-## gh issue create コマンド構築
+## gh issue create Command
 
 ```bash
 gh issue create \
   --title "[Feature] {FEATURE_NAME}" \
   --body "$(cat <<'EOF'
-{組み立てたIssue本文}
+{Composed issue body}
 EOF
 )" \
   ${LABELS:+--label "$LABELS"} \
   ${ASSIGNEE:+--assignee "$ASSIGNEE"}
 ```
 
-ラベルが指定されている場合: `--label "feature,spec-generated"`
-担当者が指定されている場合: `--assignee "username"`
+With labels: `--label "feature,spec-generated"`
+With assignee: `--assignee "username"`
 
-## Projectへの追加
+## Adding to Project
 
-Issue作成後、`--project` が指定されている場合:
+After issue creation, if `--project` is specified:
 
 ```bash
 gh project item-add {PROJECT_NUMBER} --owner {ORG} --url {ISSUE_URL}
 ```
 
-`{ORG}` は `gh repo view --json owner -q '.owner.login'` で取得。
+`{ORG}` is obtained via `gh repo view --json owner -q '.owner.login'`.
 
-## 仕様書リンクのブランチ
+## Spec Link Branch
 
-仕様書へのリンクは以下の形式:
+Links to spec files use this format:
 ```
 ../blob/{BRANCH}/.specs/{FEATURE_DIR}/requirement.md
 ```
 
-`{BRANCH}` の決定順:
-1. `--branch` 引数
-2. `.specs/.config.yml` の `default-branch`
-3. CLAUDE.md のGitワークフロー設定
-4. デフォルト: `main`
+`{BRANCH}` resolution order:
+1. `--branch` argument
+2. `.specs/.config.yml` `default-branch`
+3. CLAUDE.md Git workflow settings
+4. Default: `main`

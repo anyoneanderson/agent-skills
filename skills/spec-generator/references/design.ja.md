@@ -36,11 +36,7 @@ find . -type f \( -name "*auth*" -o -name "*Auth*" \) -not -path "*/node_modules
 find . -type d \( -name "models" -o -name "types" -o -name "entities" \) -not -path "*/node_modules/*"
 ```
 
-Serena MCPで詳細調査:
-```
-mcp__serena__get_symbols_overview('ファイルパス')
-mcp__serena__find_symbol('クラス名', include_body: true)
-```
+コード解析ツールが利用可能な場合は、シンボル・クラス・モジュール間の関係をより深く分析するために活用する。
 
 ### 3. 設計判断（AskUserQuestion 活用）
 
@@ -202,12 +198,3 @@ erDiagram
 - [ ] 非同期処理
 - [ ] 管理画面・ダッシュボード
 - [ ] バックアップ・リストア機能
-
-## MCP活用
-
-| 状況 | 使用MCP |
-|------|---------|
-| 複雑なアーキテクチャ決定 | Sequential |
-| フレームワークパターン | Context7 |
-| 既存コードとの整合性 | Serena |
-| UI/UXコンポーネント設計 | Magic |

@@ -1,86 +1,92 @@
 ---
 name: spec-to-issue
 description: |
-  仕様書からGitHub Issueを自動生成 / Create GitHub Issue from spec documents
+  Create GitHub Issue from spec documents — Auto-generate structured Feature Issues from specifications.
 
-  .specs/{feature}/ 配下の仕様書（requirement.md, design.md, tasks.md）を解析し、
-  構造化されたFeature Issueを gh issue create で生成する。
-  spec-workflowで作成した仕様書のIssue化に最適。
-
-  日本語トリガー:
-  - 「仕様書をIssueにして」「Issueに登録して」「specからIssue作成」
-  - 「仕様書からIssue生成」「specをIssueに変換」
-  - spec-workflow完了後に「これをIssueにして」「Issueにして」
+  Analyzes spec documents (requirement.md, design.md, tasks.md) in .specs/{feature}/ and
+  generates a structured Feature Issue via gh issue create.
+  Best used with specs created by spec-generator.
 
   English triggers:
   - "Create issue from spec", "Register spec as issue"
   - "Convert spec to GitHub issue", "Publish spec to issue"
-  - After spec-workflow: "Turn this into an issue"
+  - After spec-generator: "Turn this into an issue"
+
+  日本語トリガー:
+  - 「仕様書をIssueにして」「Issueに登録して」「specからIssue作成」
+  - 「仕様書からIssue生成」「specをIssueに変換」
+  - spec-generator完了後に「これをIssueにして」「Issueにして」
+license: MIT
 ---
 
-# spec-to-issue - 仕様書→GitHub Issue生成
+# spec-to-issue — Spec to GitHub Issue
 
-仕様書ディレクトリ `.specs/{feature}/` からGitHub Issueを自動生成する。
+Auto-generate GitHub Issues from spec directories (`.specs/{feature}/`).
 
-## 言語ルール
+## Language Rules
 
-1. 入力言語を自動判定 → 同じ言語で出力
-2. 日本語で指示 → 日本語でIssue生成
-3. English input → English issue
+1. **Auto-detect input language** → output in the same language
+2. Japanese input → Japanese issue, use `references/issue-template.ja.md` as template reference
+3. English input → English issue, use `references/issue-template.md` as template reference
+4. Explicit override takes priority
 
-## 実行フロー
+**Reference file selection**: Based on the detected output language, use the corresponding template:
+- English → `references/issue-template.md`
+- Japanese → `references/issue-template.ja.md`
 
-### 1. 仕様書ディレクトリの特定
+## Execution Flow
 
-**引数あり**: `spec-to-issue auth-feature` → `.specs/auth-feature/` を使用
+### 1. Locate Spec Directory
 
-**引数なし**: `.specs/` 配下を走査し一覧表示 → ユーザーに選択を求める
+**With argument**: `spec-to-issue auth-feature` → use `.specs/auth-feature/`
+
+**Without argument**: Scan `.specs/` and present a list → ask user to select
 
 ```
-.specs/ 配下の仕様書:
+Spec directories found in .specs/:
 1. auth-feature (requirement.md, design.md, tasks.md)
 2. member-management (requirement.md, tasks.md)
-どの仕様書からIssueを作成しますか？
+Which spec do you want to create an issue from?
 ```
 
-### 2. ファイル検証
+### 2. File Validation
 
-必須: `requirement.md` が存在すること。なければエラー終了。
-推奨: `tasks.md`（なければ基本チェックリストを生成）
-任意: `design.md`（あれば補足情報として使用）
+Required: `requirement.md` must exist. Otherwise, exit with error.
+Recommended: `tasks.md` (if missing, generate a basic checklist)
+Optional: `design.md` (used as supplementary info if present)
 
-### 3. 仕様書解析
+### 3. Spec Analysis
 
-各ファイルから以下を抽出:
+Extract from each file:
 
 **requirement.md:**
-- タイトル: 最初の `# ` 行から「要件定義書」等の接尾辞を除去
-- 概要: `## 概要` セクション
-- 主な機能: `### 数字.` で始まるセクション名
-- 技術スタック: `## 技術要件` または `## 技術スタック` セクション
+- Title: First `# ` line, strip suffixes like "Requirements", "要件定義書"
+- Overview: `## Overview` or `## 概要` section
+- Key features: Sections starting with `### 1.`, `### 2.`, etc.
+- Tech stack: `## Technology Stack` or `## 技術要件` section
 
 **tasks.md:**
-- フェーズ: `## フェーズN:` で始まる行
-- タスク: 各フェーズ内の `### ` セクション名を簡略化して抽出
-- 完了条件: `## 完了の定義` セクション
-- 注意事項: `## 注意事項` セクション
+- Phases: Lines starting with `## Phase` or `## フェーズ`
+- Tasks: `### ` headings within each phase, simplified for checklist
+- Done criteria: `## Definition of Done` or `## 完了の定義` section
+- Notes: `## Notes` or `## 注意事項` section
 
-**design.md（任意）:**
-- アーキテクチャ概要（補足情報として）
+**design.md (optional):**
+- Architecture overview (as supplementary info)
 
-### 4. プロジェクト設定の解決
+### 4. Resolve Project Settings
 
-以下の優先順位でデフォルト値を決定:
+Determine defaults in this priority order:
 
 ```
-コマンド引数 > .specs/.config.yml > CLAUDE.md > ビルトインデフォルト
+Command arguments > .specs/.config.yml > CLAUDE.md > Built-in defaults
 ```
 
-**CLAUDE.md から読み取る項目:**
-- ブランチ名: Git Workflow セクションのPR送信先ブランチ → `--branch` デフォルト
-- GitHub Organization: リポジトリURLから推定
+**From CLAUDE.md:**
+- Branch name: PR target branch from Git Workflow section → `--branch` default
+- GitHub Organization: Inferred from repository URL
 
-**.specs/.config.yml（任意）:**
+**.specs/.config.yml (optional):**
 ```yaml
 default-branch: develop
 default-labels: [feature, spec-generated]
@@ -88,78 +94,83 @@ project-number: 7
 assignee: username
 ```
 
-### 5. Issue本文の組み立て
+### 5. Compose Issue Body
 
-テンプレート詳細: [references/issue-template.md](references/issue-template.md)
+See template details in the appropriate reference file (based on Language Rules):
+- English: [references/issue-template.md](references/issue-template.md)
+- Japanese: [references/issue-template.ja.md](references/issue-template.ja.md)
 
-### 6. Issue生成
+### 6. Create Issue
 
-**--preview なし（デフォルト）**: 解析結果を簡潔に表示し `gh issue create` を実行
-
-```
-📋 Issue生成:
-  タイトル: [Feature] メンバー管理機能
-  ラベル: feature, spec-generated
-  フェーズ数: 3
-  タスク数: 12
-→ gh issue create 実行中...
-✅ Issue #42 を作成しました: https://github.com/org/repo/issues/42
-```
-
-**--preview あり**: Issue本文全体を表示し、確認後に実行
-
-### 7. 追加アクション（オプション）
-
-- `--label`: 指定ラベルを付与
-- `--project`: `gh project item-add` でProjectボードに追加
-- `--assignee`: 担当者を設定
-
-## オプション
-
-| オプション | 説明 | デフォルト |
-|-----------|------|-----------|
-| `--preview` | Issue本文を表示して確認を求める | OFF |
-| `--label <labels>` | カンマ区切りでラベル付与 | `.config.yml` の値またはなし |
-| `--project <number>` | GitHub Projectに追加 | `.config.yml` の値またはなし |
-| `--branch <name>` | 仕様書リンクのベースブランチ | CLAUDE.md準拠 or `main` |
-| `--assignee <user>` | 担当者を指定 | `.config.yml` の値またはなし |
-
-## spec-workflow との統合
-
-spec-workflow の `full` フェーズ完了時、以下を提案:
+**Without --preview (default)**: Show a brief summary and execute `gh issue create`
 
 ```
-仕様書3点セットの生成が完了しました。
-→ このままGitHub Issueに登録しますか？ (Y/n)
+Creating Issue:
+  Title: [Feature] Member Management
+  Labels: feature, spec-generated
+  Phases: 3
+  Tasks: 12
+→ Running gh issue create...
+Issue #42 created: https://github.com/org/repo/issues/42
 ```
 
-Yes の場合、spec-to-issue を同じディレクトリで実行する。
+**With --preview**: Display the full issue body, confirm, then execute
 
-## エラーハンドリング
+### 7. Additional Actions (optional)
 
-| 状況 | 対応 |
-|------|------|
-| `.specs/` が存在しない | エラー: 仕様書ディレクトリが見つかりません |
-| `requirement.md` がない | エラー: requirement.md は必須です |
-| `tasks.md` がない | 警告: 基本チェックリストで代替 |
-| `gh` CLI未認証 | エラー: `gh auth login` を案内 |
-| セクションが見つからない | デフォルト値で代替、警告を表示 |
+- `--label`: Apply specified labels
+- `--project`: Add to GitHub Project board via `gh project item-add`
+- `--assignee`: Set assignee
 
-## 使用例
+## Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--preview` | Display issue body for confirmation | OFF |
+| `--label <labels>` | Comma-separated labels | `.config.yml` value or none |
+| `--project <number>` | Add to GitHub Project | `.config.yml` value or none |
+| `--branch <name>` | Base branch for spec links | CLAUDE.md or `main` |
+| `--assignee <user>` | Set assignee | `.config.yml` value or none |
+
+## Integration with spec-generator
+
+After spec-generator's `full` phase completes, suggest:
 
 ```
-# 引数指定で実行
+All three spec documents have been generated.
+→ Create a GitHub Issue from them? (Y/n)
+```
+
+If yes, run spec-to-issue on the same directory.
+
+## Error Handling
+
+| Situation | Response |
+|-----------|----------|
+| `.specs/` does not exist | Error: Spec directory not found |
+| `requirement.md` missing | Error: requirement.md is required |
+| `tasks.md` missing | Warning: Use basic checklist as fallback |
+| `gh` CLI not authenticated | Error: Guide user to `gh auth login` |
+| Section not found | Use default value, show warning |
+
+## Usage Examples
+
+```
+# With argument
 /spec-to-issue auth-feature
 
-# 自動検出で選択
+# Auto-detect and select
 /spec-to-issue
 
-# プレビュー付き
+# With preview
 /spec-to-issue auth-feature --preview
 
-# ラベルとProject付き
+# With labels and Project
 /spec-to-issue auth-feature --label "feature,priority:high" --project 7
 
-# spec-workflow後に続けて
+# After spec-generator
+"Create full spec for todo-app" → done → "Turn this into an issue"
+
+# Japanese
 「仕様書を全部作って」→ 完了 →「これをIssueにして」
 ```
