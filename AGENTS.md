@@ -52,6 +52,8 @@ This repository follows a bilingual (English/Japanese) pattern:
 - `*.md` — English version (primary)
 - `*.ja.md` — Japanese version
 
+**SKILL.md body must be written in English.** Use a Language Rules section to define auto-detection and reference file selection for Japanese support.
+
 Skills should auto-detect the user's language and reference the appropriate files.
 
 ## Code Style
@@ -60,6 +62,8 @@ Skills should auto-detect the user's language and reference the appropriate file
 - Avoid hardcoding tool names or MCP server references — use generic descriptions instead
 - Keep SKILL.md under 500 lines
 - Use AskUserQuestion for interactive decisions, not free-form text prompts
+
+For detailed SKILL.md authoring conventions, see [docs/skill-style-guide.md](docs/skill-style-guide.md).
 
 ## Testing
 

@@ -404,7 +404,8 @@ options:
 ```
 question: "Task list generated. What's next?"
 options:
-  - "Create a GitHub Issue" → invoke spec-to-issue skill
+  - "Run spec-inspect (quality check)" → invoke spec-inspect skill
+  - "Skip to GitHub Issue" → invoke spec-to-issue skill
   - "Review and revise" → revision dialogue
   - "Done for now" → end
 ```
@@ -413,7 +414,8 @@ options:
 ```
 question: "All three spec documents are complete."
 options:
-  - "Create a GitHub Issue" → invoke spec-to-issue skill
+  - "Run spec-inspect (quality check)" → invoke spec-inspect skill
+  - "Skip to GitHub Issue" → invoke spec-to-issue skill
   - "Review and revise specific document" → ask which document to revise
   - "Done for now" → end
 ```
