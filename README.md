@@ -9,6 +9,7 @@ Reusable AI agent skills for specification-driven development.
 | Skill | Description |
 |-------|-------------|
 | [spec-generator](skills/spec-generator/) | Generate project requirements, design documents, and task lists from conversations or prompts |
+| [spec-inspect](skills/spec-inspect/) | Validate specification quality and detect issues before implementation |
 | [spec-to-issue](skills/spec-to-issue/) | Create structured GitHub Issues from spec documents |
 
 ## Installation
@@ -19,6 +20,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 
 # Install a specific skill
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 ```
 
@@ -31,6 +33,14 @@ npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 > Design the architecture for todo-app
 > Create task list for todo-app
 > Create full spec for an e-commerce platform
+```
+
+### Validate specification quality
+
+```
+> Inspect specs
+> Check specification quality
+> Validate requirements
 ```
 
 ### Create a GitHub Issue from specs
@@ -47,7 +57,13 @@ npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
    - `design.md` — Technical design document
    - `tasks.md` — Implementation task list
 
-2. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue with checklists, links to spec files, and completion criteria.
+2. **spec-inspect** validates the specification quality:
+   - Verifies requirement ID consistency
+   - Detects missing sections and contradictions
+   - Identifies ambiguous expressions
+   - Generates `inspection-report.md` with findings
+
+3. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue with checklists, links to spec files, and completion criteria.
 
 ## Compatibility
 
