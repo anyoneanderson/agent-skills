@@ -11,32 +11,39 @@ description: |
 license: MIT
 ---
 
-# spec-inspect - 仕様書品質チェッカー
+# spec-inspect — Specification Quality Checker
 
-spec-generatorで生成された仕様書（requirement.md, design.md, tasks.md）の品質を自動的に検証し、問題をレポートします。
+Automatically validates spec-generator output (requirement.md, design.md, tasks.md) and reports quality issues.
 
-## 実行タイミング
+## Language Rules
 
-- spec-generator完了後（自動提案）
-- spec-to-issueでIssue登録する前
-- 仕様書を更新した後
+1. **Auto-detect input language** → output in the same language
+2. Japanese input → Japanese report output
+3. English input → English report output
+4. Explicit override takes priority (e.g., "in English", "日本語で")
 
-## 実行フロー
+## When to Run
 
-### ステップ1: プロジェクトパスの確認
+- After spec-generator completes (auto-suggested)
+- Before registering Issues with spec-to-issue
+- After updating specification documents
 
-ユーザーから提供されたプロジェクトパス、または現在のコンテキストから`.specs/{project-name}/`のパスを特定します。
+## Execution Flow
 
-**確認事項**:
-- `.specs/{project-name}/requirement.md` が存在するか
-- `.specs/{project-name}/design.md` が存在するか
-- `.specs/{project-name}/tasks.md` が存在するか
+### Step 1: Locate Project Path
 
-ファイルが存在しない場合はエラーメッセージを表示して終了。
+Identify the `.specs/{project-name}/` path from user input or current context.
 
-### ステップ2: 仕様書の読み込み
+**Validation**:
+- `.specs/{project-name}/requirement.md` exists
+- `.specs/{project-name}/design.md` exists
+- `.specs/{project-name}/tasks.md` exists
 
-Readツールを使用して3つの仕様書を読み込みます。
+If any file is missing, display an error message and exit.
+
+### Step 2: Read Specifications
+
+Read all three specification files:
 
 ```
 requirement_content = Read(".specs/{project-name}/requirement.md")
@@ -44,393 +51,399 @@ design_content = Read(".specs/{project-name}/design.md")
 tasks_content = Read(".specs/{project-name}/tasks.md")
 ```
 
-### ステップ3: 品質チェックの実行
+### Step 3: Run Quality Checks
 
-以下のチェックを順次実行します。検出した問題はissuesリストに追加します。
+Execute the following checks sequentially. Add detected issues to an issues list.
 
-#### チェック1: 要件ID整合性検証 [CRITICAL]
+#### Check 1: Requirement ID Consistency [CRITICAL]
 
-**目的**: requirement.mdで定義されている要件IDが、design.mdとtasks.mdで正しく参照されているか検証
+**Purpose**: Verify that requirement IDs defined in requirement.md are correctly referenced in design.md and tasks.md.
 
-**手順**:
-1. requirement.mdから要件IDを抽出（正規表現: `\[(REQ|NFR|CON|ASM|T)-\d{3,}\]`）
-2. design.mdから参照されている要件IDを抽出
-3. tasks.mdから参照されている要件IDを抽出
+**Procedure**:
+1. Extract requirement IDs from requirement.md (regex: `\[(REQ|NFR|CON|ASM|T)-\d{3,}\]`)
+2. Extract referenced requirement IDs from design.md
+3. Extract referenced requirement IDs from tasks.md
 
-**検出パターン**:
-- **[CRITICAL]** design.mdまたはtasks.mdで参照されているが、requirement.mdに存在しない要件ID
+**Detection patterns**:
+
+- **[CRITICAL]** ID referenced in design.md or tasks.md but not defined in requirement.md
   ```
-  ID: CRITICAL-{連番}
-  Title: "要件ID {req_id} が存在しない"
-  File: design.md または tasks.md
-  Line: {該当行番号}
-  Description: "{req_id} は {file} で参照されているが requirement.md に定義されていません"
-  Suggestion: "requirement.md に {req_id} を追加するか、参照を修正してください"
+  ID: CRITICAL-{seq}
+  Title: "Requirement ID {req_id} does not exist"
+  File: design.md or tasks.md
+  Line: {line_number}
+  Description: "{req_id} is referenced in {file} but not defined in requirement.md"
+  Suggestion: "Add {req_id} to requirement.md or fix the reference"
   ```
 
-- **[INFO]** requirement.mdに定義されているが、どこからも参照されていない要件ID
+- **[INFO]** ID defined in requirement.md but never referenced
   ```
-  ID: INFO-{連番}
-  Title: "要件ID {req_id} が未参照"
+  ID: INFO-{seq}
+  Title: "Requirement ID {req_id} is unreferenced"
   File: requirement.md
-  Line: {該当行番号}
-  Description: "{req_id} はどの設計・タスクにも紐づいていません"
-  Suggestion: "この要件は実装不要ですか？不要な場合は削除を検討してください"
+  Line: {line_number}
+  Description: "{req_id} is not linked to any design or task"
+  Suggestion: "Is this requirement still needed? Consider removing if unnecessary"
   ```
 
-- **[WARNING]** 要件カバレッジが不十分（[NFR-XXX]含む全要件IDのdesign.md参照率を算出し、100%未満の場合に警告）
+- **[WARNING]** Insufficient requirement coverage (calculate design.md reference rate for all IDs including [NFR-XXX]; warn if below 100%)
   ```
-  ID: WARNING-{連番}
-  Title: "要件カバレッジ: {covered}/{total} ({percentage}%)"
-  Description: "以下の要件がdesign.mdで言及されていません: {未カバー要件リスト}"
-  Suggestion: "design.mdに各要件への対応方針を記載してください"
+  ID: WARNING-{seq}
+  Title: "Requirement coverage: {covered}/{total} ({percentage}%)"
+  Description: "The following requirements are not mentioned in design.md: {uncovered_list}"
+  Suggestion: "Add coverage for each requirement in design.md"
   ```
 
-#### チェック2: 必須セクション検証 [WARNING]
+#### Check 2: Required Section Validation [WARNING]
 
-**目的**: 各仕様書が標準的な構造を持っているか確認
+**Purpose**: Confirm each spec has the expected structure.
 
-**必須セクション定義**:
-- **requirement.md**: 概要、機能要件、非機能要件、制約事項、前提条件
-- **design.md**: アーキテクチャ概要、技術スタック、データモデル、API設計（該当する場合）、セキュリティ設計
-- **tasks.md**: タスク一覧、優先順位
+**Required sections**:
+- **requirement.md**: Overview, Functional Requirements, Non-Functional Requirements, Constraints, Assumptions
+- **design.md**: Architecture Overview, Technology Stack, Data Model, API Design (if applicable), Security Design
+- **tasks.md**: Task List, Priority
 
-**手順**:
-1. 各ファイルのMarkdown見出し（# または ##）を抽出
-2. 必須セクションが存在するか確認（部分一致、大文字小文字を区別しない）
+**Procedure**:
+1. Extract Markdown headings (`#` or `##`) from each file
+2. Check for required sections (partial match, case-insensitive)
 
-**検出パターン**:
-- **[WARNING]** 必須セクションが欠けている
+**Detection pattern**:
+- **[WARNING]** Required section missing
   ```
-  ID: WARNING-{連番}
-  Title: "必須セクション '{section_name}' が欠如"
+  ID: WARNING-{seq}
+  Title: "Required section '{section_name}' is missing"
   File: {filename}
   Line: 1
-  Description: "{filename} には '{section_name}' セクションが必要です"
-  Suggestion: "'{section_name}' セクションを追加してください"
+  Description: "{filename} should contain a '{section_name}' section"
+  Suggestion: "Add a '{section_name}' section"
   ```
 
-#### チェック3: 矛盾検出 [WARNING]
+#### Check 3: Contradiction Detection [WARNING]
 
-**目的**: 仕様書間で矛盾する記述を検出
+**Purpose**: Detect contradictory statements across specification documents.
 
-**検出パターン例**:
-- 技術スタックの不一致（例：requirementではPostgreSQL、designではMySQL）
-- 数値の不一致（例：requirementで「100ユーザー」、designで「1000ユーザー」）
-- APIエンドポイントの不一致
-- design.mdで設計されたコンポーネントがtasks.mdの実装予定から漏れている
+**Detection examples**:
+- Technology stack mismatch (e.g., requirement says PostgreSQL, design says MySQL)
+- Numeric mismatch (e.g., requirement says "100 users", design says "1000 users")
+- API endpoint mismatch
+- Components designed in design.md but missing from tasks.md implementation plan
 
-**手順**:
-1. requirement.mdから技術的な固有名詞を抽出（データベース名、ライブラリ名等）
-2. design.mdで同じ概念が異なる名前で言及されていないかチェック
-3. 数値データの不一致を検出
+**Procedure**:
+1. Extract technical proper nouns from requirement.md (database names, library names, etc.)
+2. Check if the same concept is referred to by a different name in design.md
+3. Detect numeric data inconsistencies
 
-**検出パターン**:
-- **[WARNING]** 矛盾する記述
+**Detection pattern**:
+- **[WARNING]** Contradictory statements
   ```
-  ID: WARNING-{連番}
-  Title: "矛盾: {概念名}"
+  ID: WARNING-{seq}
+  Title: "Contradiction: {concept}"
   File: requirement.md, design.md
-  Line: {該当行番号}
-  Description: "requirement.md では {value1}、design.md では {value2} と記載されています"
-  Suggestion: "どちらかに統一してください"
+  Line: {line_number}
+  Description: "requirement.md states {value1}, but design.md states {value2}"
+  Suggestion: "Unify to one value"
   ```
 
-#### チェック4: 曖昧な表現の検出 [INFO]
+#### Check 4: Ambiguous Expression Detection [INFO]
 
-**目的**: 実装に必要な情報が欠けている曖昧な表現を検出
+**Purpose**: Detect vague expressions that lack the specificity needed for implementation.
 
-**検出キーワード**:
-- "適切に"、"できる限り"、"なるべく"、"ある程度"
-- "高速に"、"大量の"、"多くの"（数値基準なし）
-- "検討する"、"考慮する"、"予定"（確定していない）
+**Detection keywords** (English):
+- "appropriately", "as much as possible", "reasonable", "adequate"
+- "fast", "large amount", "many" (without numeric criteria)
+- "to be determined", "under consideration", "planned" (not finalized)
 
-**手順**:
-1. 3つの仕様書全体で曖昧なキーワードを検索（Grepツール使用）
-2. 該当箇所をリスト化
+**Detection keywords** (Japanese):
+- 「適切に」「できる限り」「なるべく」「ある程度」
+- 「高速に」「大量の」「多くの」（数値基準なし）
+- 「検討する」「考慮する」「予定」（確定していない）
 
-**検出パターン**:
-- **[INFO]** 曖昧な表現
+**Procedure**:
+1. Search all three specs for ambiguous keywords
+2. List all occurrences
+
+**Detection pattern**:
+- **[INFO]** Ambiguous expression
   ```
-  ID: INFO-{連番}
-  Title: "曖昧な表現: '{keyword}'"
+  ID: INFO-{seq}
+  Title: "Ambiguous expression: '{keyword}'"
   File: {filename}
-  Line: {該当行番号}
-  Description: "'{context}' という表現は実装者によって解釈が異なります"
-  Suggestion: "具体的な数値・基準を明記してください"
+  Line: {line_number}
+  Description: "The expression '{context}' may be interpreted differently by implementors"
+  Suggestion: "Specify concrete numbers or criteria"
   ```
 
-#### チェック5: 用語の一貫性チェック [WARNING] → [REQ-003]
+#### Check 5: Terminology Consistency [WARNING]
 
-**目的**: 仕様書全体で用語が一貫して使用されているか確認
+**Purpose**: Ensure consistent terminology usage across all specifications.
 
-**検出パターン**:
-- 同じ概念を異なる用語で表現（例：「ユーザー」と「利用者」、「削除」と「除去」）
-- 略語の不統一（例：「DB」と「データベース」が混在）
-- 用語集（存在する場合）で定義された用語と異なる表現の使用
+**Detection patterns**:
+- Same concept expressed with different terms (e.g., "user" vs "member", "delete" vs "remove")
+- Inconsistent abbreviations (e.g., "DB" and "database" mixed)
+- Terms deviating from glossary definitions (if a glossary section exists)
 
-**手順**:
-1. 3つの仕様書から主要な名詞・概念を抽出
-2. 同義語・類義語のペアを検出
-3. 用語集セクションがあれば、それと照合
+**Procedure**:
+1. Extract key nouns/concepts from all three specs
+2. Detect synonym/near-synonym pairs
+3. Cross-reference with glossary section if present
 
-**出力**: `WARNING-{連番}` 「用語の揺れ: '{term1}' と '{term2}'」+ 統一推奨
+**Output**: `WARNING-{seq}` "Terminology inconsistency: '{term1}' vs '{term2}'" + recommendation to unify
 
-#### チェック6: 設計の実装計画検証 [WARNING] → [REQ-005]
+#### Check 6: Design-to-Task Coverage [WARNING]
 
-**目的**: design.mdの設計内容がtasks.mdで実装計画されているか確認
+**Purpose**: Verify that design.md components have corresponding implementation tasks in tasks.md.
 
-**検出パターン**:
-- 設計されたコンポーネント・モジュールに対応するタスクが存在しない
-- DBスキーマ設計に対応するマイグレーションタスクがない
-- API設計に対応する実装タスクがない
+**Detection patterns**:
+- Designed component/module with no corresponding task
+- DB schema design with no migration task
+- API design with no implementation task
 
-**手順**:
-1. design.mdから主要コンポーネント名・モジュール名を抽出
-2. tasks.mdで各コンポーネントに対応するタスクが存在するか確認
-3. 未カバーの設計要素をリスト化
+**Procedure**:
+1. Extract major component/module names from design.md
+2. Check if each component has a corresponding task in tasks.md
+3. List uncovered design elements
 
-**出力**: `WARNING-{連番}` 「設計要素 '{component}' に対応するタスクが未定義」
+**Output**: `WARNING-{seq}` "Design element '{component}' has no corresponding task"
 
-#### チェック7: 依存関係の検証 [WARNING] → [REQ-006]
+#### Check 7: Dependency Validation [WARNING]
 
-**目的**: タスク間の依存関係が論理的に正しいか検証
+**Purpose**: Verify that task dependencies are logically correct.
 
-**検出パターン**:
-- 循環依存（タスクAがBに依存、BがAに依存）
-- 前提タスク未定義（存在しないタスクへの依存参照）
-- 明らかに順序が逆の依存関係（例：テストタスクが実装タスクより先）
+**Detection patterns**:
+- Circular dependencies (Task A depends on B, B depends on A)
+- Undefined prerequisite tasks (dependency on non-existent task)
+- Obviously reversed dependency order (e.g., test task before implementation task)
 
-**手順**:
-1. tasks.mdからタスク間の依存関係を抽出
-2. 依存グラフを構築し循環を検出
-3. 論理的に不自然な順序を指摘
+**Procedure**:
+1. Extract inter-task dependencies from tasks.md
+2. Build dependency graph and detect cycles
+3. Flag logically inconsistent ordering
 
-**出力**: `WARNING-{連番}` 「循環依存: {taskA} ⇄ {taskB}」または「依存順序が不自然」
+**Output**: `WARNING-{seq}` "Circular dependency: {taskA} ⇄ {taskB}" or "Illogical dependency order"
 
-#### チェック8: 実装不可能な要件の警告 [WARNING] → [REQ-008]
+#### Check 8: Infeasible Requirement Warning [WARNING]
 
-**目的**: 技術的に実装が困難、または矛盾する要件を検出
+**Purpose**: Detect technically difficult or contradictory requirements.
 
-**検出パターン**:
-- 相反する非機能要件（例：「レスポンス1ms以内」と「全データ暗号化」の両立困難）
-- 技術スタックでは実現困難な機能
-- リソース制約を超える要件（例：無制限ストレージ、ゼロダウンタイム等の非現実的要件）
+**Detection patterns**:
+- Conflicting non-functional requirements (e.g., "response under 1ms" + "encrypt all data")
+- Features difficult to achieve with the chosen technology stack
+- Unrealistic resource requirements (e.g., unlimited storage, zero downtime)
 
-**出力**: `WARNING-{連番}` 「実現困難な可能性: {要件内容}」+ 代替案の提示
+**Output**: `WARNING-{seq}` "Potentially infeasible: {requirement}" + alternative suggestion
 
-#### チェック9: 要件漏れの検出 [WARNING] → [REQ-010]
+#### Check 9: Missing Requirement Detection [WARNING]
 
-**目的**: 明らかに必要だが記述されていない要件を検出
+**Purpose**: Detect clearly necessary but undocumented requirements.
 
-**検出パターン**:
-- 認証機能あり → セキュリティ要件がない
-- DB使用 → バックアップ・リカバリ要件がない
-- 外部API連携 → エラーハンドリング・リトライ要件がない
-- ファイルアップロード → サイズ制限・形式制限要件がない
-- ユーザーデータ保存 → プライバシー・データ保護要件がない
+**Detection patterns**:
+- Authentication present → no security requirements
+- Database used → no backup/recovery requirements
+- External API integration → no error handling/retry requirements
+- File upload → no size/format restrictions
+- User data storage → no privacy/data protection requirements
 
-**手順**:
-1. requirement.md/design.mdから機能の特徴を抽出
-2. 上記パターンに照合し、対応する要件の有無を確認
+**Procedure**:
+1. Extract feature characteristics from requirement.md / design.md
+2. Match against detection patterns and check for corresponding requirements
 
-**出力**: `WARNING-{連番}` 「要件漏れの可能性: {機能}に対する{要件種別}が未定義」
+**Output**: `WARNING-{seq}` "Possible missing requirement: {requirement_type} for {feature} is undefined"
 
-#### チェック10: 命名規則の一貫性チェック [INFO] → [REQ-014]
+#### Check 10: Naming Convention Consistency [INFO]
 
-**目的**: 仕様書内の命名規則が一貫しているか確認
+**Purpose**: Verify consistent naming conventions across specifications.
 
-**検出パターン**:
-- ケバブケース/キャメルケース/スネークケースの混在
-- 同一文脈での命名揺れ（例：user_id vs userId vs userID）
-- 定数・テーブル名・コンポーネント名の命名パターン違反
+**Detection patterns**:
+- Mixed kebab-case / camelCase / snake_case
+- Naming variations in the same context (e.g., `user_id` vs `userId` vs `userID`)
+- Convention violations in constants, table names, component names
 
-**手順**:
-1. design.md/tasks.mdからコード関連の名前（変数名、テーブル名、API名等）を抽出
-2. 命名パターンの統計を取り、少数派を検出
+**Procedure**:
+1. Extract code-related names (variable names, table names, API names, etc.) from design.md / tasks.md
+2. Gather naming pattern statistics and flag minority patterns
 
-**出力**: `INFO-{連番}` 「命名規則の不統一: {pattern1}({count1}件) vs {pattern2}({count2}件)」
+**Output**: `INFO-{seq}` "Naming convention inconsistency: {pattern1} ({count1} occurrences) vs {pattern2} ({count2} occurrences)"
 
-#### チェック11: ディレクトリ配置ルールの一貫性チェック [INFO] → [REQ-015]
+#### Check 11: Directory Structure Consistency [INFO]
 
-**目的**: 仕様書で定義されたディレクトリ構造・配置ルールが一貫しているか確認
+**Purpose**: Verify consistent directory structure and placement rules.
 
-**検出パターン**:
-- 類似コンポーネントの配置場所の不統一（例：`src/features/A/` vs `src/components/B/`）
-- テストファイル配置の不統一（`tests/` vs `__tests__/` 混在）
-- 設定ファイル配置の散在
+**Detection patterns**:
+- Inconsistent placement of similar components (e.g., `src/features/A/` vs `src/components/B/`)
+- Mixed test file placement (`tests/` vs `__tests__/`)
+- Scattered configuration files
 
-**出力**: `INFO-{連番}` 「ディレクトリ配置の不統一: {パターン説明}」
+**Output**: `INFO-{seq}` "Directory structure inconsistency: {pattern description}"
 
-#### チェック12: コンポーネント再発明の検出 [INFO] → [REQ-016]
+#### Check 12: Reinvention Detection [INFO]
 
-**目的**: 既存のライブラリで実現可能な機能を再実装していないか検出
+**Purpose**: Detect custom implementations of functionality already available in declared libraries.
 
-**検出パターン**:
-- design.mdの技術スタックに含まれるライブラリの機能を独自実装
-  - 例：date-fns導入済みなのに日付処理を自作
-  - 例：Zod導入済みなのにバリデーションを独自実装
-- 標準ライブラリで提供される機能の再実装
+**Detection patterns**:
+- Reimplementation of features provided by libraries in the technology stack
+  - e.g., Custom date handling when date-fns is included
+  - e.g., Custom validation when Zod is included
+- Reimplementation of standard library features
 
-**手順**:
-1. design.mdの「技術スタック」セクションからライブラリ一覧を抽出
-2. tasks.mdの実装タスクと照合し、ライブラリ機能と重複する実装を検出
+**Procedure**:
+1. Extract library list from the "Technology Stack" section of design.md
+2. Compare against implementation tasks in tasks.md to detect overlapping functionality
 
-**出力**: `INFO-{連番}` 「再発明の可能性: {タスク内容} は {ライブラリ名} で実現可能」
+**Output**: `INFO-{seq}` "Possible reinvention: {task} could be handled by {library_name}"
 
-#### チェック13: プロジェクトルール遵守チェック [WARNING] → [REQ-017]
+#### Check 13: Project Rule Compliance [WARNING]
 
-**目的**: CLAUDE.md/AGENTS.md等に記載されたプロジェクト固有ルールに仕様書が違反していないか確認
+**Purpose**: Check that specifications comply with project-specific rules defined in CLAUDE.md / AGENTS.md.
 
-**手順**:
-1. プロジェクトルートの `CLAUDE.md`、`AGENTS.md`、`.claude/` を読み込み
-2. コーディング規約・禁止パターン・必須パターンを抽出
-3. design.md/tasks.mdの記述と照合
+**Procedure**:
+1. Read `CLAUDE.md`, `AGENTS.md`, and `.claude/` from the project root
+2. Extract coding conventions, prohibited patterns, and required patterns
+3. Cross-reference with design.md / tasks.md
 
-**検出例**:
-- 「TypeScript strict mode必須」→ design.mdで言及なし
-- 「JWT認証必須」→ design.mdで別方式を採用
-- 「console.log禁止」→ tasks.mdでconsole.logを使用する記述
+**Detection examples**:
+- "TypeScript strict mode required" → not mentioned in design.md
+- "JWT authentication required" → design.md uses a different approach
+- "console.log prohibited" → tasks.md describes console.log usage
 
-**出力**: `WARNING-{連番}` 「プロジェクトルール違反: {ルール内容} に対して {違反箇所}」
+**Output**: `WARNING-{seq}` "Project rule violation: {rule} conflicts with {violation_location}"
 
-#### チェック14: API/UI命名規則の一貫性チェック [WARNING] → [REQ-021]
+#### Check 14: API / UI Naming Convention Consistency [WARNING]
 
-**目的**: API・UI命名規則の一貫性を検証（Webアプリ/API関連の仕様書の場合）
+**Purpose**: Validate API and UI naming conventions (for web app / API specifications).
 
-**検出パターン**:
-- REST APIリソース名の単数形/複数形不統一（`/user/:id` vs `/comments`）
-- 非RESTfulな動詞パス（`/getUsers` → `/users` (GET) が推奨）
-- パスのケース不統一（`/user-profile` vs `/userProfile`）
-- パスパラメータ形式の不統一（`:id` vs `{id}`）
-- 画面コンポーネント名の接尾辞不統一（`Screen` vs `Page`）
+**Detection patterns**:
+- Inconsistent singular/plural in REST resource names (`/user/:id` vs `/comments`)
+- Non-RESTful verb paths (`/getUsers` → `/users` (GET) is recommended)
+- Path casing inconsistency (`/user-profile` vs `/userProfile`)
+- Path parameter format inconsistency (`:id` vs `{id}`)
+- Screen component suffix inconsistency (`Screen` vs `Page`)
 
-**手順**:
-1. design.mdの「API設計」セクションからエンドポイント一覧を抽出
-2. tasks.mdから画面名・ルーティングを抽出
-3. 多数派パターンを「推奨」として少数派を指摘
+**Procedure**:
+1. Extract endpoint list from the "API Design" section of design.md
+2. Extract screen names / routing from tasks.md
+3. Identify majority pattern as "recommended" and flag minority pattern
 
-**出力**: `WARNING-{連番}` 「API命名規則の不統一: {詳細}」+ 統一提案
+**Output**: `WARNING-{seq}` "API naming inconsistency: {details}" + unification suggestion
 
-#### チェック15: ドキュメント更新必要性の分析 [INFO] → [REQ-024]
+#### Check 15: Documentation Update Analysis [INFO]
 
-**目的**: 仕様書の内容に基づき、既存ドキュメントの更新が必要かどうかを分析
+**Purpose**: Analyze whether existing documentation needs updating based on spec content.
 
-**対象ドキュメント**:
-- README.md、CLAUDE.md、AGENTS.md
-- CLAUDE.mdで指定されたドキュメントディレクトリ（例：`docs/`）内のファイル
+**Target documents**:
+- README.md, CLAUDE.md, AGENTS.md
+- Files in documentation directories specified by CLAUDE.md (e.g., `docs/`)
 
-**手順**:
-1. プロジェクトルートのREADME.md、CLAUDE.md、AGENTS.mdの存在を確認
-2. CLAUDE.mdを解析し、ドキュメントディレクトリの指定があれば走査
-3. 仕様書の内容と照合:
-   - 新機能 → README.mdの機能一覧に未記載
-   - 新APIエンドポイント → API仕様書に未記載
-   - 技術スタック変更 → セットアップガイド未更新
-   - コーディング規約追加 → CLAUDE.md/AGENTS.md未更新
-4. 更新が必要な箇所をDOC-XXXタスクとして提案
+**Procedure**:
+1. Check for README.md, CLAUDE.md, AGENTS.md at project root
+2. Parse CLAUDE.md for documentation directory references and scan them
+3. Cross-reference with spec content:
+   - New feature → not listed in README.md feature list
+   - New API endpoint → not in API docs
+   - Technology stack change → setup guide not updated
+   - New coding convention → CLAUDE.md / AGENTS.md not updated
+4. Propose needed updates as DOC-XXX tasks
 
-**出力**:
-- `INFO-{連番}` 「ドキュメント更新が必要: {ファイル名} - {理由}」
-- 検出結果を tasks.md への追加タスクとして提案:
+**Output**:
+- `INFO-{seq}` "Documentation update needed: {filename} — {reason}"
+- Suggest additions to tasks.md:
   ```
-  ### ドキュメント更新タスク（自動検出）
-  - [ ] DOC-001: {ファイル名}の{セクション}を更新 ({理由})
+  ### Documentation Update Tasks (auto-detected)
+  - [ ] DOC-001: Update {section} in {filename} ({reason})
   ```
 
-### ステップ4: 検査結果のサマリー生成
+### Step 4: Generate Summary
 
-検出した問題を重要度別に集計:
+Aggregate detected issues by severity:
 - Critical: {count}
 - Warning: {count}
 - Info: {count}
 
-### ステップ5: レポート生成
+### Step 5: Generate Report
 
-`.specs/{project-name}/inspection-report.md` にMarkdown形式のレポートを生成します。
+Write a Markdown report to `.specs/{project-name}/inspection-report.md`.
 
-**テンプレート**: `# spec-inspect レポート - {project_name}` → 検査サマリー（日時、対象、検出数） → 重要度別セクション（⛔ Critical / ⚠️ Warnings / ℹ️ Info）。各issue: `### [{issue.id}] {issue.title}` + ファイル:行番号、詳細、修正提案。0件の場合は「なし」と表示。
+**Template**: `# spec-inspect Report — {project_name}` → Inspection summary (date, targets, counts) → Severity sections (CRITICAL / WARNING / INFO). Each issue: `### [{issue.id}] {issue.title}` + file:line, details, suggestion. Display "None" for sections with 0 issues.
 
-Writeツールで `.specs/{project-name}/inspection-report.md` に保存。
+Save with Write tool to `.specs/{project-name}/inspection-report.md`.
 
-### ステップ6: コンソール出力
+### Step 6: Console Output
 
-ユーザーに分かりやすい形式でサマリーを表示:
+Display a user-friendly summary:
 
 ```
-✅ spec-inspect 完了
+spec-inspect complete
 
-📊 検査結果:
-  ⛔ Critical: {count} 件
-  ⚠️  Warning: {count} 件
-  ℹ️  Info: {count} 件
+Results:
+  CRITICAL: {count}
+  WARNING:  {count}
+  INFO:     {count}
 
-{Critical問題が1件以上ある場合}
-❌ Critical問題が見つかりました。実装前に修正が必要です。
+{if critical_count > 0}
+Critical issues found. Fix before implementation.
 
-{Critical問題が0件の場合}
-✅ Critical問題はありません。
+{if critical_count == 0}
+No critical issues found.
 
-📄 詳細レポート: .specs/{project-name}/inspection-report.md
+Report: .specs/{project-name}/inspection-report.md
 ```
 
-### ステップ7: 次のアクション提案（ワークフロー連携）
+### Step 7: Next Action Suggestion (Workflow Integration)
 
-検査結果に応じてAskUserQuestionで次のアクションを質問（header: "次のアクション", multiSelect: false）:
+Use AskUserQuestion to suggest the next action based on results (header: "Next action" / "次のアクション", multiSelect: false):
 
-| 検査結果 | 質問文 | 選択肢 |
-|---------|-------|--------|
-| Critical問題あり | 「Critical問題が {count} 件。修正が必要です」 | 修正してから再実行 / スキップしてIssue登録 / キャンセル |
-| Warning/Infoのみ | 「Warning が {count} 件。このままIssue登録しますか？」 | Issue登録する / 修正してから再実行 / キャンセル |
-| 問題なし | 「品質チェック完了。Issue登録しますか？」 | Issue登録する / キャンセル |
+| Result | Question | Options |
+|--------|----------|---------|
+| Critical issues | "{count} critical issue(s) found. Action needed." / "Critical問題が{count}件。修正が必要です" | "Fix and re-run" / "修正して再実行", "Skip to Issue registration" / "スキップしてIssue登録", "Cancel" / "キャンセル" |
+| Warning/Info only | "{count} warning(s) found. Proceed to Issue registration?" / "Warningが{count}件。Issue登録しますか？" | "Register Issue" / "Issue登録する", "Fix and re-run" / "修正して再実行", "Cancel" / "キャンセル" |
+| No issues | "Quality check passed. Register Issues?" / "品質チェック完了。Issue登録しますか？" | "Register Issue" / "Issue登録する", "Cancel" / "キャンセル" |
 
-**ユーザー選択に応じた処理**:
-- 「Issue登録する」/「スキップしてIssue登録」 → spec-to-issueスキルを起動
-- 「修正してから再実行」 → 終了（ユーザーが修正後に再実行）
-- 「キャンセル」 → 終了
+**Handling user selection**:
+- "Register Issue" / "Skip to Issue registration" → invoke spec-to-issue skill
+- "Fix and re-run" → exit (user fixes and re-runs manually)
+- "Cancel" → exit
 
-### ステップ8: spec-to-issueへの連携データ保存
+### Step 8: Save Handoff Data for spec-to-issue
 
-次のスキルで使用できるように、検査結果を一時ファイルに保存:
+Save inspection results as a temporary file for the next skill:
 
 ```json
 {
   "project_path": ".specs/{project-name}",
   "project_name": "{project-name}",
-  "critical_count": {count},
-  "warning_count": {count},
-  "info_count": {count},
+  "critical_count": 0,
+  "warning_count": 0,
+  "info_count": 0,
   "report_path": ".specs/{project-name}/inspection-report.md",
   "timestamp": "{ISO 8601}"
 }
 ```
 
-Writeツールで保存:
+Save with Write tool:
 ```
 Write(".specs/{project-name}/.inspection_result.json", json_content)
 ```
 
-## エラーハンドリング
+## Error Handling
 
-- **ファイル不在**: `❌ エラー: 必須ファイルが見つかりません` + 見つからないファイル名、パス確認指示
-- **読み取りエラー**: `❌ エラー: ファイルの読み取りに失敗しました` + ファイル名、エラー内容
-- **要件ID抽出エラー**: 処理を続行し `⚠️ 警告: 要件ID抽出で一部エラーが発生しました` を表示
+- **File not found**: "Error: Required file not found" + missing filename, path verification guidance
+- **Read error**: "Error: Failed to read file" + filename, error details
+- **ID extraction error**: Continue processing and display "Warning: Partial error during requirement ID extraction"
 
-## 実装上の注意点
+## Implementation Notes
 
-- **効率**: 大きなファイルはRead操作を最小限に。Grepツールで効率的に検索。各チェック完了時に進捗表示
-- **精度**: セクション名は部分一致で検索。矛盾検出では文脈を考慮。日本語・英語ともに柔軟にマッチング
-- **UX**: エラーは具体的で実行可能な修正提案を含む。emoji（⛔⚠️ℹ️✅❌📄📊）で視認性向上
+- **Efficiency**: Minimize Read operations for large files. Use search tools for efficient scanning. Show progress after each check.
+- **Accuracy**: Use partial matching for section names. Consider context for contradiction detection. Flexibly match both Japanese and English content.
+- **UX**: Errors should include concrete, actionable fix suggestions. Use emoji indicators for visual clarity.
 
-## 制約事項
+## Constraints
 
-- 日本語と英語の仕様書に対応（自然言語処理の精度には限界あり）
-- Markdown形式の仕様書のみサポート
-- spec-generatorの出力形式に依存
+- Supports specifications in both Japanese and English (natural language analysis has inherent accuracy limits)
+- Only Markdown-format specifications are supported
+- Depends on spec-generator output format
 
-## 成功基準
+## Success Criteria
 
-- 要件ID参照エラーの検出率: 100%
-- 必須セクション欠如の検出率: 100%
-- 矛盾検出の精度: ベストエフォート（LLMの推論能力に依存）
-- 処理時間: 3つの仕様書合計3000行以下で30秒以内
+- Requirement ID reference error detection rate: 100%
+- Missing required section detection rate: 100%
+- Contradiction detection accuracy: Best effort (depends on LLM reasoning capability)
+- Processing time: Under 30 seconds for combined spec files under 3000 lines
