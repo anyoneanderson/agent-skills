@@ -49,6 +49,10 @@ Read all three specification files:
 requirement_content = Read(".specs/{project-name}/requirement.md")
 design_content = Read(".specs/{project-name}/design.md")
 tasks_content = Read(".specs/{project-name}/tasks.md")
+
+# Optional: load coding rules if available
+coding_rules = Read("docs/coding-rules.md") or None
+# Also check CLAUDE.md / AGENTS.md for alternative path
 ```
 
 ### Step 3: Run Quality Checks
@@ -293,17 +297,25 @@ Execute the following checks sequentially. Add detected issues to an issues list
 
 #### Check 13: Project Rule Compliance [WARNING]
 
-**Purpose**: Check that specifications comply with project-specific rules defined in CLAUDE.md / AGENTS.md.
+**Purpose**: Check that specifications comply with project-specific rules defined in CLAUDE.md / AGENTS.md and coding-rules.md.
 
 **Procedure**:
 1. Read `CLAUDE.md`, `AGENTS.md`, and `.claude/` from the project root
-2. Extract coding conventions, prohibited patterns, and required patterns
-3. Cross-reference with design.md / tasks.md
+2. Read `docs/coding-rules.md` if it exists (or path from CLAUDE.md/AGENTS.md)
+3. Extract `[MUST]` rules from coding-rules.md
+4. Extract coding conventions, prohibited patterns, and required patterns
+5. Cross-reference with design.md / tasks.md
 
 **Detection examples**:
 - "TypeScript strict mode required" → not mentioned in design.md
 - "JWT authentication required" → design.md uses a different approach
 - "console.log prohibited" → tasks.md describes console.log usage
+
+**coding-rules.md specific checks**:
+- Naming rules vs design.md file/class naming (e.g., coding-rules: `[MUST] kebab-case` vs design: `UserProfile.service.ts`)
+- Test coverage requirements vs tasks.md test planning (e.g., coding-rules: `[MUST] 80%+ coverage` vs tasks.md has no test tasks)
+- Required libraries vs design.md technology choices (e.g., coding-rules: `[MUST] Use Prisma` vs design: direct SQL)
+- Prohibited patterns vs design.md/tasks.md descriptions
 
 **Output**: `WARNING-{seq}` "Project rule violation: {rule} conflicts with {violation_location}"
 

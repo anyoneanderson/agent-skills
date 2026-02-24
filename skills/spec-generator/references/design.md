@@ -18,7 +18,16 @@ Extract from requirements file:
 - Non-functional requirements (NFR-XXX)
 - Constraints (CON-XXX)
 
-### 2. Create Existing Asset Map
+### 2. Check for coding-rules.md
+
+If `docs/coding-rules.md` exists (or an alternative path specified in CLAUDE.md / AGENTS.md), read it before designing:
+
+- Extract `[MUST]` rules as hard constraints for the design
+- Use `[SHOULD]` rules (including skill-derived rules marked `Source: skill/*`) as design recommendations
+- Ensure naming conventions, test strategy, and technology choices align with the rules
+- Reference coding-rules.md in the "Implementation Guidelines" section of design.md
+
+### 3. Create Existing Asset Map
 
 Check existing assets before new implementation (avoid reinventing the wheel):
 
@@ -38,7 +47,7 @@ find . -type d \( -name "models" -o -name "types" -o -name "entities" \) -not -p
 
 If code intelligence tools are available in your environment, use them for deeper analysis of symbols, classes, and module relationships.
 
-### 3. Design Decisions (AskUserQuestion)
+### 4. Design Decisions (AskUserQuestion)
 
 When requirement.md alone doesn't determine the technical choices, confirm with AskUserQuestion.
 
@@ -71,7 +80,7 @@ options:
 
 **Note:** Skip if technology choices are already specified in requirement.md.
 
-### 4. Generate Design Document
+### 5. Generate Design Document
 
 #### Output Structure
 
@@ -132,7 +141,7 @@ Design:
 - Deployment considerations
 ```
 
-### 5. Multi-Perspective Review (--personas)
+### 6. Multi-Perspective Review (--personas)
 
 Evaluate the design from 7 expert perspectives:
 
@@ -146,7 +155,7 @@ Evaluate the design from 7 expert perspectives:
 | DB Engineer | Schema optimization, indexes, transactions |
 | QA Engineer | Testability, coverage, automation |
 
-### 6. Visual Design (--visual)
+### 7. Visual Design (--visual)
 
 Diagrams to generate:
 
@@ -174,7 +183,7 @@ erDiagram
     User ||--o{ Order : has
 ```
 
-### 7. Output Location
+### 8. Output Location
 
 ```
 .specs/[project-name]/design.md
