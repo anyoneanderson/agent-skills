@@ -2,7 +2,7 @@
 name: workflow-reviewer
 description: Code review agent that reviews implementation and test code against project coding rules
 tools: Read, Glob, Grep
-model: sonnet
+model: opus
 ---
 
 # Workflow Reviewer

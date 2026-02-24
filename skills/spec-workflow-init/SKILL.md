@@ -25,7 +25,7 @@ Generate a project-specific `issue-to-pr-workflow.md` through interactive dialog
 **Sub-agent template selection** (when generating agent definitions):
 - English → `references/agents/claude/workflow-*.md`
 - Japanese → `references/agents/claude/workflow-*.ja.md`
-- Codex templates: language is applied dynamically to `developer_instructions` content
+- Codex templates: English → `references/agents/codex/workflow-*.toml`, Japanese → `references/agents/codex/workflow-*.ja.toml`
 
 ## Execution Flow
 
@@ -291,11 +291,12 @@ If an existing workflow file is detected (from Step 1 or during generation):
 
 **Step 6b: Codex agents** (when `.codex/` detected):
 
-1. Read each TOML template from `references/agents/codex/workflow-*.toml`
+1. Select template language based on Language Rules:
+   - English → `references/agents/codex/workflow-*.toml`
+   - Japanese → `references/agents/codex/workflow-*.ja.toml`
 
-2. Replace placeholders in `developer_instructions`:
+2. Read each TOML template and replace placeholders in `developer_instructions`:
    - Same variables as Claude Code agents
-   - Translate `developer_instructions` content to match user's language
 
 3. Create directory and write files:
    ```bash

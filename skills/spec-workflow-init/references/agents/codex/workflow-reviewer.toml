@@ -1,4 +1,4 @@
-model = "o4-mini"
+model = "gpt-5.3-codex"
 
 developer_instructions = """
 You are the code review agent. Review implementation and test code against the project's coding rules.

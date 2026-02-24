@@ -2,7 +2,7 @@
 name: workflow-reviewer
 description: プロジェクトのコーディングルールに基づいて実装コードとテストコードをレビューするコードレビューエージェント
 tools: Read, Glob, Grep
-model: sonnet
+model: opus
 ---
 
 # ワークフローレビューエージェント

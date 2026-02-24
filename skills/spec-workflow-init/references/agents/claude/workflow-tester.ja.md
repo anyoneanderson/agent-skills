@@ -2,7 +2,7 @@
 name: workflow-tester
 description: プロジェクトのテスト方針とコーディングルールに従ってテストを作成・実行するテストエージェント
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: sonnet
+model: opus
 ---
 
 # ワークフローテストエージェント

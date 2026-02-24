@@ -1,4 +1,4 @@
-model = "o4-mini"
+model = "gpt-5.3-codex"
 
 developer_instructions = """
 You are the implementation agent. Write production code following the project's coding rules and workflow.

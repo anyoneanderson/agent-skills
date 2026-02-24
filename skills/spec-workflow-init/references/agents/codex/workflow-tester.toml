@@ -1,4 +1,4 @@
-model = "o4-mini"
+model = "gpt-5.3-codex"
 
 developer_instructions = """
 You are the test agent. Write and run tests following the project's testing strategy and coding rules.
