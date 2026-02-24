@@ -48,8 +48,26 @@ Execute implementation from specifications to pull request, following project-sp
      ```
 
 4. **Locate and read project files** (in this order):
-   - `docs/issue-to-pr-workflow.md` → workflow playbook
-   - `docs/coding-rules.md` → quality rules
+
+   **Workflow playbook** — search in order, use first found:
+   1. `docs/development/issue-to-pr-workflow.md`
+   2. `docs/issue-to-pr-workflow.md`
+   3. Fallback: `find . -name "issue-to-pr-workflow.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" | head -1`
+   4. If not found → trigger fallback (see Phase 1)
+
+   **Coding rules** — search in order, use first found:
+   1. `docs/development/coding-rules.md`
+   2. `docs/coding-rules.md`
+   3. Fallback: `find . -name "coding-rules.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" | head -1`
+   4. If not found → trigger fallback (see Phase 2)
+
+   **Project instruction files** — read all that exist:
+   - `CLAUDE.md` (project root)
+   - `src/CLAUDE.md` (source-level rules)
+   - `test/CLAUDE.md` (test-level rules)
+   - `AGENTS.md` (agent definitions)
+
+   **Spec files**:
    - `.specs/{feature}/requirement.md` → what to build
    - `.specs/{feature}/design.md` → how to build it
    - `.specs/{feature}/tasks.md` → task breakdown with checkboxes
@@ -58,21 +76,29 @@ Execute implementation from specifications to pull request, following project-sp
 
 ### Phase 1: Workflow Loading
 
-Read `docs/issue-to-pr-workflow.md` and interpret each section as instructions to follow:
+Read the workflow file (located in Step 4) and interpret each section as instructions to follow:
 
 | Workflow Section | Action |
 |-----------------|--------|
 | Development Environment | Extract setup commands, environment variables |
 | Issue Analysis and Setup | Follow branch naming convention, issue reading steps |
+| Branch Strategy / PR Target | **Extract base branch** (e.g., `develop`, `main`) and PR target branch |
 | Phased Implementation | Follow implementation order and guidelines |
+| Agent Roles / Sub-agents | Extract agent role definitions (if present) |
 | Testing | Extract test commands and coverage thresholds |
 | PR Creation and Quality Gates | Extract pre-PR checks and PR template |
 | CI/CD Monitoring | Extract CI verification commands |
+| Commit Message Rules | Extract commit message format and language requirements |
 
 **Follow sections top-to-bottom.** Replace `{variable}` placeholders with actual values (issue number, branch name, etc.). Treat "MUST" and "required" keywords as mandatory; treat "optional" and "if applicable" as conditional.
 
+**Base branch detection** — determine `{base_branch}` from the workflow:
+1. Look for "branch strategy", "base branch", "PR target", "develop", "main" in the workflow
+2. If the workflow specifies a branch (e.g., `develop`), use it as `{base_branch}`
+3. Default fallback: `main`
+
 **Fallback (no workflow file):**
-If `docs/issue-to-pr-workflow.md` does not exist:
+If no workflow file is found:
 ```
 AskUserQuestion:
   question: "Workflow file not found. Generate it?" / "ワークフローファイルが見つかりません。生成しますか？"
@@ -80,11 +106,11 @@ AskUserQuestion:
     - "Run spec-workflow-init" / "spec-workflow-initを実行"
     - "Continue without workflow" / "ワークフローなしで続行"
 ```
-If continuing without workflow, use minimal flow: Issue analysis → branch → implement → test → PR.
+If continuing without workflow, use minimal flow: Issue analysis → branch → implement → test → PR. Use `main` as `{base_branch}`.
 
 ### Phase 2: Quality Rules Loading
 
-Read `docs/coding-rules.md` and parse rule structure:
+Read the coding rules file (located in Step 4) and parse rule structure:
 
 ```
 ## {Category}
@@ -107,7 +133,7 @@ Apply rules by severity:
 - **Final gate**: Check all `[MUST]` rules across all changes
 
 **Fallback (no rules file):**
-If `docs/coding-rules.md` does not exist:
+If no coding rules file is found:
 ```
 AskUserQuestion:
   question: "Coding rules not found. Generate them?" / "コーディングルールが見つかりません。生成しますか？"
@@ -117,7 +143,21 @@ AskUserQuestion:
 ```
 If continuing without rules, use CLAUDE.md or AGENTS.md as fallback reference if available.
 
-### Phase 3: Issue Analysis
+### Phase 3: Project Instruction Loading
+
+Read all project instruction files found in Step 4 (`CLAUDE.md`, `src/CLAUDE.md`, `test/CLAUDE.md`, `AGENTS.md`).
+
+These files contain project-specific conditional rules, environment constraints, and coding conventions. Apply them with the same enforcement level as `[MUST]` rules from coding-rules.md:
+
+- **Extract conditional rules**: IF-THEN patterns, conditional instructions, and environment-specific constraints (e.g., "when using Docker...", "if the project has...") are mandatory action triggers
+- **Extract environment constraints**: Docker requirements, package manager restrictions, etc.
+- **Extract commit conventions**: Commit message language, format, co-author requirements
+- **Extract test patterns**: Required test helpers, test structure conventions
+- **Merge with coding-rules.md**: These rules supplement (not replace) coding-rules.md
+
+If neither coding-rules.md nor any CLAUDE.md files exist, proceed with framework defaults only.
+
+### Phase 4: Issue Analysis
 
 If `--issue {N}` is provided or an issue number is found in context:
 ```bash
@@ -130,19 +170,66 @@ Extract from the issue:
 - Phase/task checklists
 - Assignees and labels
 
-### Phase 4: Branch Creation
+### Phase 5: Branch Creation
 
-Follow the workflow's branch naming convention. Default pattern:
+> **🚨 BLOCKING GATE — Feature branch is MANDATORY**
+>
+> Implementation MUST NOT proceed on `main`, `master`, or `develop` branches.
+> This gate cannot be skipped. Violation = immediate stop.
+
+Follow the workflow's branch naming convention:
 ```bash
-git checkout main && git pull origin main
+git checkout {base_branch} && git pull origin {base_branch}
 git checkout -b feature/issue-{N}-{brief-description}
 ```
 
+Where `{base_branch}` is the branch detected in Phase 1 (default: `main`).
+
+**Protected branch list** — by default: `main`, `master`, `develop`.
+If the workflow file defines a "protected branches" or "branch protection" section, use that list instead.
+
 If `--resume` is active and the branch already exists, switch to it instead.
 
-### Phase 5: Spec-Driven Task Loop
+**Post-creation verification:**
+```bash
+current_branch=$(git branch --show-current)
+if [ "$current_branch" = "main" ] || [ "$current_branch" = "master" ] || [ "$current_branch" = "develop" ]; then
+  echo "🚨 ERROR: Cannot implement on protected branch: $current_branch"
+  echo "Create a feature branch first."
+  exit 1
+fi
+```
 
-Read specs in order: `requirement.md` → `design.md` → `tasks.md`
+This check MUST pass before proceeding to Phase 6. If it fails, stop and ask the user for guidance.
+
+### Phase 6: Spec-Driven Task Loop
+
+**Pre-loop: Agent role detection**
+
+If the workflow file contains an "Agent Roles", "Sub-agents", or "エージェントロール" section:
+
+1. **Parse the Role Assignment Table** — find the Markdown table with columns like `Role | Agent | Responsibility`:
+   - Extract each row's `Agent` column value → use as Task tool `name` parameter
+   - Extract each row's `Responsibility` column value → use as context in the task prompt
+2. **Parse the Parallel Execution Strategy Table** (if present) — find the table with phase rows and role columns:
+   - Each row = a phase (execute sequentially, top to bottom)
+   - Cells with `-` = role is idle in that phase
+   - Non-`-` cells = role's action (roles active in the same row run in parallel)
+3. Present options to the user:
+   ```
+   AskUserQuestion:
+     question: "Workflow defines agent roles. Use sub-agents for parallel execution?" /
+               "ワークフローにエージェントロールが定義されています。サブエージェントで並列実行しますか？"
+     options:
+       - "Use sub-agents (parallel)" / "サブエージェント使用（並列）"
+       - "Single agent (sequential)" / "シングルエージェント（順次）"
+   ```
+4. If sub-agents selected: spawn agents via Task tool using parsed `Agent` names, execute phases per strategy table
+5. If single agent selected: proceed with sequential execution below
+
+See reference guide for table format examples and Task tool invocation patterns.
+
+**Read specs in order:** `requirement.md` → `design.md` → `tasks.md`
 
 For each unchecked task in `tasks.md`:
 
@@ -150,77 +237,63 @@ For each unchecked task in `tasks.md`:
 1. Read task details (requirements ID, design reference, target files, completion criteria)
 2. Reference the corresponding design.md section
 3. Implement: create or modify target files
-4. Verify each completion criterion
-5. Check coding-rules.md [MUST] rules for generated code
+4. 🔍 Implementation Review:
+   a. Self-review generated code against design.md specifications
+   b. Verify coding-rules.md [MUST] rules for generated code
+   c. Verify CLAUDE.md conditional rules for generated code
+   d. If review finds issues → fix before proceeding
+5. If task includes test implementation:
+   a. Write tests following project test patterns (from CLAUDE.md / coding-rules.md)
+   b. Run tests to verify they pass
+   c. 🔍 Test Review:
+      - Verify test coverage matches completion criteria
+      - Verify test patterns match project conventions
+      - If review finds issues → fix before proceeding
 6. Update tasks.md: mark completion criteria (- [ ] → - [x])
 7. When all criteria pass: mark top-level task checkbox (- [x])
 8. Commit progress:
    git add .specs/{feature}/tasks.md [+ implementation files]
-   git commit -m "feat: {task-id} complete — {brief description}"
+   git commit -m "{commit message following project conventions}"
 ```
 
-**Fallback (no specs, Issue only):**
-If `.specs/` directory is missing or has no tasks.md:
-- Use Issue body as the sole implementation guide
-- Generate a simple task checklist from the Issue content
-- Track progress against this generated checklist
+**Commit messages:** Follow format/language from coding-rules.md or CLAUDE.md. Default: `feat: {task-id} complete — {brief description}`. See reference guide for details.
 
-### Phase 6: Final Quality Gate
+**No specs fallback:** If `.specs/` is missing, use Issue body as guide and generate a simple checklist. See reference guide for details.
+
+### Phase 7: Final Quality Gate
 
 After all tasks are complete:
 
-1. Run test commands from the workflow (or `npm test` / language-appropriate default)
+1. Run test commands from the workflow (or language-appropriate default)
 2. Run lint/typecheck commands from the workflow (if specified)
 3. Verify all `[MUST]` rules from coding-rules.md pass
-4. If any check fails → fix → recheck
-5. All checks pass → proceed to PR creation
+4. Verify all CLAUDE.md conditional rules pass
+5. If any check fails → fix → recheck
+6. All checks pass → proceed to PR creation
 
-### Phase 7: PR Creation
+### Phase 8: PR Creation
 
-Follow the workflow's PR template. Default structure:
+Follow the workflow's PR template. Use `{base_branch}` detected in Phase 1:
 
 ```bash
 gh pr create \
   --title "{type}: {description} (closes #{N})" \
   --body "{PR body following workflow template}" \
-  --base main
+  --base {base_branch}
 ```
+
+Where `{base_branch}` comes from Phase 1 workflow detection (default: `main`).
+
+Verify `--base {base_branch}` matches the workflow's branch strategy before creating the PR.
 
 **Safety guards:**
 - Do NOT create PR if tests are failing
 - Do NOT force push
 - Do NOT push directly to main/master
+- Do NOT target wrong base branch (verify against workflow)
 - Ask for user confirmation before large-scale code deletions
 
 After PR creation, monitor CI status if the workflow specifies CI verification commands.
-
-## State Management and Resume
-
-### Checkbox Tracking
-
-Progress is tracked via tasks.md checkboxes:
-- `- [ ]` → task pending
-- `- [x]` → task completed
-- Sub-checkboxes track individual completion criteria
-
-### --resume Logic
-
-When `--resume` is specified:
-
-1. Read tasks.md and scan all top-level checkboxes
-2. Find the first unchecked task (`- [ ]`)
-3. Check its sub-criteria:
-   - All unchecked → start task from beginning
-   - Some checked → continue from first unchecked criterion
-4. Execute remaining tasks in order
-5. If all tasks are checked → proceed directly to final quality gate
-
-### Intermediate Saves
-
-After each task completion, commit tasks.md changes. This ensures:
-- Progress survives agent interruptions
-- `--resume` can accurately detect where to continue
-- Git history shows incremental progress
 
 ## Options
 
@@ -229,7 +302,7 @@ After each task completion, commit tasks.md changes. This ensures:
 | `--resume` | Resume from last uncompleted task in tasks.md |
 | `--issue {N}` | Specify GitHub Issue number for context |
 | `--spec {path}` | Specify .specs/ directory path (default: auto-detect) |
-| `--dry-run` | Show execution plan without making any changes |
+| `--dry-run` | Show execution plan without making any changes (output format: see reference guide) |
 
 ## Error Handling
 
@@ -243,6 +316,8 @@ After each task completion, commit tasks.md changes. This ensures:
 | `[MUST]` rule violation | Error: stop, fix, recheck before continuing |
 | Tests failing before PR | Block PR creation, report failures |
 | Branch already exists | Ask: switch to it or create new |
+| On protected branch (main/master/develop) | 🚨 BLOCKING: stop immediately, require feature branch |
+| Workflow/rules file not at expected path | Search alternate paths before declaring missing |
 
 ## Usage Examples
 

@@ -5,8 +5,9 @@
 spec-implement automates the implementation-to-PR workflow by reading project-specific configuration files and executing tasks from structured specifications.
 
 It acts as an execution engine that:
-- Reads `docs/issue-to-pr-workflow.md` as the development playbook
-- Enforces `docs/coding-rules.md` as quality gates
+- Reads the workflow file (`issue-to-pr-workflow.md`) as the development playbook
+- Enforces the coding rules file (`coding-rules.md`) as quality gates
+- Reads project instruction files (`CLAUDE.md`, `AGENTS.md`) as supplementary rules
 - Tracks progress via `.specs/{feature}/tasks.md` checkboxes
 - Creates a PR upon successful completion
 
@@ -18,9 +19,12 @@ It acts as an execution engine that:
    ├── Parse options (--resume, --issue, --spec, --dry-run)
    └── Locate spec directory (.specs/{feature}/)
 
-2. File Loading
-   ├── docs/issue-to-pr-workflow.md (playbook)
-   ├── docs/coding-rules.md (quality rules)
+2. File Loading (flexible path search)
+   ├── issue-to-pr-workflow.md (playbook)
+   │   └── Search order: docs/development/ → docs/ → find command
+   ├── coding-rules.md (quality rules)
+   │   └── Search order: docs/development/ → docs/ → find command
+   ├── CLAUDE.md, src/CLAUDE.md, test/CLAUDE.md, AGENTS.md (project instructions)
    ├── .specs/{feature}/requirement.md
    ├── .specs/{feature}/design.md
    └── .specs/{feature}/tasks.md
@@ -29,31 +33,67 @@ It acts as an execution engine that:
    ├── gh issue view {number} for context
    └── Extract requirements, labels, assignees
 
-4. Branch Creation
-   └── Follow workflow's naming convention (default: feature/issue-{N}-{desc})
+4. Branch Creation 🚨 BLOCKING GATE
+   ├── Dynamically detect base branch from workflow (default: main)
+   ├── Follow workflow's naming convention (default: feature/issue-{N}-{desc})
+   └── Block implementation on main/master/develop (verification required)
 
 5. Task Loop
+   ├── Agent role detection (if defined in workflow)
    ├── Read next unchecked task from tasks.md
    ├── Reference design.md for implementation details
    ├── Implement the task
-   ├── Run quality checks (coding-rules.md)
+   ├── 🔍 Implementation review (design.md + coding-rules.md + CLAUDE.md)
+   ├── Test implementation (if applicable)
+   ├── 🔍 Test review (coverage + pattern verification)
+   ├── Run quality checks
    ├── Update tasks.md checkbox (- [ ] → - [x])
-   └── Commit progress
+   └── Commit progress (following project commit conventions)
 
 6. Final Quality Gate
    ├── Run all tests (from workflow)
    ├── Run lint/typecheck (from workflow)
-   └── Verify all [MUST] rules pass
+   ├── Verify all [MUST] rules pass
+   └── Verify CLAUDE.md conditional rules pass
 
 7. PR Creation
    ├── Follow workflow's PR template
+   ├── --base {base_branch} (dynamically determined from workflow)
    ├── Link to issue (Closes #{N})
    └── Monitor CI (if specified in workflow)
 ```
 
-## Workflow File Loading
+## File Loading
 
-### How `docs/issue-to-pr-workflow.md` Is Used
+### Workflow File Search
+
+The workflow file is searched in the following order:
+1. `docs/development/issue-to-pr-workflow.md`
+2. `docs/issue-to-pr-workflow.md`
+3. `find . -name "issue-to-pr-workflow.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" | head -1`
+
+The first file found is used.
+
+### Coding Rules File Search
+
+The coding rules file is searched in the following order:
+1. `docs/development/coding-rules.md`
+2. `docs/coding-rules.md`
+3. `find . -name "coding-rules.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" | head -1`
+
+The first file found is used.
+
+### Project Instruction Files
+
+The following files are read if they exist:
+- `CLAUDE.md` (project root)
+- `src/CLAUDE.md` (source-level rules)
+- `test/CLAUDE.md` (test-level rules)
+- `AGENTS.md` (agent definitions)
+
+Conditional rules (IF-THEN patterns, conditional instructions, environment-specific constraints), environment constraints, and coding conventions from these files are applied with the same enforcement level as `[MUST]` rules from coding-rules.md.
+
+### How the Workflow File Is Used
 
 The workflow file is a project-specific playbook that spec-implement reads and follows section by section. It typically contains:
 
@@ -61,24 +101,28 @@ The workflow file is a project-specific playbook that spec-implement reads and f
 |---------|------------------------------|
 | Development Environment | Environment setup commands, container start commands |
 | Issue Analysis and Setup | Branch naming conventions, issue reading instructions |
+| Branch Strategy / PR Target | **Base branch** (e.g., `develop`, `main`) and PR target |
 | Phased Implementation | Implementation order, coding guidelines |
+| Agent Roles / Sub-agents | Agent role definitions (if present) |
 | Testing | Test commands, coverage thresholds |
 | PR Creation and Quality Gates | Pre-PR checks, PR body template |
 | CI/CD Monitoring | CI verification commands |
+| Commit Message Rules | Commit message format and language requirements |
 
-**Key principle**: spec-implement does NOT hardcode any project-specific commands. All commands come from the workflow file.
+**Key principle**: spec-implement does NOT hardcode any project-specific commands or branch names. All come from the workflow file.
 
 ### When Workflow File Is Missing
 
-If `docs/issue-to-pr-workflow.md` does not exist:
+If no workflow file is found at any of the searched paths:
 1. A warning is displayed
 2. The user is asked whether to run spec-workflow-init to generate it
 3. If declined, a minimal built-in flow is used:
    - Issue analysis → branch creation → implement tasks → run tests → create PR
+   - Base branch defaults to `main`
 
 ## Coding Rules Loading
 
-### How `docs/coding-rules.md` Is Used
+### How the Rules File Is Used
 
 The rules file defines project-specific quality standards with three severity levels:
 
@@ -96,11 +140,92 @@ Rules are checked at four points:
 
 ### When Rules File Is Missing
 
-If `docs/coding-rules.md` does not exist:
+If no rules file is found at any of the searched paths:
 1. A warning is displayed
 2. The user is asked whether to run spec-rules-init to generate it
 3. If declined, implementation proceeds without rule enforcement
 4. CLAUDE.md or AGENTS.md are used as fallback references if available
+
+## Branch Creation (Blocking Gate)
+
+### Feature Branch is MANDATORY
+
+Implementation MUST NOT proceed on `main`, `master`, or `develop` branches. This gate cannot be skipped.
+
+If the workflow file defines a "protected branches" or "branch protection" section, use that list instead of the defaults.
+
+### Dynamic Base Branch Detection
+
+1. Search the workflow file for "branch strategy", "base branch", "PR target", "develop", "main"
+2. If a branch is specified (e.g., `develop`), use it as `{base_branch}`
+3. If not specified, default to `main`
+
+### Post-Creation Verification
+
+```bash
+current_branch=$(git branch --show-current)
+if [ "$current_branch" = "main" ] || [ "$current_branch" = "master" ] || [ "$current_branch" = "develop" ]; then
+  echo "🚨 ERROR: Cannot implement on protected branch: $current_branch"
+  exit 1
+fi
+```
+
+If this verification fails, the task loop MUST NOT proceed.
+
+## Agent Role Detection
+
+If the workflow file contains an "Agent Roles", "Sub-agents", or equivalent section:
+
+1. Parse role definitions (e.g., implementer, reviewer, tester)
+2. Present options to the user (sub-agent parallel execution vs single agent)
+3. If sub-agents selected: use Task tool to spawn agents per role definition
+4. If single agent selected: proceed with sequential execution
+
+### Parsing Workflow Table Format
+
+Workflow files typically define agent roles using two Markdown tables:
+
+**Role Assignment Table** — maps roles to agent names and responsibilities:
+
+```markdown
+| Role | Agent | Responsibility |
+|------|-------|---------------|
+| Implementer | workflow-implementer | Write implementation code following coding-rules.md |
+| Reviewer | workflow-reviewer | Code review against coding-rules.md standards |
+| Tester | workflow-tester | Write and run tests, verify coverage |
+```
+
+**Parallel Execution Strategy Table** — defines which roles are active in each phase:
+
+```markdown
+| Phase | Implementer | Tester | Reviewer |
+|-------|-------------|--------|----------|
+| Analysis | Design review | Test plan | - |
+| Implementation | Write code | Write tests | - |
+| Review | - | - | Review code + tests |
+| Quality Gate | - | Run all tests | Final check |
+```
+
+### Mapping Tables to Task Tool Parameters
+
+When spawning sub-agents via the Task tool:
+
+1. **Agent name**: Use the `Agent` column value from the Role Assignment Table as the `name` parameter for the Task tool (e.g., `name: "workflow-implementer"`)
+2. **Agent responsibility**: Use the `Responsibility` column value as context in the task prompt
+3. **Phase execution order**: Follow the Parallel Execution Strategy Table row by row:
+   - Cells with `-` mean the role is idle in that phase
+   - Non-`-` cells describe the role's action in that phase
+   - Roles active in the same phase row can run in parallel
+   - Phases execute sequentially (top to bottom)
+
+### Example: Task Tool Invocation
+
+For the "Implementation" phase where Implementer and Tester are both active:
+
+```
+# Spawn in parallel:
+Task(name: "workflow-implementer", prompt: "Write implementation code following coding-rules.md...")
+Task(name: "workflow-tester", prompt: "Write tests following project test patterns...")
 
 ## tasks.md State Management
 
@@ -130,13 +255,35 @@ tasks.md uses standard Markdown checkboxes for state tracking:
 
 ### Commit Strategy
 
-After completing each task:
+After completing each task, commit following the project's commit conventions:
+
+1. Extract commit message rules from coding-rules.md or CLAUDE.md (format, language)
+2. Generate commit messages following extracted rules
+3. Default fallback (no rules found): `feat: {task-id} complete — {brief description}`
+
 ```
 git add .specs/{feature}/tasks.md [+ implementation files]
-git commit -m "feat: T001 complete — {brief description}"
+git commit -m "{commit message following project conventions}"
 ```
 
 This ensures progress is saved even if the agent stops unexpectedly.
+
+## Review Phases
+
+### Implementation Review (after each task)
+
+After completing a task's implementation, self-review before proceeding:
+- Consistency with design.md specifications
+- No `[MUST]` rule violations from coding-rules.md
+- No conditional rule violations from CLAUDE.md
+- If issues found → fix before proceeding
+
+### Test Review (after test implementation)
+
+After completing test implementation:
+- Test coverage meets completion criteria
+- Test patterns match project conventions
+- If issues found → fix before proceeding
 
 ## --resume Operation
 
@@ -166,10 +313,12 @@ The `--resume` option enables continuation from the last incomplete task:
 ### Common Issues
 
 **"workflow.md not found"**
+- Verify both `docs/development/` and `docs/` were checked
 - Run `spec-workflow-init` to generate the workflow file
 - Or proceed with the minimal built-in flow
 
 **"coding-rules.md not found"**
+- Verify both `docs/development/` and `docs/` were checked
 - Run `spec-rules-init` to generate the rules file
 - Or proceed without rule enforcement
 
@@ -180,6 +329,10 @@ The `--resume` option enables continuation from the last incomplete task:
 **"gh CLI not authenticated"**
 - Run `gh auth login` to authenticate
 - Ensure you have write access to the repository
+
+**Attempting to implement on a protected branch**
+- Create a feature branch before proceeding
+- When using `--resume`, verify you are on the correct branch
 
 **Task loop appears stuck**
 - Check if a `[MUST]` rule violation is blocking progress
@@ -194,8 +347,40 @@ The `--resume` option enables continuation from the last incomplete task:
 ### Safety Mechanisms
 
 spec-implement includes these safety guards:
+- Blocks implementation on protected branches (main/master/develop)
 - Never force pushes
 - Never pushes directly to main/master
 - Blocks PR creation if tests fail
 - Asks for confirmation before large-scale code deletions
 - Commits progress after each task for recoverability
+
+## `--dry-run` Output Format
+
+When `--dry-run` is specified, display the following and exit without making changes:
+
+```
+=== spec-implement Dry Run ===
+
+📁 Detected Files:
+  Workflow:      {path or "not found"}
+  Coding Rules:  {path or "not found"}
+  CLAUDE.md:     {list of found files}
+  Spec Dir:      {.specs/{feature}/ path}
+
+🌿 Branch Strategy:
+  Base Branch:   {base_branch}
+  Feature Branch: feature/issue-{N}-{description}
+  PR Target:     {base_branch}
+
+📋 Tasks ({N} total, {M} completed, {K} remaining):
+  {list each task with status}
+
+🔍 Quality Gates:
+  [MUST] rules:  {count} rules detected
+  Test command:  {extracted command or "default"}
+  Lint command:  {extracted command or "default"}
+
+🤖 Agent Roles:  {detected roles or "none (single agent)"}
+
+📝 Commit Convention: {extracted format or "default"}
+```
