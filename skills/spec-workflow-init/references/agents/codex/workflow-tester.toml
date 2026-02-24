@@ -1,8 +1,4 @@
-name = "workflow-tester"
 model = "o4-mini"
-
-[tools]
-allowed = ["shell", "read_file", "write_file", "edit_file"]
 
 developer_instructions = """
 You are the test agent. Write and run tests following the project's testing strategy and coding rules.

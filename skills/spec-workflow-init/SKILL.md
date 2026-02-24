@@ -307,12 +307,16 @@ If an existing workflow file is detected (from Step 1 or during generation):
 
 4. Update `.codex/config.toml`:
    - Create file if it doesn't exist
-   - Add or update `[agents]` section:
+   - Add or update agent sections in config.toml:
      ```toml
-     [agents]
-     workflow-implementer = { path = "agents/workflow-implementer.toml" }
-     workflow-reviewer = { path = "agents/workflow-reviewer.toml" }
-     workflow-tester = { path = "agents/workflow-tester.toml" }
+     [agents.workflow-implementer]
+     config_file = "agents/workflow-implementer.toml"
+
+     [agents.workflow-reviewer]
+     config_file = "agents/workflow-reviewer.toml"
+
+     [agents.workflow-tester]
+     config_file = "agents/workflow-tester.toml"
      ```
    - Add `[features] multi_agent = true` if not present
 
