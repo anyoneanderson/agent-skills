@@ -12,6 +12,8 @@
 | [spec-inspect](skills/spec-inspect/) | 仕様書の品質を検証し、実装前に問題を検出 |
 | [spec-rules-init](skills/spec-rules-init/) | プロジェクト規約を抽出し、統一的なcoding-rules.mdを生成 |
 | [spec-to-issue](skills/spec-to-issue/) | 仕様書から構造化されたGitHub Issueを自動生成 |
+| [spec-workflow-init](skills/spec-workflow-init/) | 対話形式でプロジェクト固有のissue-to-pr-workflow.mdを生成 |
+| [spec-implement](skills/spec-implement/) | 仕様書駆動で実装からPR作成まで自動実行、品質ゲート付き |
 
 ## インストール
 
@@ -24,6 +26,8 @@ npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 ```
 
 ## クイックスタート
@@ -53,11 +57,27 @@ npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 > プロジェクトルールを抽出
 ```
 
+### 開発ワークフローを生成する
+
+```
+> ワークフローを生成
+> 開発フローを作成
+> Issue-to-PRフローを設定
+```
+
 ### 仕様書からGitHub Issueを作成する
 
 ```
 > 仕様書をIssueにして
 > specからIssue作成
+```
+
+### 仕様書から実装してPRを作成する
+
+```
+> 仕様書から実装 --issue 42
+> 実装を開始 --spec .specs/auth-feature/
+> 実装を再開 --resume
 ```
 
 ## 仕組み
@@ -74,6 +94,15 @@ npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
    - 検査結果を `inspection-report.md` に生成
 
 3. **spec-to-issue** が `.specs/{project}/` を読み取り、チェックリスト・仕様書リンク・完了条件を含むGitHub Issueを作成。
+
+4. **spec-workflow-init** が `docs/issue-to-pr-workflow.md` にプロジェクト固有の開発ワークフローを生成。
+
+5. **spec-implement** が仕様書を読み、ワークフローに従い、コーディングルールを適用してPRを作成:
+   - `.specs/{project}/` から実装ガイダンスを読み込み
+   - `docs/issue-to-pr-workflow.md` をプレイブックとして追従
+   - `docs/coding-rules.md` を品質ゲートとして強制適用
+   - `tasks.md` のチェックボックスで進捗管理（再開可能）
+   - 品質ゲート通過後にPRを作成
 
 ## 互換性
 
