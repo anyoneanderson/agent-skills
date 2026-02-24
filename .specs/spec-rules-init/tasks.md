@@ -38,11 +38,11 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
   - `skills/spec-rules-init/references/rules-template.md`（新規）
   - `skills/spec-rules-init/references/rules-template.ja.md`（新規）
 - 完了条件:
-  - [ ] 英語テンプレートに全6カテゴリのセクション構造が含まれている
-  - [ ] 日本語テンプレートが英語版と同一構造で記述されている
-  - [ ] 強制度タグ（MUST/SHOULD/MAY）の使用例が含まれている
-  - [ ] 出典セクションのフォーマットが含まれている
-  - [ ] プロジェクト種別ごとの推奨ルール一覧が含まれている
+  - [x] 英語テンプレートに全6カテゴリのセクション構造が含まれている
+  - [x] 日本語テンプレートが英語版と同一構造で記述されている
+  - [x] 強制度タグ（MUST/SHOULD/MAY）の使用例が含まれている
+  - [x] 出典セクションのフォーマットが含まれている
+  - [x] プロジェクト種別ごとの推奨ルール一覧が含まれている
 
 ### T002: SKILL.md フロントマター + Language Rules 作成
 - 要件ID: REQ-006
@@ -52,9 +52,9 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（新規）
 - 完了条件:
-  - [ ] YAML フロントマターに name, description（英語 + 日英トリガー）, license が含まれている
-  - [ ] `## Language Rules` セクションが spec-series パターンに準拠している
-  - [ ] name がディレクトリ名 `spec-rules-init` と一致している
+  - [x] YAML フロントマターに name, description（英語 + 日英トリガー）, license が含まれている
+  - [x] `## Language Rules` セクションが spec-series パターンに準拠している
+  - [x] name がディレクトリ名 `spec-rules-init` と一致している
 
 ### T003: ルール抽出フローの記述
 - 要件ID: REQ-001
@@ -64,11 +64,11 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（追記）
 - 完了条件:
-  - [ ] 初期チェック手順（pwd、ファイル検出）が記述されている
-  - [ ] 検出対象ファイルの一覧と優先度が記述されている
-  - [ ] カテゴリごとの抽出パターン（キーワード）が記述されている
-  - [ ] 抽出結果の提示フォーマットが記述されている
-  - [ ] MCP ツール名のハードコードがない（CON-003 準拠）
+  - [x] 初期チェック手順（pwd、ファイル検出）が記述されている
+  - [x] 検出対象ファイルの一覧と優先度が記述されている
+  - [x] カテゴリごとの抽出パターン（キーワード）が記述されている
+  - [x] 抽出結果の提示フォーマットが記述されている
+  - [x] MCP ツール名のハードコードがない（CON-003 準拠）
 
 ### T004: コードベース解析フローの記述
 - 要件ID: REQ-008
@@ -78,12 +78,12 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（追記）
 - 完了条件:
-  - [ ] ディレクトリ構造の解析手順（レイヤー分離、テスト配置パターン検出）が記述されている
-  - [ ] ファイル命名規則の検出ロジック（ケース分布集計、多数派判定）が記述されている
-  - [ ] 主要ライブラリの解析手順（package.json / go.mod 等からの検出と推奨ルール生成）が記述されている
-  - [ ] コードパターン（import 形式、export 形式）の検出手順が記述されている
-  - [ ] コードベースが存在しない場合のスキップ処理が記述されている
-  - [ ] 解析結果と規約ファイル抽出結果のマージ方針が記述されている
+  - [x] ディレクトリ構造の解析手順（レイヤー分離、テスト配置パターン検出）が記述されている
+  - [x] ファイル命名規則の検出ロジック（ケース分布集計、多数派判定）が記述されている
+  - [x] 主要ライブラリの解析手順（package.json / go.mod 等からの検出と推奨ルール生成）が記述されている
+  - [x] コードパターン（import 形式、export 形式）の検出手順が記述されている
+  - [x] コードベースが存在しない場合のスキップ処理が記述されている
+  - [x] 解析結果と規約ファイル抽出結果のマージ方針が記述されている
 
 ### T005: インストール済みスキル解析フローの記述
 - 要件ID: REQ-010
@@ -93,13 +93,13 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（追記）
 - 完了条件:
-  - [ ] `~/.claude/skills/` および `.claude/skills/` のスキャン手順が記述されている
-  - [ ] SKILL.md の description からフレームワーク適合度を判定するロジックが記述されている
-  - [ ] 適合スキル一覧の AskUserQuestion（bilingual）が記述されている
-  - [ ] スキル由来ルールの抽出と優先度マッピング（優先度3: `[SHOULD]`/`[MAY]`）が記述されている
-  - [ ] 優先度間の矛盾検出と警告表示のロジックが記述されている
-  - [ ] coding-rules.md の出典セクションへのスキル名記載（`Source: skill/{name}`）が記述されている
-  - [ ] スキルが未インストールの場合のスキップ処理が記述されている
+  - [x] `~/.claude/skills/` および `.claude/skills/` のスキャン手順が記述されている
+  - [x] SKILL.md の description からフレームワーク適合度を判定するロジックが記述されている
+  - [x] 適合スキル一覧の AskUserQuestion（bilingual）が記述されている
+  - [x] スキル由来ルールの抽出と優先度マッピング（優先度3: `[SHOULD]`/`[MAY]`）が記述されている
+  - [x] 優先度間の矛盾検出と警告表示のロジックが記述されている
+  - [x] coding-rules.md の出典セクションへのスキル名記載（`Source: skill/{name}`）が記述されている
+  - [x] スキルが未インストールの場合のスキップ処理が記述されている
 
 ### T006: 対話補完フロー + 出力先ヒアリングの記述
 - 要件ID: REQ-002, REQ-003
@@ -109,11 +109,11 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（追記）
 - 完了条件:
-  - [ ] 出力先パスの AskUserQuestion（デフォルト: `docs/coding-rules.md`）が記述されている
-  - [ ] AskUserQuestion を使った対話補完の例が記述されている
-  - [ ] 不足カテゴリの検出ロジックが記述されている
-  - [ ] AskUserQuestion のテキストが bilingual（"English" / "日本語"）で記述されている
-  - [ ] プロジェクト種別に応じた推奨ルールの提示が記述されている
+  - [x] 出力先パスの AskUserQuestion（デフォルト: `docs/coding-rules.md`）が記述されている
+  - [x] AskUserQuestion を使った対話補完の例が記述されている
+  - [x] 不足カテゴリの検出ロジックが記述されている
+  - [x] AskUserQuestion のテキストが bilingual（"English" / "日本語"）で記述されている
+  - [x] プロジェクト種別に応じた推奨ルールの提示が記述されている
 
 ### T007: 既存ファイル検出と冪等性の記述
 - 要件ID: REQ-005, NFR-002
@@ -123,10 +123,10 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（追記）
 - 完了条件:
-  - [ ] 既存 coding-rules.md の検出フローが記述されている
-  - [ ] 差分表示 → 上書き確認の手順が記述されている
-  - [ ] `--force` オプションの説明が記述されている
-  - [ ] Options セクションに `--force` が含まれている
+  - [x] 既存 coding-rules.md の検出フローが記述されている
+  - [x] 差分表示 → 上書き確認の手順が記述されている
+  - [x] `--force` オプションの説明が記述されている
+  - [x] Options セクションに `--force` が含まれている
 
 ### T008: AGENTS.md / CLAUDE.md 参照追記フローの記述
 - 要件ID: REQ-007
@@ -136,11 +136,11 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（追記）
 - 完了条件:
-  - [ ] AGENTS.md / CLAUDE.md の存在確認ロジックが記述されている
-  - [ ] シンボリックリンク検出（CLAUDE.md → AGENTS.md）のスキップ処理が記述されている
-  - [ ] 追記確認の AskUserQuestion（bilingual）が記述されている
-  - [ ] 追記内容の例（coding-rules.md のパスと説明文）が記述されている
-  - [ ] ファイルが存在しない場合のスキップ + 警告が記述されている
+  - [x] AGENTS.md / CLAUDE.md の存在確認ロジックが記述されている
+  - [x] シンボリックリンク検出（CLAUDE.md → AGENTS.md）のスキップ処理が記述されている
+  - [x] 追記確認の AskUserQuestion（bilingual）が記述されている
+  - [x] 追記内容の例（coding-rules.md のパスと説明文）が記述されている
+  - [x] ファイルが存在しない場合のスキップ + 警告が記述されている
 
 ### T009: spec-series 連携の記述
 - 要件ID: REQ-009
@@ -150,9 +150,9 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-rules-init/SKILL.md`（追記）
 - 完了条件:
-  - [ ] spec-generator / spec-inspect が coding-rules.md を参照する旨の説明が記述されている
-  - [ ] 生成後の案内メッセージ（spec-generator / spec-inspect との連携通知）が記述されている
-  - [ ] Post-Completion Actions セクションに連携案内が含まれている
+  - [x] spec-generator / spec-inspect が coding-rules.md を参照する旨の説明が記述されている
+  - [x] 生成後の案内メッセージ（spec-generator / spec-inspect との連携通知）が記述されている
+  - [x] Post-Completion Actions セクションに連携案内が含まれている
 
 ### T010: spec-generator SKILL.md の修正
 - 要件ID: REQ-009, REQ-010
@@ -164,12 +164,12 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
   - `skills/spec-generator/references/design.md`（修正）
   - `skills/spec-generator/references/design.ja.md`（修正）
 - 完了条件:
-  - [ ] Initial Context Check に coding-rules.md の存在チェック手順が追加されている
-  - [ ] design フェーズの Phase Execution に coding-rules.md 参照の指示が追加されている
-  - [ ] design フェーズで coding-rules.md 内のスキル由来ルール（`Source: skill/{name}`）も設計に反映する指示が追加されている
-  - [ ] references/design.md に coding-rules.md 参照時の生成手順が追加されている
-  - [ ] references/design.ja.md に同等の日本語説明が追加されている
-  - [ ] SKILL.md が 500 行以下を維持している
+  - [x] Initial Context Check に coding-rules.md の存在チェック手順が追加されている
+  - [x] design フェーズの Phase Execution に coding-rules.md 参照の指示が追加されている
+  - [x] design フェーズで coding-rules.md 内のスキル由来ルール（`Source: skill/{name}`）も設計に反映する指示が追加されている
+  - [x] references/design.md に coding-rules.md 参照時の生成手順が追加されている
+  - [x] references/design.ja.md に同等の日本語説明が追加されている
+  - [x] SKILL.md が 500 行以下を維持している
 
 ### T011: spec-inspect SKILL.md の修正
 - 要件ID: REQ-009
@@ -179,10 +179,10 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
 - 対象ファイル:
   - `skills/spec-inspect/SKILL.md`（修正）
 - 完了条件:
-  - [ ] Step 2（Read Specifications）に coding-rules.md の読み込みが追加されている
-  - [ ] Check 13（Project Rule Compliance）に coding-rules.md の読み取りと `[MUST]` ルール検証が追加されている
-  - [ ] coding-rules.md 固有の検出パターン例（命名規則違反、テスト基準未達等）が記述されている
-  - [ ] SKILL.md が 500 行以下を維持している
+  - [x] Step 2（Read Specifications）に coding-rules.md の読み込みが追加されている
+  - [x] Check 13（Project Rule Compliance）に coding-rules.md の読み取りと `[MUST]` ルール検証が追加されている
+  - [x] coding-rules.md 固有の検出パターン例（命名規則違反、テスト基準未達等）が記述されている
+  - [x] SKILL.md が 500 行以下を維持している
 
 ### T012: SKILL.md 全体の統合とスタイルガイド準拠チェック
 - 要件ID: -（品質タスク）
@@ -194,23 +194,23 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
   - `skills/spec-generator/SKILL.md`（修正確認）
   - `skills/spec-inspect/SKILL.md`（修正確認）
 - 完了条件:
-  - [ ] spec-rules-init/SKILL.md が 500 行以下
-  - [ ] spec-generator/SKILL.md が 500 行以下を維持
-  - [ ] spec-inspect/SKILL.md が 500 行以下を維持
-  - [ ] 全セクションヘッダーが英語
-  - [ ] AskUserQuestion テキストが bilingual
-  - [ ] MCP ツール名のハードコードがない
-  - [ ] 参照ファイルがすべて存在する
-  - [ ] Error Handling セクションが含まれている
-  - [ ] Usage Examples セクションが含まれている
-  - [ ] Post-Completion Actions セクションが含まれている
-  - [ ] NFR-001: SKILL.md が skills.sh フォーマットに準拠している
-  - [ ] NFR-003: 対話ラウンド数が最小限に設計されている
-  - [ ] CON-001: 出力が Markdown のみ
-  - [ ] CON-003: MCP ツール名のハードコードがない
-  - [ ] REQ-008: コードベース解析フローが正しく記述されている
-  - [ ] REQ-009: spec-generator / spec-inspect の修正が正しく適用されている
-  - [ ] REQ-010: インストール済みスキル解析フローが正しく記述されている
+  - [x] spec-rules-init/SKILL.md が 500 行以下
+  - [x] spec-generator/SKILL.md が 500 行以下を維持
+  - [x] spec-inspect/SKILL.md が 500 行以下を維持
+  - [x] 全セクションヘッダーが英語
+  - [x] AskUserQuestion テキストが bilingual
+  - [x] MCP ツール名のハードコードがない
+  - [x] 参照ファイルがすべて存在する
+  - [x] Error Handling セクションが含まれている
+  - [x] Usage Examples セクションが含まれている
+  - [x] Post-Completion Actions セクションが含まれている
+  - [x] NFR-001: SKILL.md が skills.sh フォーマットに準拠している
+  - [x] NFR-003: 対話ラウンド数が最小限に設計されている
+  - [x] CON-001: 出力が Markdown のみ
+  - [x] CON-003: MCP ツール名のハードコードがない
+  - [x] REQ-008: コードベース解析フローが正しく記述されている
+  - [x] REQ-009: spec-generator / spec-inspect の修正が正しく適用されている
+  - [x] REQ-010: インストール済みスキル解析フローが正しく記述されている
 
 ### T013: README.md / README.ja.md の更新
 - 要件ID: -（ドキュメントタスク）
@@ -220,9 +220,9 @@ spec-rules-init スキルの SKILL.md と references/ を作成するタスク�
   - `README.md`（修正: skills テーブルに追加）
   - `README.ja.md`（修正: skills テーブルに追加）
 - 完了条件:
-  - [ ] Skills テーブルに spec-rules-init の行が追加されている
-  - [ ] Installation セクションに spec-rules-init のインストールコマンドが追加されている
-  - [ ] Quick Start に使用例が追加されている
+  - [x] Skills テーブルに spec-rules-init の行が追加されている
+  - [x] Installation セクションに spec-rules-init のインストールコマンドが追加されている
+  - [x] Quick Start に使用例が追加されている
 
 ## 4. 優先度
 
