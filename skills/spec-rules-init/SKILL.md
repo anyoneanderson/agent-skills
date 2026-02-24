@@ -127,6 +127,23 @@ Skip this step entirely if no source files are found (new project).
 - Export style: named exports vs default exports
 - Error handling patterns in use
 
+**2e. Shared utility and library detection**:
+1. Scan the codebase for shared utility modules, helper functions, and internal libraries:
+   - Look for directories named `utils/`, `helpers/`, `lib/`, `shared/`, `common/`
+   - Identify frequently imported internal modules
+2. Cross-reference with dependency file to identify commonly used libraries
+3. Present a summary of detected shared utilities and libraries to the user:
+   ```
+   Detected shared utilities and libraries:
+     Internal: utils/logger.ts, lib/validation.ts, helpers/date.ts
+     External: Zod (validation), Prisma (DB), date-fns (dates)
+   ```
+4. For each detected shared utility or library, generate a `[SHOULD]` rule:
+   - Example: `[SHOULD] Use lib/validation.ts for input validation`
+   - Example: `[SHOULD] Use Zod for runtime validation`
+   - Example: `[SHOULD] Use utils/logger.ts instead of console.log`
+5. Include the detected list in the generated coding-rules.md under a "Shared Utilities" section
+
 Codebase analysis results are **Priority 2** and assigned `[MUST]` (for 60%+ majority patterns) or `[SHOULD]`.
 
 ### Step 3: Installed Skills Analysis

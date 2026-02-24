@@ -42,6 +42,27 @@
 - {import_style} 形式のimportを使用する（例: パスエイリアス `@/`、相対パス `./`）
 - 出典: {source_file}
 
+### [SHOULD] ループ内の重い処理禁止
+- ループの中でDBクエリやAPIリクエストを繰り返し実行しない
+- バッチ処理やプリフェッチで対処する
+
+### [SHOULD] マジックナンバーの排除
+- コード内に唐突に現れる数値や文字列は名前付き定数として定義する
+
+### [SHOULD] 命名の明確さ
+- 変数名・関数名はその役割を正確に表す
+- `data`, `info`, `temp`, `result` などの曖昧な名前を避ける
+
+### [SHOULD] 関数の簡潔さ
+- 1つの関数は1つの責務に集中させ、長くなりすぎないようにする
+
+### [SHOULD] DRY / KISS
+- 同じロジックの重複を避ける（Don't Repeat Yourself）
+- 最もシンプルな解決策を選ぶ（Keep It Simple, Stupid）
+
+### [SHOULD] 不要コードの排除
+- console.log、コメントアウトされたコード、デッドコードをコミットしない
+
 ## エラーハンドリング
 
 ### [MUST] エラーログ出力
@@ -52,6 +73,10 @@
 ### [SHOULD] 例外メッセージ
 - 例外メッセージは{exception_language}で記述する
 - エラーコンテキスト（操作名、入力概要）を含める
+
+### [SHOULD] エッジケースの考慮
+- 配列が空、数値が0や負数、null/undefined の場合を考慮する
+- 境界値での動作を確認する
 
 ### [MAY] カスタムエラークラス
 - 異なるエラーカテゴリにはドメイン固有のエラークラスを定義する
@@ -80,6 +105,14 @@
 - システム境界ですべての外部入力をバリデーションすること
 - ランタイムバリデーションには {validation_library} を使用する
 
+### [MUST] SQLインジェクション対策
+- 外部入力をそのままSQLに埋め込まない
+- パラメータ化クエリまたはORMを使用する
+
+### [MUST] XSS対策
+- 外部入力をそのままHTMLに出力しない
+- 出力エスケープまたはテンプレートエンジンのオートエスケープを使用する
+
 ### [SHOULD] HTTPS強制
 - リダイレクトURIがHTTPSを使用していることを検証する（localhost を除く）
 
@@ -89,8 +122,11 @@
 ## Git
 
 ### [MUST] コミットメッセージ形式
-- 言語: {commit_language}
-- 形式: {commit_format}（例: Conventional Commits、自由形式）
+- 形式: Conventional Commits（`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`）
+- 言語の決定順序:
+  1. CLAUDE.md / AGENTS.md / issue-to-pr-workflow.md に言語指定がある場合はそれに従う
+  2. 上記に指定がない場合は、該当 .specs/ ディレクトリ内の仕様書の記述言語に合わせる
+  3. いずれもない場合: {commit_language}
 - 出典: {source_file}
 
 ### [MUST] ブランチ戦略

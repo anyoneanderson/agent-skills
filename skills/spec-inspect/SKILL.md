@@ -343,6 +343,8 @@ Execute the following checks sequentially. Add detected issues to an issues list
 
 **Target documents**:
 - README.md, CLAUDE.md, AGENTS.md
+- coding-rules.md (detected path or `docs/coding-rules.md`)
+- issue-to-pr-workflow.md (detected path or `docs/issue-to-pr-workflow.md`)
 - Files in documentation directories specified by CLAUDE.md (e.g., `docs/`)
 
 **Procedure**:
@@ -353,6 +355,9 @@ Execute the following checks sequentially. Add detected issues to an issues list
    - New API endpoint → not in API docs
    - Technology stack change → setup guide not updated
    - New coding convention → CLAUDE.md / AGENTS.md not updated
+   - Shared library or utility changes → coding-rules.md library usage rules may need updating
+   - Workflow process changes → issue-to-pr-workflow.md may need updating
+   - New quality gates or coding standards → coding-rules.md may need updating
 4. Propose needed updates as DOC-XXX tasks
 
 **Output**:

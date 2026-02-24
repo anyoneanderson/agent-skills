@@ -42,6 +42,27 @@
 - Use {import_style} imports (e.g., path alias `@/`, relative `./`)
 - Source: {source_file}
 
+### [SHOULD] No Heavy Operations in Loops
+- Do not execute DB queries or API requests repeatedly inside loops
+- Use batch processing or prefetching instead
+
+### [SHOULD] No Magic Numbers
+- Define all literal numbers and strings as named constants
+
+### [SHOULD] Descriptive Naming
+- Variable and function names must accurately represent their purpose
+- Avoid vague names: `data`, `info`, `temp`, `result`
+
+### [SHOULD] Concise Functions
+- Each function should focus on a single responsibility and not be too long
+
+### [SHOULD] DRY / KISS
+- Avoid duplicating the same logic (Don't Repeat Yourself)
+- Choose the simplest solution that works (Keep It Simple, Stupid)
+
+### [SHOULD] No Dead Code
+- Do not commit console.log, commented-out code, or dead code
+
 ## Error Handling
 
 ### [MUST] Error Logging
@@ -52,6 +73,10 @@
 ### [SHOULD] Exception Messages
 - Exception messages in {exception_language}
 - Include error context (operation, input summary)
+
+### [SHOULD] Edge Case Handling
+- Consider cases where arrays are empty, numbers are zero or negative, or values are null/undefined
+- Verify behavior at boundary values
 
 ### [MAY] Custom Error Classes
 - Define domain-specific error classes for distinct error categories
@@ -80,6 +105,14 @@
 - Validate all external input at system boundaries
 - Use {validation_library} for runtime validation
 
+### [MUST] SQL Injection Prevention
+- Never embed external input directly into SQL queries
+- Use parameterized queries or ORM
+
+### [MUST] XSS Prevention
+- Never output external input directly into HTML
+- Use output escaping or template engine auto-escaping
+
 ### [SHOULD] HTTPS Enforcement
 - Validate redirect URIs use HTTPS (except localhost for development)
 
@@ -89,8 +122,11 @@
 ## Git
 
 ### [MUST] Commit Message Format
-- Language: {commit_language}
-- Format: {commit_format} (e.g., Conventional Commits, free-form)
+- Format: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`)
+- Language priority:
+  1. Follow language specified in CLAUDE.md / AGENTS.md / issue-to-pr-workflow.md
+  2. If not specified, match the language of spec documents in the relevant .specs/ directory
+  3. Fallback: {commit_language}
 - Source: {source_file}
 
 ### [MUST] Branch Strategy
