@@ -10,6 +10,7 @@ Reusable AI agent skills for specification-driven development.
 |-------|-------------|
 | [spec-generator](skills/spec-generator/) | Generate project requirements, design documents, and task lists from conversations or prompts |
 | [spec-inspect](skills/spec-inspect/) | Validate specification quality and detect issues before implementation |
+| [spec-rules-init](skills/spec-rules-init/) | Extract project conventions and generate unified coding-rules.md |
 | [spec-to-issue](skills/spec-to-issue/) | Create structured GitHub Issues from spec documents |
 
 ## Installation
@@ -21,6 +22,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 # Install a specific skill
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 ```
 
@@ -41,6 +43,14 @@ npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 > Inspect specs
 > Check specification quality
 > Validate requirements
+```
+
+### Generate coding rules
+
+```
+> Generate coding rules
+> Create coding-rules.md
+> Extract project rules
 ```
 
 ### Create a GitHub Issue from specs
