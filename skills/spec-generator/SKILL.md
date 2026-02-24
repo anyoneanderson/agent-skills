@@ -49,7 +49,12 @@ Generate structured project specifications: requirements, design documents, and 
    - If exists → list existing projects
    - If not exists → this is a new spec workflow
 
-4. **Analyze context and decide**:
+4. **Check for coding-rules.md**:
+   - Check `docs/coding-rules.md` (default path)
+   - If not found, check CLAUDE.md / AGENTS.md for alternative path
+   - If found → load and use as design constraint during design phase
+
+5. **Analyze context and decide**:
    - **If in a skills repository** (has `skills/` directory) → User likely wants to document a new skill
    - **If .specs/ has projects** → Ask user to select existing or create new
    - **If no .specs/ and no clear context** → Ask what they want to create
@@ -256,6 +261,12 @@ options:
 Refer to the appropriate reference file (based on Language Rules):
 - **init**: `references/init.md` / `references/init.ja.md` — Requirements generation
 - **design**: `references/design.md` / `references/design.ja.md` — Design document generation
+- **design** (with coding-rules.md): If `docs/coding-rules.md` exists, read it and ensure:
+  - Naming conventions in design match `[MUST]` naming rules
+  - Test strategy satisfies coverage requirements from coding-rules
+  - Technology choices align with recommended libraries
+  - File/directory structure follows detected patterns
+  - Skill-derived `[SHOULD]` rules (e.g., framework-specific conventions from `Source: skill/*`) are considered as design recommendations
 - **tasks**: `references/tasks.md` / `references/tasks.ja.md` — Task list generation
 
 ### 4. Output Directory

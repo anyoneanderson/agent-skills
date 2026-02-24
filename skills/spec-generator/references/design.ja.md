@@ -18,7 +18,16 @@ find .specs -name "requirement.md" -type f
 - 非機能要件（NFR-XXX）
 - 制約事項（CON-XXX）
 
-### 2. 既存資産マップの作成
+### 2. coding-rules.md の確認
+
+`docs/coding-rules.md` が存在する場合（または CLAUDE.md / AGENTS.md で指定された代替パス）、設計前に読み込む:
+
+- `[MUST]` ルールを設計のハード制約として抽出する
+- `[SHOULD]` ルール（`Source: skill/*` のスキル由来ルールを含む）を設計の推奨事項として使用する
+- 命名規則、テスト戦略、技術選択がルールと整合していることを確認する
+- design.md の「実装ガイドライン」セクションで coding-rules.md を参照する
+
+### 3. 既存資産マップの作成
 
 新規実装前に既存資産を確認（車輪の再発明を防止）:
 
@@ -38,7 +47,7 @@ find . -type d \( -name "models" -o -name "types" -o -name "entities" \) -not -p
 
 コード解析ツールが利用可能な場合は、シンボル・クラス・モジュール間の関係をより深く分析するために活用する。
 
-### 3. 設計判断（AskUserQuestion 活用）
+### 4. 設計判断（AskUserQuestion 活用）
 
 requirement.md だけでは判断できない技術的選択がある場合、AskUserQuestion で確認する。
 
@@ -71,7 +80,7 @@ options:
 
 **注意:** requirement.md で技術選択が明記されている場合はスキップ。
 
-### 4. 設計書の生成
+### 5. 設計書の生成
 
 #### 出力構造
 
@@ -132,7 +141,7 @@ options:
 - デプロイ考慮事項
 ```
 
-### 5. 複数視点レビュー（--personas）
+### 6. 複数視点レビュー（--personas）
 
 7つの専門視点から設計を評価:
 
@@ -146,7 +155,7 @@ options:
 | DBエンジニア | スキーマ最適化、インデックス、トランザクション |
 | QAエンジニア | テスタビリティ、カバレッジ、自動化 |
 
-### 6. ビジュアル設計（--visual）
+### 7. ビジュアル設計（--visual）
 
 生成するダイアグラム:
 
@@ -174,7 +183,7 @@ erDiagram
     User ||--o{ Order : has
 ```
 
-### 7. 保存先
+### 8. 保存先
 
 ```
 .specs/[project-name]/design.md
