@@ -13,6 +13,7 @@ Reusable AI agent skills for specification-driven development.
 | [spec-rules-init](skills/spec-rules-init/) | Extract project conventions and generate unified coding-rules.md |
 | [spec-to-issue](skills/spec-to-issue/) | Create structured GitHub Issues from spec documents |
 | [spec-workflow-init](skills/spec-workflow-init/) | Generate project-specific issue-to-pr-workflow.md with interactive dialogue |
+| [spec-implement](skills/spec-implement/) | Execute spec-driven implementation from specs to PR with quality gates |
 
 ## Installation
 
@@ -26,6 +27,7 @@ npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 ```
 
 ## Quick Start
@@ -70,6 +72,14 @@ npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
 > Convert spec to GitHub issue
 ```
 
+### Implement from specs to PR
+
+```
+> Implement from spec --issue 42
+> Start implementation --spec .specs/auth-feature/
+> Resume implementation --resume
+```
+
 ## How It Works
 
 1. **spec-generator** produces a structured spec in `.specs/{project}/`:
@@ -84,6 +94,13 @@ npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
    - Generates `inspection-report.md` with findings
 
 3. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue with checklists, links to spec files, and completion criteria.
+
+4. **spec-implement** reads the specs, follows the workflow, enforces coding rules, and creates a PR:
+   - Reads `.specs/{project}/` for implementation guidance
+   - Follows `docs/issue-to-pr-workflow.md` as playbook
+   - Enforces `docs/coding-rules.md` as quality gates
+   - Tracks progress via `tasks.md` checkboxes (resumable)
+   - Creates PR with quality gates passed
 
 ## Compatibility
 
