@@ -16,7 +16,7 @@ spec-implement は、プロジェクト固有の設定ファイルを読み込�
 ```
 1. 初期チェック
    ├── 作業ディレクトリの確認（gitリポジトリ、gh CLI利用可能）
-   ├── オプション解析（--resume, --issue, --spec, --dry-run）
+   ├── オプション解析（--resume, --issue, --spec, --dry-run, --parallel, --no-parallel）
    └── specディレクトリの特定（.specs/{feature}/）
 
 2. ファイル読み込み（柔軟なパス探索）
@@ -38,7 +38,16 @@ spec-implement は、プロジェクト固有の設定ファイルを読み込�
    ├── ワークフローの命名規則に従う（デフォルト: feature/issue-{N}-{desc}）
    └── main/master/develop上での実装を禁止（検証必須）
 
-5. タスクループ
+5. ランタイム対応の並列モード判定
+   ├── 現在の実行環境からランタイムを判定
+   ├── ワークフローの `Agent definition files` / `エージェント定義ファイル` セクションを解析（存在する場合）
+   ├── ランタイムごとのサブエージェント設定を検証
+   │   ├── Codex: .codex/config.toml + multi_agent + agents.workflow-*
+   │   └── Claude Code: ワークフロー記載パス（未記載時は .claude/agents/workflow-*.md）
+   ├── ランタイムが曖昧な場合はユーザーに選択確認
+   └── 設定不備ならシングルエージェント順次実行へフォールバック
+
+6. タスクループ
    ├── エージェントロール検出（ワークフローに定義がある場合）
    ├── tasks.mdから次の未完了タスクを読み取り
    ├── design.mdを参照して実装の詳細を確認
@@ -50,13 +59,13 @@ spec-implement は、プロジェクト固有の設定ファイルを読み込�
    ├── tasks.mdのチェックボックスを更新（- [ ] → - [x]）
    └── 進捗をコミット（プロジェクトのコミット規則に従う）
 
-6. 最終品質ゲート
+7. 最終品質ゲート
    ├── 全テスト実行（ワークフローから）
    ├── lint/typecheck実行（ワークフローから）
    ├── 全[MUST]ルールの通過を確認
    └── CLAUDE.md 条件付きルールの通過を確認
 
-7. PR作成
+8. PR作成
    ├── ワークフローのPRテンプレートに従う
    ├── --base {base_branch}（ワークフローから動的決定）
    ├── Issueにリンク（Closes #{N}）
@@ -104,6 +113,7 @@ spec-implement は、プロジェクト固有の設定ファイルを読み込�
 | Branch Strategy / PR Target | **ベースブランチ**（develop, mainなど）、PRターゲット |
 | Phased Implementation | 実装の順序、コーディングガイドライン |
 | Agent Roles / Sub-agents | エージェントロール定義（存在する場合） |
+| Agent Definition Files (Optional) | サブエージェント定義ファイルの明示パス |
 | Testing | テストコマンド、カバレッジ閾値 |
 | PR Creation and Quality Gates | PR前チェック、PR本文テンプレート |
 | CI/CD Monitoring | CI確認コマンド |
@@ -178,8 +188,19 @@ fi
 
 1. ロール定義を解析（例: implementer, reviewer, tester）
 2. ユーザーに並列実行の選択肢を提示
-3. サブエージェント選択時: Task tool でロール定義に基づいてエージェントを起動
+3. サブエージェント選択時: ランタイム別の方式でロール定義に基づいてエージェントを起動
 4. シングル選択時: 順次実行で続行
+
+### ランタイム判定ルール
+
+ランタイムは現在の実行環境から判定します。リポジトリ内のディレクトリ（`.codex/`, `.claude/`）の有無だけで判定してはいけません。
+
+- `.codex/` と `.claude/` は設定検証のためにのみ使用
+- ワークフローの `Agent definition files` / `エージェント定義ファイル` セクションを先に解析
+- ワークフローに明示された定義ファイルパスを最優先で使用
+- ワークフロー未記載時のみランタイム既定パスにフォールバック
+- ランタイムを判定できない場合は、起動前にユーザーへ確認
+- ランタイム設定が不正な場合は順次実行へフォールバック
 
 ### ワークフローテーブル形式の解析
 
@@ -206,26 +227,44 @@ fi
 | Quality Gate | - | Run all tests | Final check |
 ```
 
-### テーブルからTask Toolパラメータへのマッピング
+### テーブルからサブエージェントパラメータへのマッピング
 
-Task tool でサブエージェントを起動する際:
+サブエージェント起動時:
 
-1. **エージェント名**: ロール割り当てテーブルの `Agent` 列の値を Task tool の `name` パラメータとして使用（例: `name: "workflow-implementer"`）
-2. **エージェントの責務**: `Responsibility` 列の値をタスクプロンプトのコンテキストとして使用
-3. **フェーズ実行順序**: 並列実行戦略テーブルを行ごとに上から順に実行:
+1. **サブエージェント識別子**: ロール割り当てテーブルの `Agent` 列の値を `subagent_type` として使用（例: `subagent_type: "workflow-implementer"`）
+2. **定義ファイルパス**: ワークフローの `Agent definition files` / `エージェント定義ファイル` セクションに記載があればそのパスを使用。未記載時はランタイム既定パスを使用
+3. **エージェントの責務**: `Responsibility` 列の値をタスクプロンプトのコンテキストとして使用
+4. **フェーズ実行順序**: 並列実行戦略テーブルを行ごとに上から順に実行:
    - `-` のセルはそのフェーズでロールがアイドル状態であることを示す
    - `-` 以外のセルはそのフェーズでのロールのアクションを記述
    - 同じフェーズ行でアクティブなロールは並列実行可能
    - フェーズは上から下に順次実行
 
-### 例: Task Tool の呼び出し
+### 例: ランタイム別の呼び出し
 
 「Implementation」フェーズでImplementerとTesterが両方アクティブな場合:
 
+```text
+# Codex（並列起動の例）
+Task:
+  subagent_type: workflow-implementer
+  prompt: "Write implementation code following coding-rules.md..."
+
+Task:
+  subagent_type: workflow-tester
+  prompt: "Write tests following project test patterns..."
 ```
-# 並列で起動:
-Task(name: "workflow-implementer", prompt: "Write implementation code following coding-rules.md...")
-Task(name: "workflow-tester", prompt: "Write tests following project test patterns...")
+
+```text
+# Claude Code（擬似コード。実際はランタイム固有の呼び出し形式を使用）
+SubAgent:
+  subagent_type: workflow-implementer
+  prompt: "Write implementation code following coding-rules.md..."
+
+SubAgent:
+  subagent_type: workflow-tester
+  prompt: "Write tests following project test patterns..."
+```
 
 ## tasks.md の状態管理
 
@@ -326,6 +365,20 @@ git commit -m "{プロジェクト規則に従ったコミットメッセージ}
 - この機能に対して spec-generator を実行済みか確認
 - または `--issue` を使用してミニマルモード（Issueのみ）で実行
 
+**「並列モードを開始できない」**
+- ランタイムごとの設定を確認:
+  - Codex: `.codex/config.toml` に `multi_agent = true` と `agents.workflow-*` がある
+  - Claude Code: ワークフロー記載パスが存在する（未記載時は `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`）
+- 設定が不足している場合は順次実行で続行するか、`spec-workflow-init` を再実行
+
+**「ワークフロー記載のエージェント定義ファイルが存在しない」**
+- ワークフロー内の `Agent definition files` / `エージェント定義ファイル` セクションのパスを確認
+- ワークフローのパスを修正するか、不足ファイルを作成してから再実行
+
+**「ワークフローのAgent名がランタイム設定に存在しない」**
+- ワークフローの Role Assignment Table の `Agent` 名とランタイムの識別子定義を一致させる
+- ワークフローまたはランタイム設定を修正して再実行
+
 **「gh CLIが認証されていません」**
 - `gh auth login` を実行して認証
 - リポジトリへの書き込み権限があることを確認
@@ -381,6 +434,9 @@ spec-implement には以下の安全装置が含まれています:
   Lintコマンド:    {抽出されたコマンド or "default"}
 
 🤖 エージェントロール: {検出されたロール or "none (single agent)"}
+🤖 ランタイム:      {codex | claude-code | unknown}
+🤖 並列モード:      {enabled | disabled | fallback-to-sequential}
+🤖 エージェント定義: {workflow記載パス | runtime defaults}
 
 📝 コミット規約: {抽出されたフォーマット or "default"}
 ```
