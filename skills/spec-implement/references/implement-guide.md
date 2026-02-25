@@ -16,7 +16,7 @@ It acts as an execution engine that:
 ```
 1. Initial Checks
    ├── Verify working directory (git repo, gh CLI available)
-   ├── Parse options (--resume, --issue, --spec, --dry-run)
+   ├── Parse options (--resume, --issue, --spec, --dry-run, --parallel, --no-parallel)
    └── Locate spec directory (.specs/{feature}/)
 
 2. File Loading (flexible path search)
@@ -38,7 +38,16 @@ It acts as an execution engine that:
    ├── Follow workflow's naming convention (default: feature/issue-{N}-{desc})
    └── Block implementation on main/master/develop (verification required)
 
-5. Task Loop
+5. Runtime-Aware Parallel Mode Resolution
+   ├── Determine runtime from current execution environment
+   ├── Parse workflow `Agent definition files` section (if present)
+   ├── Validate runtime-specific sub-agent setup
+   │   ├── Codex: .codex/config.toml + multi_agent + agents.workflow-*
+   │   └── Claude Code: workflow-declared files (fallback: .claude/agents/workflow-*.md)
+   ├── If runtime is ambiguous, ask user to choose
+   └── If setup is invalid, fallback to single-agent sequential mode
+
+6. Task Loop
    ├── Agent role detection (if defined in workflow)
    ├── Read next unchecked task from tasks.md
    ├── Reference design.md for implementation details
@@ -50,13 +59,13 @@ It acts as an execution engine that:
    ├── Update tasks.md checkbox (- [ ] → - [x])
    └── Commit progress (following project commit conventions)
 
-6. Final Quality Gate
+7. Final Quality Gate
    ├── Run all tests (from workflow)
    ├── Run lint/typecheck (from workflow)
    ├── Verify all [MUST] rules pass
    └── Verify CLAUDE.md conditional rules pass
 
-7. PR Creation
+8. PR Creation
    ├── Follow workflow's PR template
    ├── --base {base_branch} (dynamically determined from workflow)
    ├── Link to issue (Closes #{N})
@@ -104,6 +113,7 @@ The workflow file is a project-specific playbook that spec-implement reads and f
 | Branch Strategy / PR Target | **Base branch** (e.g., `develop`, `main`) and PR target |
 | Phased Implementation | Implementation order, coding guidelines |
 | Agent Roles / Sub-agents | Agent role definitions (if present) |
+| Agent Definition Files (Optional) | Explicit sub-agent definition file paths |
 | Testing | Test commands, coverage thresholds |
 | PR Creation and Quality Gates | Pre-PR checks, PR body template |
 | CI/CD Monitoring | CI verification commands |
@@ -178,8 +188,19 @@ If the workflow file contains an "Agent Roles", "Sub-agents", or equivalent sect
 
 1. Parse role definitions (e.g., implementer, reviewer, tester)
 2. Present options to the user (sub-agent parallel execution vs single agent)
-3. If sub-agents selected: use Task tool to spawn agents per role definition
+3. If sub-agents selected: dispatch runtime-specific sub-agents per role definition
 4. If single agent selected: proceed with sequential execution
+
+### Runtime Detection Rule
+
+Determine runtime from the current execution environment. Do NOT infer runtime solely from repository directories (`.codex/`, `.claude/`).
+
+- Use `.codex/` and `.claude/` files only to validate sub-agent setup
+- Parse workflow `Agent definition files` section first, if present
+- Use workflow-declared agent definition file paths as first priority
+- If not declared in workflow, fallback to runtime default paths
+- If runtime cannot be determined, ask user to choose runtime before dispatch
+- If runtime setup is invalid, fallback to sequential mode
 
 ### Parsing Workflow Table Format
 
@@ -206,26 +227,44 @@ Workflow files typically define agent roles using two Markdown tables:
 | Quality Gate | - | Run all tests | Final check |
 ```
 
-### Mapping Tables to Task Tool Parameters
+### Mapping Tables to Sub-Agent Parameters
 
-When spawning sub-agents via the Task tool:
+When spawning sub-agents:
 
-1. **Agent name**: Use the `Agent` column value from the Role Assignment Table as the `name` parameter for the Task tool (e.g., `name: "workflow-implementer"`)
-2. **Agent responsibility**: Use the `Responsibility` column value as context in the task prompt
-3. **Phase execution order**: Follow the Parallel Execution Strategy Table row by row:
+1. **Sub-agent identifier**: Use the `Agent` column value from the Role Assignment Table as `subagent_type` (e.g., `subagent_type: "workflow-implementer"`)
+2. **Definition file path**: Use role-specific path from workflow `Agent definition files` section if declared; otherwise use runtime defaults
+3. **Agent responsibility**: Use the `Responsibility` column value as context in the task prompt
+4. **Phase execution order**: Follow the Parallel Execution Strategy Table row by row:
    - Cells with `-` mean the role is idle in that phase
    - Non-`-` cells describe the role's action in that phase
    - Roles active in the same phase row can run in parallel
    - Phases execute sequentially (top to bottom)
 
-### Example: Task Tool Invocation
+### Example: Runtime-Specific Dispatch
 
 For the "Implementation" phase where Implementer and Tester are both active:
 
+```text
+# Codex (parallel dispatch example)
+Task:
+  subagent_type: workflow-implementer
+  prompt: "Write implementation code following coding-rules.md..."
+
+Task:
+  subagent_type: workflow-tester
+  prompt: "Write tests following project test patterns..."
 ```
-# Spawn in parallel:
-Task(name: "workflow-implementer", prompt: "Write implementation code following coding-rules.md...")
-Task(name: "workflow-tester", prompt: "Write tests following project test patterns...")
+
+```text
+# Claude Code (pseudocode; use runtime-native call format)
+SubAgent:
+  subagent_type: workflow-implementer
+  prompt: "Write implementation code following coding-rules.md..."
+
+SubAgent:
+  subagent_type: workflow-tester
+  prompt: "Write tests following project test patterns..."
+```
 
 ## tasks.md State Management
 
@@ -326,6 +365,20 @@ The `--resume` option enables continuation from the last incomplete task:
 - Ensure spec-generator has been run for this feature
 - Or use `--issue` to run in minimal mode (Issue-only)
 
+**"parallel mode could not start"**
+- Verify runtime-specific setup:
+  - Codex: `.codex/config.toml` includes `multi_agent = true` and `agents.workflow-*`
+  - Claude Code: workflow-declared paths exist (fallback: `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`)
+- If setup is incomplete, continue in sequential mode or run `spec-workflow-init` again
+
+**"workflow-declared agent definition file does not exist"**
+- Check file paths listed in workflow `Agent definition files` section
+- Fix paths in workflow or create missing files, then retry parallel execution
+
+**"workflow agent name not configured in runtime"**
+- Verify `Agent` names in workflow Role Assignment Table match configured runtime agent identifiers
+- Fix the workflow table or runtime config, then retry parallel execution
+
 **"gh CLI not authenticated"**
 - Run `gh auth login` to authenticate
 - Ensure you have write access to the repository
@@ -381,6 +434,9 @@ When `--dry-run` is specified, display the following and exit without making cha
   Lint command:  {extracted command or "default"}
 
 🤖 Agent Roles:  {detected roles or "none (single agent)"}
+🤖 Runtime:      {codex | claude-code | unknown}
+🤖 Parallel:     {enabled | disabled | fallback-to-sequential}
+🤖 Agent files:  {workflow-declared paths | runtime defaults}
 
 📝 Commit Convention: {extracted format or "default"}
 ```

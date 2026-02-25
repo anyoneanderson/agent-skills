@@ -346,6 +346,24 @@ CIが失敗した場合:
 | レビュアー | workflow-reviewer | coding-rules.md 基準のコードレビュー |
 | テスター | workflow-tester | テスト作成・実行、カバレッジ確認 |
 
+### エージェント定義ファイル
+
+{if_claude_agents}
+- `.claude/agents/workflow-implementer.md` — 実装エージェント
+- `.claude/agents/workflow-reviewer.md` — レビューエージェント
+- `.claude/agents/workflow-tester.md` — テストエージェント
+{end_claude_agents}
+
+{if_codex_agents}
+- `.codex/agents/workflow-implementer.toml` — 実装エージェント
+- `.codex/agents/workflow-reviewer.toml` — レビューエージェント
+- `.codex/agents/workflow-tester.toml` — テストエージェント
+{end_codex_agents}
+
+{if_no_agent_files}
+- エージェント定義ファイルは生成しません。必要に応じて手動設定してください。
+{end_no_agent_files}
+
 {end_parallel}
 
 ---

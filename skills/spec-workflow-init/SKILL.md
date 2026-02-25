@@ -190,23 +190,19 @@ options:
   - "Parallel" / "実装とテストコード生成を並行して実行（高速・要エージェント分離）"
 ```
 
-**Round 7: Sub-Agent Generation (only if Parallel selected)**
+**Round 7: Agent Targets (only if Parallel selected)**
 
-First, detect the agent environment:
-```bash
-ls -d .claude/ .codex/ 2>/dev/null
-```
+Ask which agent definitions to generate. Do NOT decide targets based on `.claude/` / `.codex/` directory detection.
 
-If an environment is detected:
 ```
-question: "Generate workflow sub-agent definitions? (Detected: {detected_env})" / "ワークフロー専用サブエージェントを生成しますか？（検出: {detected_env}）"
+question: "Which agent definitions should be generated?" / "どのエージェント定義を生成しますか？"
 header: "Agents"
 options:
-  - "Yes, generate (Recommended)" / "はい、{detected_env}にエージェント定義を配置"
-  - "No, skip" / "いいえ、ワークフロー内に手順のみ記載"
+  - "Both Claude + Codex (Recommended)" / "Claude と Codex の両方を生成"
+  - "Claude only" / "Claude のみ生成"
+  - "Codex only" / "Codex のみ生成"
+  - "Skip generation" / "生成しない"
 ```
-
-If no environment detected, skip agent generation and note in the workflow that manual setup is needed.
 
 **Additional Questions (project-type specific)**:
 
@@ -234,6 +230,9 @@ If no environment detected, skip agent generation and note in the workflow that 
 4. **Handle conditional sections**:
    - Browser E2E not selected → remove `{if_browser_e2e}...{end_browser_e2e}` blocks
    - Parallel not selected → remove `{if_parallel}...{end_parallel}` blocks
+   - If agent targets include Claude → keep `{if_claude_agents}...{end_claude_agents}`, otherwise remove
+   - If agent targets include Codex → keep `{if_codex_agents}...{end_codex_agents}`, otherwise remove
+   - If agent generation is skipped → keep `{if_no_agent_files}...{end_no_agent_files}`, otherwise remove
    - No typecheck command → remove `{if_typecheck}...{end_typecheck}`
    - No build command → remove `{if_build}...{end_build}`
 
@@ -263,9 +262,9 @@ If an existing workflow file is detected (from Step 1 or during generation):
 
 ### Step 6: Sub-Agent Generation
 
-**Skip this step** if the user did not select parallel execution or declined agent generation.
+**Skip this step** if the user did not select parallel execution or selected "Skip generation" in Round 7.
 
-**Step 6a: Claude Code agents** (when `.claude/` detected):
+**Step 6a: Claude Code agents** (when Round 7 selection includes Claude):
 
 1. Select template language based on Language Rules:
    - English → `references/agents/claude/workflow-*.md`
@@ -289,7 +288,7 @@ If an existing workflow file is detected (from Step 1 or during generation):
 
 4. If files already exist, ask for overwrite confirmation (same as Step 5)
 
-**Step 6b: Codex agents** (when `.codex/` detected):
+**Step 6b: Codex agents** (when Round 7 selection includes Codex):
 
 1. Select template language based on Language Rules:
    - English → `references/agents/codex/workflow-*.toml`

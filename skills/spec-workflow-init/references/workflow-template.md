@@ -346,6 +346,24 @@ Implementation and test code generation run in parallel:
 | Reviewer | workflow-reviewer | Code review against coding-rules.md standards |
 | Tester | workflow-tester | Write and run tests, verify coverage |
 
+### Agent definition files
+
+{if_claude_agents}
+- `.claude/agents/workflow-implementer.md` — Implementation agent
+- `.claude/agents/workflow-reviewer.md` — Review agent
+- `.claude/agents/workflow-tester.md` — Test agent
+{end_claude_agents}
+
+{if_codex_agents}
+- `.codex/agents/workflow-implementer.toml` — Implementation agent
+- `.codex/agents/workflow-reviewer.toml` — Review agent
+- `.codex/agents/workflow-tester.toml` — Test agent
+{end_codex_agents}
+
+{if_no_agent_files}
+- Agent definition files are not generated. Set up sub-agents manually if needed.
+{end_no_agent_files}
+
 {end_parallel}
 
 ---

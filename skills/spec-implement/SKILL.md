@@ -36,6 +36,8 @@ Execute implementation from specifications to pull request, following project-sp
    - `--issue {N}` → specify GitHub Issue number
    - `--spec {path}` → specify `.specs/` directory path
    - `--dry-run` → show execution plan without making changes
+   - `--parallel` → force parallel execution if environment is ready
+   - `--no-parallel` → force sequential execution
 
 3. **Locate spec directory**:
    - If `--spec` provided → use that path
@@ -72,6 +74,23 @@ Execute implementation from specifications to pull request, following project-sp
    - `.specs/{feature}/design.md` → how to build it
    - `.specs/{feature}/tasks.md` → task breakdown with checkboxes
 
+5. **Detect parallel-capable agent environment (runtime-aware)**:
+   - Determine active runtime from the current execution environment (do NOT infer runtime solely from repository directories)
+   - Use repository files only for runtime setup validation:
+     - Codex validation: `.codex/config.toml`
+     - Claude Code validation: `.claude/agents/workflow-*.md`
+   - If runtime cannot be determined, ask user to choose runtime
+   - Check whether workflow contains a parallel section (`Parallel Execution Strategy` / `Agent Roles`)
+   - Parse optional workflow section for explicit agent file paths:
+     - `Agent definition files:` / `エージェント定義ファイル:`
+     - Extract paths for implementer / reviewer / tester from list items
+     - Use extracted paths as first priority for validation and dispatch context
+     - If section is absent, fallback to runtime defaults
+   - Validate runtime-specific sub-agent setup:
+     - Codex: `.codex/config.toml` has `[features] multi_agent = true` and `agents.workflow-*`
+     - Claude Code: agent files from workflow section exist; if absent, use defaults (`.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`)
+   - If any required condition is missing, continue in sequential mode
+
 ## Execution Flow
 
 ### Phase 1: Workflow Loading
@@ -85,6 +104,7 @@ Read the workflow file (located in Step 4) and interpret each section as instruc
 | Branch Strategy / PR Target | **Extract base branch** (e.g., `develop`, `main`) and PR target branch |
 | Phased Implementation | Follow implementation order and guidelines |
 | Agent Roles / Sub-agents | Extract agent role definitions (if present) |
+| Agent Definition Files (Optional) | Extract explicit sub-agent definition file paths |
 | Testing | Extract test commands and coverage thresholds |
 | PR Creation and Quality Gates | Extract pre-PR checks and PR template |
 | CI/CD Monitoring | Extract CI verification commands |
@@ -107,6 +127,58 @@ AskUserQuestion:
     - "Continue without workflow" / "ワークフローなしで続行"
 ```
 If continuing without workflow, use minimal flow: Issue analysis → branch → implement → test → PR. Use `main` as `{base_branch}`.
+
+### Phase 1.5: Parallel Mode Resolution (Runtime-Aware)
+
+Enable parallel mode only when ALL are true:
+
+1. Workflow includes a parallel section with role assignment
+2. Runtime-specific sub-agent configuration is valid
+3. User did not pass `--no-parallel` (or explicitly passed `--parallel`)
+
+If runtime cannot be determined from execution context, confirm runtime before dispatch:
+```
+AskUserQuestion:
+  question: "Which runtime should execute sub-agents?" / "どのランタイムでサブエージェント実行しますか？"
+  options:
+    - "Codex runtime" / "Codexで実行"
+    - "Claude Code runtime" / "Claude Codeで実行"
+```
+
+If enabled:
+- Run implementer and tester in parallel, then run reviewer after both complete.
+- Use explicit runtime-specific dispatch instructions, not narrative role assignment only.
+
+Codex path:
+- Required config: `.codex/config.toml` with `multi_agent = true` and `agents.workflow-*`
+- Agent definition file paths:
+  - First priority: paths declared in workflow `Agent definition files` section
+  - Fallback: runtime defaults (from `.codex/agents/` conventions)
+- Dispatch format (example):
+```text
+Task:
+  subagent_type: workflow-implementer
+  prompt: "Implement task T001 using design section 2.3. Edit implementation files only."
+
+Task:
+  subagent_type: workflow-tester
+  prompt: "Create tests for task T001. Edit test files only."
+```
+
+Claude Code path:
+- Required files:
+  - First priority: paths declared in workflow `Agent definition files` section
+  - Fallback defaults: `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`
+- Dispatch format: use Claude Code sub-agent call format with `subagent_type` set to workflow agent names (`workflow-implementer`, `workflow-tester`, `workflow-reviewer`).
+- Example (pseudocode):
+```text
+SubAgent:
+  subagent_type: workflow-implementer
+  prompt: "Implement task T001 using design section 2.3. Edit implementation files only."
+```
+
+If disabled:
+- Continue with the existing single-agent sequential loop.
 
 ### Phase 2: Quality Rules Loading
 
@@ -208,8 +280,13 @@ This check MUST pass before proceeding to Phase 6. If it fails, stop and ask the
 
 If the workflow file contains an "Agent Roles", "Sub-agents", or "エージェントロール" section:
 
+0. **Parse explicit agent file paths** (if present):
+   - Read workflow section `Agent definition files:` / `エージェント定義ファイル:`
+   - Build a map of role → definition file path (implementer/reviewer/tester)
+   - If no section exists, use runtime defaults
+
 1. **Parse the Role Assignment Table** — find the Markdown table with columns like `Role | Agent | Responsibility`:
-   - Extract each row's `Agent` column value → use as Task tool `name` parameter
+   - Extract each row's `Agent` column value → use as runtime sub-agent identifier (`subagent_type`)
    - Extract each row's `Responsibility` column value → use as context in the task prompt
 2. **Parse the Parallel Execution Strategy Table** (if present) — find the table with phase rows and role columns:
    - Each row = a phase (execute sequentially, top to bottom)
@@ -224,10 +301,13 @@ If the workflow file contains an "Agent Roles", "Sub-agents", or "エージェ�
        - "Use sub-agents (parallel)" / "サブエージェント使用（並列）"
        - "Single agent (sequential)" / "シングルエージェント（順次）"
    ```
-4. If sub-agents selected: spawn agents via Task tool using parsed `Agent` names, execute phases per strategy table
+4. If sub-agents selected, branch by runtime:
+   - Codex runtime: spawn agents via Codex Task dispatch using parsed `Agent` names as `subagent_type`
+   - Claude Code runtime: spawn agents via Claude Code sub-agent dispatch using parsed `Agent` names as `subagent_type`
+   - Execute phases per strategy table (same-row roles run in parallel)
 5. If single agent selected: proceed with sequential execution below
 
-See reference guide for table format examples and Task tool invocation patterns.
+See reference guide for table format examples and runtime-specific sub-agent invocation patterns.
 
 **Read specs in order:** `requirement.md` → `design.md` → `tasks.md`
 
@@ -303,6 +383,8 @@ After PR creation, monitor CI status if the workflow specifies CI verification c
 | `--issue {N}` | Specify GitHub Issue number for context |
 | `--spec {path}` | Specify .specs/ directory path (default: auto-detect) |
 | `--dry-run` | Show execution plan without making any changes (output format: see reference guide) |
+| `--parallel` | Force parallel mode (requires valid runtime sub-agent setup for Codex or Claude Code) |
+| `--no-parallel` | Disable parallel mode and run sequentially |
 
 ## Error Handling
 
@@ -311,6 +393,10 @@ After PR creation, monitor CI status if the workflow specifies CI verification c
 | Not a git repository | Error: "Must be in a git repository" / "gitリポジトリ内で実行してください" |
 | `gh` CLI not available | Error: guide user to install/authenticate gh CLI |
 | `.specs/` not found | Warning: switch to Issue-only minimal mode |
+| Parallel requested but runtime sub-agent config missing/invalid | Warning: explain missing setup, fallback to sequential mode |
+| Workflow-declared agent definition file path does not exist | Warning: explain missing file path, fallback to sequential mode |
+| Workflow references sub-agent names that are not configured in selected runtime | Warning: explain missing agent definitions, fallback to sequential mode |
+| Parallel file edit collision | Warning: stop parallel for current task, continue sequentially |
 | `requirement.md` missing | Warning: use Issue body as requirements source |
 | `tasks.md` missing | Warning: generate simple checklist from Issue |
 | `[MUST]` rule violation | Error: stop, fix, recheck before continuing |
@@ -337,6 +423,10 @@ After PR creation, monitor CI status if the workflow specifies CI verification c
 # Dry run to preview plan
 "Show implementation plan --dry-run --spec .specs/auth-feature/"
 「実装計画を表示 --dry-run」
+
+# Force parallel mode (runtime-aware)
+"Implement from spec --spec .specs/auth-feature/ --parallel"
+「仕様書から並列実行で実装 --parallel」
 
 # Minimal mode (no specs)
 "Implement issue 42"
