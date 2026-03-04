@@ -14,6 +14,7 @@
 | [spec-to-issue](skills/spec-to-issue/) | 仕様書から構造化されたGitHub Issueを自動生成 |
 | [spec-workflow-init](skills/spec-workflow-init/) | 対話形式でプロジェクト固有のissue-to-pr-workflow.mdを生成 |
 | [spec-implement](skills/spec-implement/) | 仕様書駆動で実装からPR作成まで自動実行、品質ゲート付き |
+| [kintai](skills/kintai/) | レバテックプラットフォームの勤怠入力をブラウザ自動操作で自動化 |
 
 ## インストール
 
@@ -28,6 +29,7 @@ npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
+npx skills add anyoneanderson/agent-skills --skill kintai -g -y
 ```
 
 ## クイックスタート

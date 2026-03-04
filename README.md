@@ -14,6 +14,7 @@ Reusable AI agent skills for specification-driven development.
 | [spec-to-issue](skills/spec-to-issue/) | Create structured GitHub Issues from spec documents |
 | [spec-workflow-init](skills/spec-workflow-init/) | Generate project-specific issue-to-pr-workflow.md with interactive dialogue |
 | [spec-implement](skills/spec-implement/) | Execute spec-driven implementation from specs to PR with quality gates |
+| [kintai](skills/kintai/) | Automate Levtech platform time tracking input via browser automation |
 
 ## Installation
 
@@ -28,6 +29,7 @@ npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
+npx skills add anyoneanderson/agent-skills --skill kintai -g -y
 ```
 
 ## Quick Start
