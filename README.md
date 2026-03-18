@@ -9,6 +9,7 @@ Reusable AI agent skills for specification-driven development.
 | Skill | Description |
 |-------|-------------|
 | [spec-generator](skills/spec-generator/) | Generate project requirements, design documents, and task lists from conversations or prompts |
+| [mcp-convert](skills/mcp-convert/) | Convert Claude Code MCP settings into Codex CLI MCP configuration |
 | [spec-inspect](skills/spec-inspect/) | Validate specification quality and detect issues before implementation |
 | [spec-rules-init](skills/spec-rules-init/) | Extract project conventions and generate unified coding-rules.md |
 | [spec-to-issue](skills/spec-to-issue/) | Create structured GitHub Issues from spec documents |
@@ -23,6 +24,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 
 # Install a specific skill
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
+npx skills add anyoneanderson/agent-skills --skill mcp-convert -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
@@ -47,6 +49,14 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 > Inspect specs
 > Check specification quality
 > Validate requirements
+```
+
+### Convert Claude MCP settings into Codex
+
+```
+> Convert Claude Code MCP to Codex
+> Sync MCP settings from Claude Code
+> Migrate Claude mcpServers into Codex CLI
 ```
 
 ### Generate coding rules

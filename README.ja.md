@@ -9,6 +9,7 @@
 | スキル | 説明 |
 |-------|------|
 | [spec-generator](skills/spec-generator/) | 会話やプロンプトからプロジェクトの要件定義書・設計書・タスクリストを生成 |
+| [mcp-convert](skills/mcp-convert/) | Claude Code の MCP 設定を Codex CLI 向けに変換 |
 | [spec-inspect](skills/spec-inspect/) | 仕様書の品質を検証し、実装前に問題を検出 |
 | [spec-rules-init](skills/spec-rules-init/) | プロジェクト規約を抽出し、統一的なcoding-rules.mdを生成 |
 | [spec-to-issue](skills/spec-to-issue/) | 仕様書から構造化されたGitHub Issueを自動生成 |
@@ -23,6 +24,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 
 # 個別にインストール
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
+npx skills add anyoneanderson/agent-skills --skill mcp-convert -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
@@ -47,6 +49,14 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 > 仕様書を検査
 > 品質チェック
 > 仕様を検証
+```
+
+### Claude の MCP 設定を Codex に変換する
+
+```
+> Claude CodeのMCPをCodexに変換
+> ClaudeのMCP設定をCodex CLIに同期
+> mcpServersをCodexに移行
 ```
 
 ### コーディングルールを生成する
