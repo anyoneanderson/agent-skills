@@ -33,7 +33,12 @@ npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
+npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
+npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
+npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 ```
+
+> **Note**: cmux スキルは [cmux](https://cmux.dev/)（macOS 14.0+）が必要で、cmux セッション内で実行する必要があります。
 
 ## クイックスタート
 
@@ -93,6 +98,30 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 > 実装を再開 --resume
 ```
 
+### 会話をフォークする（cmux）
+
+```
+> フォークして
+> 下にフォークして
+> 新しいワークスペースでフォークして
+```
+
+### 別エージェントにタスクを委任する（cmux）
+
+```
+> 別ペインでテストを実行して
+> Codex にこの diff をレビューしてもらって
+> 新しいワークスペースに委任して
+```
+
+### セカンドオピニオンを取得する（cmux）
+
+```
+> この diff をセカンドオピニオンして
+> 仕様書のセカンドオピニオンをもらって
+> 自由にレビューしてもらって
+```
+
 ## 仕組み
 
 1. **spec-generator** が `.specs/{project}/` に構造化された仕様書を生成:
@@ -110,12 +139,26 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 
 4. **spec-workflow-init** が `docs/issue-to-pr-workflow.md` にプロジェクト固有の開発ワークフローを生成。
 
-5. **spec-implement** が仕様書を読み、ワークフローに従い、コーディングルールを適用してPRを作成:
+5. **spec-rules-init** がプロジェクト規約から品質ルールを生成:
+   - `docs/coding-rules.md` — 実装品質ゲート
+   - `docs/review_rules.md` — レビュー基準（重大度別出力方針: CI / レビューゲート / セカンドオピニオン）
+
+6. **spec-implement** が仕様書を読み、ワークフローに従い、コーディングルールを適用してPRを作成:
    - `.specs/{project}/` から実装ガイダンスを読み込み
    - `docs/issue-to-pr-workflow.md` をプレイブックとして追従
    - `docs/coding-rules.md` を品質ゲートとして強制適用
+   - **レビューゲート**（修正ループ最大3回）で `review_rules.md` を参照
    - `tasks.md` のチェックボックスで進捗管理（再開可能）
+   - オプション: **cmux dispatch** でサブエージェントを可視化、ロール別エージェント選択
    - 品質ゲート通過後にPRを作成
+
+### cmux スキル（オプション、[cmux](https://cmux.dev/) が必要）
+
+7. **cmux-fork** が現在の会話を新しい cmux ペインまたはワークスペースにフォーク。会話コンテキストを完全に引き継ぎ。
+
+8. **cmux-delegate** が別の cmux ワークスペースに AI エージェントを起動し、タスクを送信・監視・結果回収。Claude Code / Codex / Gemini CLI 対応。
+
+9. **cmux-second-opinion** が別の AI エージェントに独立したレビューを依頼。親と異なるエージェントを自動選択。コードレビュー・仕様書レビュー対応、基準モード3種。
 
 ## 互換性
 

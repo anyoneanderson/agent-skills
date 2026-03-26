@@ -33,7 +33,12 @@ npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
+npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
+npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
+npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 ```
+
+> **Note**: cmux skills require [cmux](https://cmux.dev/) (macOS 14.0+) and must be run inside a cmux session.
 
 ## Quick Start
 
@@ -93,6 +98,30 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 > Resume implementation --resume
 ```
 
+### Fork a conversation (cmux)
+
+```
+> Fork this conversation
+> Fork down
+> Fork to a new workspace
+```
+
+### Delegate a task to another agent (cmux)
+
+```
+> Run tests in another pane
+> Have Codex review this diff
+> Delegate this to a new workspace
+```
+
+### Get a second opinion (cmux)
+
+```
+> Get a second opinion on this diff
+> Have another AI review the specs
+> Second opinion, freely review
+```
+
 ## How It Works
 
 1. **spec-generator** produces a structured spec in `.specs/{project}/`:
@@ -108,12 +137,26 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 
 3. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue with checklists, links to spec files, and completion criteria.
 
-4. **spec-implement** reads the specs, follows the workflow, enforces coding rules, and creates a PR:
+4. **spec-rules-init** generates quality rules from project conventions:
+   - `docs/coding-rules.md` — Implementation quality gates
+   - `docs/review_rules.md` — Review criteria with severity-based output policies (CI / review gate / second opinion)
+
+5. **spec-implement** reads the specs, follows the workflow, enforces coding rules, and creates a PR:
    - Reads `.specs/{project}/` for implementation guidance
    - Follows `docs/issue-to-pr-workflow.md` as playbook
    - Enforces `docs/coding-rules.md` as quality gates
+   - **Review gates** with fix loops (max 3 iterations) using `review_rules.md`
    - Tracks progress via `tasks.md` checkboxes (resumable)
+   - Optional: **cmux dispatch** for visible sub-agent execution with agent selection per role
    - Creates PR with quality gates passed
+
+### cmux Skills (optional, requires [cmux](https://cmux.dev/))
+
+6. **cmux-fork** forks the current conversation into a new cmux pane or workspace, preserving full context.
+
+7. **cmux-delegate** launches an AI agent in a separate cmux workspace, sends a task, monitors completion, and collects results. Supports Claude Code, Codex, Gemini CLI.
+
+8. **cmux-second-opinion** gets an independent review from a different AI agent. Automatically selects an agent different from the parent. Supports code review and spec review with 3 criteria modes.
 
 ## Compatibility
 
