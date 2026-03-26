@@ -439,4 +439,114 @@ When `--dry-run` is specified, display the following and exit without making cha
 🤖 Agent files:  {workflow-declared paths | runtime defaults}
 
 📝 Commit Convention: {extracted format or "default"}
+📋 Review Rules:  {path or "not found"}
+🖥️  cmux Dispatch: {enabled | disabled}
 ```
+
+## cmux Dispatch Patterns
+
+When cmux dispatch mode is selected, sub-agents are launched in separate cmux workspaces instead of using built-in Agent tools.
+
+### Agent Launch Pattern
+
+```bash
+# 1. Create workspace
+WS=$(cmux new-workspace)
+# Output: OK surface:{N} workspace:{N}
+
+# 2. Launch agent (select command based on AI column in role table)
+# Claude Code:
+cmux send --surface surface:{N} "claude --dangerously-skip-permissions\n"
+# Codex:
+cmux send --surface surface:{N} "codex --dangerously-bypass-approvals-and-sandbox\n"
+# Gemini CLI:
+cmux send --surface surface:{N} "gemini\n"
+
+# 3. Detect prompt (poll every 3s, timeout 15s)
+sleep 3
+cmux read-screen --surface surface:{N}
+
+# 4. Send task
+cmux send --surface surface:{N} "{task_prompt}"
+cmux send-key --surface surface:{N} return
+
+# 5. Monitor completion (graduated polling: 5s → 10s → 30s)
+cmux read-screen --surface surface:{N}
+
+# 6. Collect results
+cmux read-screen --surface surface:{N} --scrollback 500
+
+# 7. Cleanup
+cmux close-workspace --workspace workspace:{N}
+```
+
+### Agent Selection from Role Table
+
+The workflow's role assignment table may include an `AI` column:
+
+| Role | Agent | AI | Responsibility |
+|------|-------|----|---------------|
+| Implementer | workflow-implementer | codex | Write code |
+| Tester | workflow-tester | codex | Write tests |
+| Reviewer | workflow-reviewer | claude | Code review |
+
+Map `AI` column values to launch commands:
+
+| AI Value | Command (auto-approve) |
+|----------|----------------------|
+| `claude` | `claude --dangerously-skip-permissions` |
+| `codex` | `codex --dangerously-bypass-approvals-and-sandbox` |
+| `gemini` | `gemini` (no auto-approve available) |
+| *(missing)* | Default: `claude --dangerously-skip-permissions` |
+
+### Parallel Execution with cmux
+
+Follow the strategy table — roles in the same row run in parallel:
+
+1. Launch implementer + tester in separate workspaces simultaneously
+2. Monitor both for completion
+3. After both complete, launch reviewer
+4. Collect all results
+
+## Review Gate Details
+
+### Implementation Review Gate
+
+The review gate replaces the simple self-review with a structured process:
+
+1. **Load criteria**: review_rules.md (if found) + coding-rules.md + CLAUDE.md
+2. **Review**: Check severity-based criteria (security, type safety, patterns, quality)
+3. **Classify findings**:
+   - **Critical**: Security vulnerabilities, bugs → must fix
+   - **Improvement**: Quality, readability → should fix
+   - **Minor**: Style → log only
+4. **Fix loop** (max 3 iterations):
+   - Fix issues → re-review only changed code
+   - After 3rd iteration: unresolved improvements downgraded to minor
+   - After 3rd iteration: unresolved critical → ask user
+5. **Second opinion** (if cmux dispatch + second-opinion enabled):
+   - After self-review loop passes
+   - Launch reviewer agent (different AI from implementer) in cmux workspace
+   - Send diff + review_rules.md
+   - Collect structured result
+   - New critical findings → 1 additional fix loop
+6. **Gate passes** when no unresolved critical issues remain
+
+### Test Review Gate
+
+Same structure as Implementation Review Gate, with additional test-specific criteria:
+
+- Coverage meets completion criteria
+- Edge cases and error paths are tested
+- Test isolation (no inter-test dependencies)
+- AAA pattern (Arrange → Act → Assert)
+
+### Second Opinion Settings (from workflow)
+
+The workflow may specify second opinion behavior:
+
+| Setting | Behavior |
+|---------|----------|
+| "Always" / "毎回実施" | Auto-run at every review gate |
+| "On request" / "ユーザー要求時のみ" | Ask user before running |
+| "Never" / "実施しない" | Skip second opinion |

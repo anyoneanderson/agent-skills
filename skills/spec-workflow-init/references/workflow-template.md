@@ -390,11 +390,11 @@ Implementation and test code generation run in parallel:
 
 ### Role Assignment
 
-| Role | Agent | Responsibility |
-|------|-------|---------------|
-| Implementer | workflow-implementer | Write implementation code following coding-rules.md |
-| Reviewer | workflow-reviewer | Code review against coding-rules.md standards |
-| Tester | workflow-tester | Write and run tests, verify coverage |
+| Role | Agent | AI | Responsibility |
+|------|-------|----|---------------|
+| Implementer | workflow-implementer | {implementer_ai} | Write implementation code following coding-rules.md |
+| Reviewer | workflow-reviewer | {reviewer_ai} | Code review against coding-rules.md standards |
+| Tester | workflow-tester | {tester_ai} | Write and run tests, verify coverage |
 
 ### Agent definition files
 

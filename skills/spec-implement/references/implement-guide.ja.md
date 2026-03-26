@@ -439,4 +439,114 @@ spec-implement には以下の安全装置が含まれています:
 🤖 エージェント定義: {workflow記載パス | runtime defaults}
 
 📝 コミット規約: {抽出されたフォーマット or "default"}
+📋 レビュー基準:  {パス or "未検出"}
+🖥️  cmux dispatch: {有効 | 無効}
 ```
+
+## cmux ディスパッチパターン
+
+cmux dispatch モードが選択された場合、サブエージェントは組み込み Agent ツールの代わりに cmux ワークスペースで起動されます。
+
+### エージェント起動パターン
+
+```bash
+# 1. ワークスペース作成
+WS=$(cmux new-workspace)
+# 出力: OK surface:{N} workspace:{N}
+
+# 2. エージェント起動（ロールテーブルの AI 列に基づきコマンド選択）
+# Claude Code:
+cmux send --surface surface:{N} "claude --dangerously-skip-permissions\n"
+# Codex:
+cmux send --surface surface:{N} "codex --dangerously-bypass-approvals-and-sandbox\n"
+# Gemini CLI:
+cmux send --surface surface:{N} "gemini\n"
+
+# 3. プロンプト検出（3秒間隔、15秒タイムアウト）
+sleep 3
+cmux read-screen --surface surface:{N}
+
+# 4. タスク送信
+cmux send --surface surface:{N} "{task_prompt}"
+cmux send-key --surface surface:{N} return
+
+# 5. 完了検出（段階的ポーリング: 5秒 → 10秒 → 30秒）
+cmux read-screen --surface surface:{N}
+
+# 6. 結果回収
+cmux read-screen --surface surface:{N} --scrollback 500
+
+# 7. クリーンアップ
+cmux close-workspace --workspace workspace:{N}
+```
+
+### ロールテーブルからのエージェント選択
+
+ワークフローのロール割り当てテーブルに `AI` 列がある場合:
+
+| ロール | エージェント | AI | 責務 |
+|--------|-------------|-----|------|
+| 実装者 | workflow-implementer | codex | コード作成 |
+| テスター | workflow-tester | codex | テスト作成 |
+| レビュアー | workflow-reviewer | claude | コードレビュー |
+
+AI 列の値 → 起動コマンドのマッピング:
+
+| AI 値 | コマンド（auto-approve） |
+|-------|----------------------|
+| `claude` | `claude --dangerously-skip-permissions` |
+| `codex` | `codex --dangerously-bypass-approvals-and-sandbox` |
+| `gemini` | `gemini`（auto-approve なし） |
+| *(未指定)* | デフォルト: `claude --dangerously-skip-permissions` |
+
+### cmux での並列実行
+
+戦略テーブルに従い、同一行のロールを並列起動:
+
+1. 実装者 + テスターを別ワークスペースで同時起動
+2. 両方の完了を監視
+3. 両方完了後、レビュアーを起動
+4. 全結果を統合
+
+## レビューゲート詳細
+
+### Implementation Review Gate
+
+単純なセルフレビューを構造化されたプロセスに置き換えます:
+
+1. **基準読み込み**: review_rules.md（検出時）+ coding-rules.md + CLAUDE.md
+2. **レビュー**: 重大度別チェック（セキュリティ、型安全、パターン、品質）
+3. **検出結果の分類**:
+   - **重大**: セキュリティ脆弱性、バグ → 必ず修正
+   - **改善提案**: 品質、可読性 → 修正推奨
+   - **軽微**: スタイル → ログのみ
+4. **修正ループ**（最大3回）:
+   - 修正 → 変更箇所のみ再レビュー
+   - 3回目で未解消の改善提案 → 軽微に降格
+   - 3回目で未解消の重大 → ユーザーに判断を委ねる
+5. **セカンドオピニオン**（cmux dispatch + second-opinion 有効時）:
+   - セルフレビューループ通過後
+   - レビュアーエージェント（実装者と異なるAI）を cmux で起動
+   - diff + review_rules.md を送信
+   - 構造化レポートを回収
+   - 新たな重大指摘 → 追加修正ループ（1回のみ）
+6. **ゲート通過**: 未解消の重大指摘がない状態
+
+### Test Review Gate
+
+Implementation Review Gate と同じ構造 + テスト固有の観点:
+
+- カバレッジが完了条件を満たしているか
+- エッジケース・エラーパスのテストがあるか
+- テストの独立性（テスト間依存なし）
+- AAA パターン（Arrange → Act → Assert）
+
+### セカンドオピニオン設定（ワークフローから）
+
+ワークフローでセカンドオピニオンの動作を指定可能:
+
+| 設定 | 動作 |
+|------|------|
+| 「毎回実施」 | レビューゲートごとに自動実行 |
+| 「ユーザー要求時のみ」 | 実行前にユーザーに確認 |
+| 「実施しない」 | スキップ |

@@ -63,6 +63,12 @@ Execute implementation from specifications to pull request, following project-sp
    3. Fallback: `find . -name "coding-rules.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" | head -1`
    4. If not found → trigger fallback (see Phase 2)
 
+   **Review rules** — search in order, use first found:
+   1. `docs/development/review_rules.md`
+   2. `docs/review_rules.md`
+   3. Fallback: `find . -name "review_rules.md" -not -path "*/node_modules/*" -not -path "*/.git/*" | head -1`
+   4. If not found → log info, continue without review rules (coding-rules.md only for review gates)
+
    **Project instruction files** — read all that exist:
    - `CLAUDE.md` (project root)
    - `src/CLAUDE.md` (source-level rules)
@@ -292,20 +298,24 @@ If the workflow file contains an "Agent Roles", "Sub-agents", or "エージェ�
    - Each row = a phase (execute sequentially, top to bottom)
    - Cells with `-` = role is idle in that phase
    - Non-`-` cells = role's action (roles active in the same row run in parallel)
-3. Present options to the user:
+3. **Detect cmux dispatch**:
+   - Check if workflow contains a "Dispatch Strategy" / "ディスパッチ戦略" section with `cmux`
+   - Check `CMUX_SOCKET_PATH` environment variable
+   - Parse workflow role assignment table for optional `AI` column (maps roles to agents)
+4. Present options to the user:
    ```
    AskUserQuestion:
-     question: "Workflow defines agent roles. Use sub-agents for parallel execution?" /
-               "ワークフローにエージェントロールが定義されています。サブエージェントで並列実行しますか？"
+     question: "Execution mode?" / "実行モードを選択してください"
      options:
        - "Use sub-agents (parallel)" / "サブエージェント使用（並列）"
+       - "Sub-agents via cmux (visible)" / "cmux で可視化（並列）"  ← only if cmux detected
        - "Single agent (sequential)" / "シングルエージェント（順次）"
    ```
-4. If sub-agents selected, branch by runtime:
-   - Codex runtime: spawn agents via Codex Task dispatch using parsed `Agent` names as `subagent_type`
-   - Claude Code runtime: spawn agents via Claude Code sub-agent dispatch using parsed `Agent` names as `subagent_type`
+5. If sub-agents selected, branch by dispatch method:
+   - **Built-in Agent dispatch**: spawn via Codex Task or Claude Code sub-agent using `subagent_type`
+   - **cmux dispatch**: spawn via cmux CLI (new-workspace → send → poll → collect). Use `AI` column from role table to select agent command. See reference guide for cmux dispatch patterns.
    - Execute phases per strategy table (same-row roles run in parallel)
-5. If single agent selected: proceed with sequential execution below
+6. If single agent selected: proceed with sequential execution below
 
 See reference guide for table format examples and runtime-specific sub-agent invocation patterns.
 
@@ -317,18 +327,28 @@ For each unchecked task in `tasks.md`:
 1. Read task details (requirements ID, design reference, target files, completion criteria)
 2. Reference the corresponding design.md section
 3. Implement: create or modify target files
-4. 🔍 Implementation Review:
-   a. Self-review generated code against design.md specifications
-   b. Verify coding-rules.md [MUST] rules for generated code
-   c. Verify CLAUDE.md conditional rules for generated code
-   d. If review finds issues → fix before proceeding
+4. 🔍 Implementation Review Gate:
+   a. Load review_rules.md (if found in Phase 1 Step 4)
+   b. Review against review_rules.md + coding-rules.md + design.md
+   c. Severity classification:
+      - Critical (security/bugs) → fix immediately → re-review
+      - Improvement (quality/readability) → fix → re-review
+      - Minor (style) → log only, continue
+   d. Fix loop (max 3 iterations):
+      - Fix → re-review only fixed areas → repeat
+      - After 3rd: unresolved improvements → downgrade to minor
+      - After 3rd: unresolved critical → ask user to decide
+   e. If cmux dispatch + second-opinion enabled:
+      - After self-review loop passes, run second opinion (see reference guide)
+      - New critical findings → 1 additional fix loop
+   f. Gate passes → proceed to Step 5
 5. If task includes test implementation:
-   a. Write tests following project test patterns (from CLAUDE.md / coding-rules.md)
+   a. Write tests following project test patterns
    b. Run tests to verify they pass
-   c. 🔍 Test Review:
-      - Verify test coverage matches completion criteria
-      - Verify test patterns match project conventions
-      - If review finds issues → fix before proceeding
+   c. 🔍 Test Review Gate:
+      - Same fix loop structure as Implementation Review Gate
+      - Additional test-specific criteria: coverage, edge cases, test isolation, AAA pattern
+      - Gate passes → proceed to Step 6
 6. Update tasks.md: mark completion criteria (- [ ] → - [x])
 7. When all criteria pass: mark top-level task checkbox (- [x])
 8. Commit progress:
