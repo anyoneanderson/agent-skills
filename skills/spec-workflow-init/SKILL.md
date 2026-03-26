@@ -227,6 +227,30 @@ options:
   - "Skip generation" / "生成しない"
 ```
 
+**Round 8: Agent AI Assignment (only if cmux dispatch selected in Round 6.5)**
+
+```
+question: "Which AI to assign to each role?" / "各ロールにどのAIを割り当てますか？"
+header: "AI Assignment"
+options:
+  - "Implement=Codex, Test=Codex, Review=Claude (Recommended)"
+  - "All Claude Code" / "全て Claude Code"
+  - "All Codex" / "全て Codex"
+```
+
+Use the selection to fill `{implementer_ai}`, `{tester_ai}`, `{reviewer_ai}` in the role table.
+
+**Round 8.5: Second Opinion (only if cmux dispatch selected in Round 6.5)**
+
+```
+question: "Run second opinion at review gates?" / "レビューゲートでセカンドオピニオンを実施しますか？"
+header: "Opinion"
+options:
+  - "Always (Recommended)" / "毎回実施（推奨）"
+  - "On user request only" / "ユーザーが要求した場合のみ"
+  - "Never" / "実施しない"
+```
+
 **Additional Questions (project-type specific)**:
 
 - **Docker project**: "Run all commands inside Docker?" / "Docker内で全コマンドを実行しますか？"
@@ -263,6 +287,8 @@ options:
    - cmux dispatch selected → keep `{if_cmux_dispatch}...{end_cmux_dispatch}` and `{if_second_opinion}...{end_second_opinion}`
    - cmux dispatch not selected → remove both cmux/second-opinion blocks
    - Replace `{review_rules_path}` with detected path (or placeholder)
+   - Replace `{implementer_ai}`, `{tester_ai}`, `{reviewer_ai}` with selected AI values (from Round 8). Default: `claude`
+   - If AI column not applicable (no cmux dispatch), remove `AI` column from role table
 
 5. **Clean up** remaining placeholders and conditional markers
 

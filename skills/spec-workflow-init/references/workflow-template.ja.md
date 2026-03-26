@@ -390,11 +390,11 @@ CIが失敗した場合:
 
 ### ロール割り当て
 
-| ロール | エージェント | 責務 |
-|--------|-------------|------|
-| 実装者 | workflow-implementer | coding-rules.md に従った実装コード作成 |
-| レビュアー | workflow-reviewer | coding-rules.md 基準のコードレビュー |
-| テスター | workflow-tester | テスト作成・実行、カバレッジ確認 |
+| ロール | エージェント | AI | 責務 |
+|--------|-------------|-----|------|
+| 実装者 | workflow-implementer | {implementer_ai} | coding-rules.md に従った実装コード作成 |
+| レビュアー | workflow-reviewer | {reviewer_ai} | coding-rules.md 基準のコードレビュー |
+| テスター | workflow-tester | {tester_ai} | テスト作成・実行、カバレッジ確認 |
 
 ### エージェント定義ファイル
 
