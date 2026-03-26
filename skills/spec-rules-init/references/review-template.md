@@ -56,12 +56,35 @@ Documentation update omissions are treated as **Critical** findings. They will n
 
 When new features are added or existing features are changed, verify that related documentation has been updated accordingly.
 
-Check targets:
-- **README.md** — Are install instructions, usage examples, and feature descriptions updated for new features?
-- **CLAUDE.md / AGENTS.md** — Are project rules and skill configuration changes reflected?
-- **coding-rules.md** — Are new rules or patterns added?
-- **issue-to-pr-workflow.md** — Are workflow changes reflected?
-- **API documentation** — Are endpoint additions/changes documented?
-- **.specs/ specifications** — Are design changes reflected in requirement.md / design.md / tasks.md?
+### Step 1: Discover Documentation Files
 
-{auto_detected_doc_targets}
+Search the project for all documentation files. Do NOT rely on a fixed list — scan the project to find what actually exists:
+
+```bash
+# Markdown docs (including multilingual variants like README.ja.md, CONTRIBUTING.ko.md)
+find . -maxdepth 4 -name "*.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/.specs/*" 2>/dev/null
+
+# API documentation (OpenAPI, Swagger, etc.)
+find . -maxdepth 4 \( -name "openapi.*" -o -name "swagger.*" -o -name "*.openapi.*" \) -not -path "*/node_modules/*" 2>/dev/null
+
+# Documentation directories
+find . -maxdepth 2 -type d \( -name "docs" -o -name "doc" -o -name "documentation" -o -name "wiki" \) -not -path "*/node_modules/*" 2>/dev/null
+```
+
+### Step 2: Classify and Check
+
+For each discovered documentation file, determine if the code changes require an update:
+
+| Category | Example Files | When Update is Required |
+|----------|--------------|----------------------|
+| Project README | `README.md`, `README.ja.md`, `README.*.md` | New feature added, install steps changed, usage examples outdated |
+| Project rules | `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` | Project conventions or skill settings changed |
+| Coding standards | `coding-rules.md`, `review_rules.md` | New rules, patterns, or libraries introduced |
+| Workflow | `issue-to-pr-workflow.md` | Development process changed |
+| API docs | `openapi.yaml`, `swagger.json`, `docs/api/` | Endpoints added, modified, or removed |
+| Specifications | `.specs/*/requirement.md`, `.specs/*/design.md` | Architecture or design decisions changed |
+| Guides / tutorials | Files in `docs/`, `doc/`, `wiki/` | Feature behavior changed |
+
+### Step 3: Report
+
+Flag each documentation file that should be updated but was not included in the changeset.
