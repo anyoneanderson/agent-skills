@@ -40,6 +40,15 @@ echo $CMUX_SOCKET_PATH
   - JA: "エラー: cmux セッション内で実行されていません。cmux 内で Claude Code を起動してください。"
 - If set → proceed
 
+## Permission Mode
+
+By default, fork with `--dangerously-skip-permissions` to avoid re-approving every tool in the forked session. Use interactive mode only when explicitly requested.
+
+| User Input Pattern | Mode | Flag |
+|---|---|---|
+| *(default)* | skip permissions | `--dangerously-skip-permissions` |
+| "interactive", "対話モード", "承認あり", "with permissions" | interactive | *(none)* |
+
 ## Direction Mapping
 
 Parse the user's request to determine fork direction. Use the **first match** from the table below. If no direction keyword is found, use the default (right).
@@ -53,9 +62,11 @@ Parse the user's request to determine fork direction. Use the **first match** fr
 
 ## Execution Steps
 
-### Step 1: Determine Direction
+### Step 1: Determine Direction and Permission Mode
 
-Parse the user's input against the Direction Mapping table above. Default to `right` if no direction is specified.
+Parse the user's input against the Direction Mapping and Permission Mode tables above.
+- Direction default: `right`
+- Permission default: `--dangerously-skip-permissions`
 
 ### Step 2: Create Surface
 
@@ -85,7 +96,15 @@ Extract both the surface and workspace handles from the output.
 
 ### Step 3: Launch Forked Claude Code
 
-Send the fork command to the new surface:
+Send the fork command to the new surface. Default includes `--dangerously-skip-permissions` to avoid re-approving tools:
+
+**Default (auto-approve — recommended):**
+
+```bash
+cmux send --surface surface:{N} "claude --continue --fork-session --dangerously-skip-permissions\n"
+```
+
+**Interactive mode (if user explicitly requested):**
 
 ```bash
 cmux send --surface surface:{N} "claude --continue --fork-session\n"
@@ -127,6 +146,6 @@ On failure, report the error:
 
 ## Notes
 
-- Forked sessions do **not** inherit session-scoped permissions. The user will need to re-approve permissions in the forked session.
+- By default, `--dangerously-skip-permissions` is used so the forked session doesn't require re-approving every tool. Use interactive mode if you want manual approval.
 - This skill only forks Claude Code sessions. To launch other agents (Codex, Gemini CLI), use `cmux-delegate` instead.
 - For detailed cmux command reference and troubleshooting, see the reference guide.

@@ -32,7 +32,7 @@ cmux new-workspace
 指定したサーフェスにテキスト入力を送信します。
 
 ```bash
-cmux send --surface surface:31 "claude --continue --fork-session\n"
+cmux send --surface surface:31 "claude --continue --fork-session --dangerously-skip-permissions\n"
 ```
 
 末尾の `\n` は改行（Enter キー押下相当）を送信します。
@@ -105,9 +105,15 @@ cmux identify --json
 
 **対処:** 数秒待ってから新しいペインを手動で確認してください。スキルは 3 秒後に自動リトライします。
 
-### 権限が引き継がれない
+### フォーク先の権限について
 
-**想定動作:** セッションスコープの権限はフォーク先に引き継がれません。新しいセッションでツール権限を再承認する必要があります。
+セッションスコープの権限はフォーク先に引き継がれません。デフォルトでは cmux-fork は `--dangerously-skip-permissions` を使用してこの問題を回避します。
+
+対話モード（フラグなし）でフォークした場合は、ツール権限を手動で再承認する必要があります。これを避けるには、デフォルトの自動承認モードを使うか、以下で再フォークしてください:
+
+```bash
+claude --continue --fork-session --dangerously-skip-permissions
+```
 
 ## アーキテクチャ
 

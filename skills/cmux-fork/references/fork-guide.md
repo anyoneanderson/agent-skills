@@ -32,7 +32,7 @@ cmux new-workspace
 Sends text input to the specified surface.
 
 ```bash
-cmux send --surface surface:31 "claude --continue --fork-session\n"
+cmux send --surface surface:31 "claude --continue --fork-session --dangerously-skip-permissions\n"
 ```
 
 The `\n` at the end sends a newline (equivalent to pressing Enter).
@@ -105,9 +105,15 @@ Agent: Creates a new workspace and forks there
 
 **Fix:** Wait a few seconds and check the new pane manually. The skill retries once after 3 seconds automatically.
 
-### Permissions not inherited
+### Permissions in forked sessions
 
-**Expected behavior:** Session-scoped permissions are not carried over to forked sessions. You will need to re-approve tool permissions in the new session.
+Session-scoped permissions are not carried over to forked sessions. By default, cmux-fork uses `--dangerously-skip-permissions` to avoid this issue.
+
+If you forked in interactive mode (without the flag), you will need to re-approve tool permissions manually. To avoid this, use the default auto-approve mode or re-fork with:
+
+```bash
+claude --continue --fork-session --dangerously-skip-permissions
+```
 
 ## Architecture
 
