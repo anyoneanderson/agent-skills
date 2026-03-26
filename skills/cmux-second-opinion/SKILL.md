@@ -169,7 +169,7 @@ Focus on code quality, security, performance, and best practices.
 4. Send review prompt: `cmux send` + `cmux send-key return`
 5. Monitor completion: graduated polling (5s → 10s → 30s)
 6. Collect results: `cmux read-screen --surface surface:{N} --scrollback`
-7. Cleanup: `cmux close-surface --surface surface:{N}` (after collecting)
+7. **Do NOT auto-close** the reviewer pane. The user may want to review the output in the pane, scroll through history, or ask follow-up questions to the reviewer directly.
 
 ## Spec Review Flow
 
