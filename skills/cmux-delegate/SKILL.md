@@ -73,15 +73,14 @@ Extract from the user's instruction:
 
 ### Step 2: Create Surface
 
-Default is **new workspace** (delegate tasks are independent work).
+Default is **pane split right**. `cmux new-workspace` may create a non-terminal surface that cannot receive commands — use `cmux new-split` instead.
 
 ```bash
-# Default: new workspace
-cmux new-workspace
+# Default: split right (recommended)
+cmux new-split right
 # Output: OK surface:{N} workspace:{N}
 
-# Alternative: pane split
-cmux new-split right
+# Alternative: split down
 cmux new-split down
 ```
 

@@ -69,17 +69,21 @@
 
 ### Step 2: 追加ドキュメントのスキャン
 
-主要ファイル以外にも、プロジェクトをスキャンして追加のドキュメントを検出する:
+主要ファイル以外にも、プロジェクトをスキャンして追加のドキュメントを検出する。以下のコマンドは**例示**であり、プロジェクト構造に応じて深度やパターンを調整すること（モノレポではより深い検索が必要な場合がある）:
 
 ```bash
-# 全 Markdown ファイル（多言語版、ネストされたドキュメント、カスタムガイドも検出）
-find . -maxdepth 4 -name "*.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/.specs/*" 2>/dev/null
+# ドキュメントファイル: Markdown, MDX, reStructuredText, AsciiDoc
+find . -maxdepth 6 \( -name "*.md" -o -name "*.mdx" -o -name "*.rst" -o -name "*.adoc" \) \
+  -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" \
+  -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/.specs/*" 2>/dev/null
 
 # API ドキュメント（OpenAPI, Swagger 等）
-find . -maxdepth 4 \( -name "openapi.*" -o -name "swagger.*" -o -name "*.openapi.*" \) -not -path "*/node_modules/*" 2>/dev/null
+find . -maxdepth 6 \( -name "openapi.*" -o -name "swagger.*" -o -name "*.openapi.*" \) \
+  -not -path "*/node_modules/*" 2>/dev/null
 
 # ドキュメントディレクトリ
-find . -maxdepth 2 -type d \( -name "docs" -o -name "doc" -o -name "documentation" -o -name "wiki" \) -not -path "*/node_modules/*" 2>/dev/null
+find . -maxdepth 4 -type d \( -name "docs" -o -name "doc" -o -name "documentation" -o -name "wiki" \) \
+  -not -path "*/node_modules/*" 2>/dev/null
 ```
 
 ### Step 3: 分類とチェック

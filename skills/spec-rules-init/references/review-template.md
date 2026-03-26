@@ -70,17 +70,21 @@ For each file that exists, determine if the code changes require an update.
 
 ### Step 2: Scan for Additional Documentation
 
-Beyond the known files, scan the project to discover any additional documentation:
+Beyond the known files, scan the project to discover any additional documentation. The commands below are **examples** — adjust depth and patterns to match the project structure (e.g., monorepos may need deeper searches):
 
 ```bash
-# All markdown files (catches multilingual, nested docs, custom guides)
-find . -maxdepth 4 -name "*.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/.specs/*" 2>/dev/null
+# Documentation files: Markdown, MDX, reStructuredText, AsciiDoc
+find . -maxdepth 6 \( -name "*.md" -o -name "*.mdx" -o -name "*.rst" -o -name "*.adoc" \) \
+  -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" \
+  -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/.specs/*" 2>/dev/null
 
 # API documentation (OpenAPI, Swagger, etc.)
-find . -maxdepth 4 \( -name "openapi.*" -o -name "swagger.*" -o -name "*.openapi.*" \) -not -path "*/node_modules/*" 2>/dev/null
+find . -maxdepth 6 \( -name "openapi.*" -o -name "swagger.*" -o -name "*.openapi.*" \) \
+  -not -path "*/node_modules/*" 2>/dev/null
 
 # Documentation directories
-find . -maxdepth 2 -type d \( -name "docs" -o -name "doc" -o -name "documentation" -o -name "wiki" \) -not -path "*/node_modules/*" 2>/dev/null
+find . -maxdepth 4 -type d \( -name "docs" -o -name "doc" -o -name "documentation" -o -name "wiki" \) \
+  -not -path "*/node_modules/*" 2>/dev/null
 ```
 
 ### Step 3: Classify and Check
