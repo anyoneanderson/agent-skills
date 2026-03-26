@@ -15,6 +15,7 @@ Reusable AI agent skills for specification-driven development.
 | [spec-to-issue](skills/spec-to-issue/) | Create structured GitHub Issues from spec documents |
 | [spec-workflow-init](skills/spec-workflow-init/) | Generate project-specific issue-to-pr-workflow.md with interactive dialogue |
 | [spec-implement](skills/spec-implement/) | Execute spec-driven implementation from specs to PR with quality gates |
+| [cmux-fork](skills/cmux-fork/) | Fork Claude Code conversation into a new cmux pane or workspace |
 
 ## Installation
 
