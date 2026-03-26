@@ -308,7 +308,7 @@ Skip this step if user chose "No" in Step 4d or `--no-review-rules` was specifie
    - Build artifacts: `dist/**`, `build/**`
    - Specs: `.specs/**`
    - ORM migrations (if ORM detected): e.g., `prisma/migrations/**`
-4. Apply template posting guidelines (§7) as-is from template
+4. Apply template review output guidelines (§7) as-is from template
 5. Write to the same directory as coding-rules.md: `{output_directory}/review_rules.md`
 
 ### Step 7: Update AGENTS.md / CLAUDE.md References

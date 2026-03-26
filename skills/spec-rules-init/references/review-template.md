@@ -29,20 +29,23 @@
 
 {auto_detected_exclusions}
 
-## 7. Posting Guidelines
+## 7. Review Output Guidelines
 
-- Inline comments only for high-confidence issues (line, rationale, and fix are all clear)
-- If the target line is ambiguous, include in the summary comment instead
+### Common Rules
 - Prioritize high-impact issues; suppress minor style suggestions
 - Do not comment on existing code (unchanged lines) in principle
+- Do not assert without evidence (diff, rule, command output)
 
-### Confidence-Based Posting Control
+### Severity Classification
+- **Critical (security/bugs)**: Must be addressed
+- **Improvement (quality/readability)**: Recommended to address
+- **Minor (style)**: Optional to address
 
-- **High (80+)**: Post as inline comment
-- **Medium (50-79)**: Include in summary comment ("We recommend checking...")
-- **Low (<50)**: Do not post
+### Output by Use Case
+- **CI Review (GitHub Actions)**: Inline for high-confidence only (QUICK: max 5, DEEP: max 10). If target line is ambiguous, use summary comment
+- **Review Gate (spec-implement)**: Detect critical/improvement issues and resolve via fix loop. Self-fix, not posting
+- **Second Opinion (cmux-second-opinion)**: Report as structured output to parent session
 
 ### Review Modes
-
-- **QUICK**: High-impact only. Max 5 inline comments
-- **DEEP**: Includes minor improvements. Max 10 inline comments
+- **QUICK**: High-impact only
+- **DEEP**: Includes minor improvement suggestions
