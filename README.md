@@ -17,6 +17,7 @@ Reusable AI agent skills for specification-driven development.
 | [spec-implement](skills/spec-implement/) | Execute spec-driven implementation from specs to PR with quality gates |
 | [cmux-fork](skills/cmux-fork/) | Fork Claude Code conversation into a new cmux pane or workspace |
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
+| [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
 
 ## Installation
 
