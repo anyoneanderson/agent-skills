@@ -37,7 +37,7 @@
 - Do not assert without evidence (diff, rule, command output)
 
 ### Severity Classification
-- **Critical (security/bugs)**: Must be addressed
+- **Critical (security/bugs/missing docs)**: Must be addressed. Will not be downgraded in fix loop.
 - **Improvement (quality/readability)**: Recommended to address
 - **Minor (style)**: Optional to address
 
@@ -50,9 +50,11 @@
 - **QUICK**: High-impact only
 - **DEEP**: Includes minor improvement suggestions
 
-## 8. Documentation Update Check
+## 8. Documentation Update Check — Severity: Critical
 
-When code changes are made, verify that related documentation has been updated accordingly.
+Documentation update omissions are treated as **Critical** findings. They will not be downgraded to minor in the fix loop — the review gate requires documentation to be updated before passing.
+
+When new features are added or existing features are changed, verify that related documentation has been updated accordingly.
 
 Check targets:
 - **README.md** — Are install instructions, usage examples, and feature descriptions updated for new features?
