@@ -37,7 +37,7 @@
 - Do not assert without evidence (diff, rule, command output)
 
 ### Severity Classification
-- **Critical (security/bugs)**: Must be addressed
+- **Critical (security/bugs/missing docs)**: Must be addressed. Will not be downgraded in fix loop.
 - **Improvement (quality/readability)**: Recommended to address
 - **Minor (style)**: Optional to address
 
@@ -49,3 +49,54 @@
 ### Review Modes
 - **QUICK**: High-impact only
 - **DEEP**: Includes minor improvement suggestions
+
+## 8. Documentation Update Check — Severity: Critical
+
+Documentation update omissions are treated as **Critical** findings. They will not be downgraded to minor in the fix loop — the review gate requires documentation to be updated before passing.
+
+When new features are added or existing features are changed, verify that related documentation has been updated accordingly.
+
+### Step 1: Check Known Documentation Files
+
+First, check the well-known documentation files that most projects have:
+
+- `README.md` and multilingual variants (`README.ja.md`, `README.*.md`)
+- `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`
+- `coding-rules.md`, `review_rules.md`
+- `issue-to-pr-workflow.md`
+- Files in `docs/`, `doc/` directories
+
+For each file that exists, determine if the code changes require an update.
+
+### Step 2: Scan for Additional Documentation
+
+Beyond the known files, scan the project to discover any additional documentation:
+
+```bash
+# All markdown files (catches multilingual, nested docs, custom guides)
+find . -maxdepth 4 -name "*.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/.specs/*" 2>/dev/null
+
+# API documentation (OpenAPI, Swagger, etc.)
+find . -maxdepth 4 \( -name "openapi.*" -o -name "swagger.*" -o -name "*.openapi.*" \) -not -path "*/node_modules/*" 2>/dev/null
+
+# Documentation directories
+find . -maxdepth 2 -type d \( -name "docs" -o -name "doc" -o -name "documentation" -o -name "wiki" \) -not -path "*/node_modules/*" 2>/dev/null
+```
+
+### Step 3: Classify and Check
+
+For each discovered documentation file, determine if the code changes require an update:
+
+| Category | When Update is Required |
+|----------|----------------------|
+| Project README | New feature added, install steps changed, usage examples outdated |
+| Project rules | Project conventions or skill settings changed |
+| Coding standards | New rules, patterns, or libraries introduced |
+| Workflow | Development process changed |
+| API docs | Endpoints added, modified, or removed |
+| Specifications | Architecture or design decisions changed |
+| Guides / tutorials | Feature behavior changed |
+
+### Step 4: Report
+
+Flag each documentation file that should be updated but was not included in the changeset.

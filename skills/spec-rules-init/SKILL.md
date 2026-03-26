@@ -309,7 +309,8 @@ Skip this step if user chose "No" in Step 4d or `--no-review-rules` was specifie
    - Specs: `.specs/**`
    - ORM migrations (if ORM detected): e.g., `prisma/migrations/**`
 4. Apply template review output guidelines (§7) as-is from template
-5. Write to the same directory as coding-rules.md: `{output_directory}/review_rules.md`
+5. Apply documentation update check (§8) as-is from template. The template instructs the reviewer to dynamically discover documentation files at review time rather than using a fixed list.
+6. Write to the same directory as coding-rules.md: `{output_directory}/review_rules.md`
 
 ### Step 7: Update AGENTS.md / CLAUDE.md References
 
