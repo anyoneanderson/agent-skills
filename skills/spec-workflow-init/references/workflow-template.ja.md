@@ -94,12 +94,43 @@ docker compose exec {service} {package_manager} install
 {dev_command}
 ```
 
-### Phase 3: コードレビュー
+### Phase 3: コードレビューゲート
 
-実装コードをレビューする:
-- coding-rules.md への準拠を確認
-- セキュリティ脆弱性のチェック
-- 適切なエラーハンドリングの確認
+{if_review_rules}
+`{review_rules_path}` に基づいて実装コードをレビューする。
+{end_review_rules}
+
+{if_no_review_rules}
+coding-rules.md に基づいて実装コードをレビューする。
+
+> review_rules.md が未生成です。`spec-rules-init --with-review-rules` で生成するとレビュー基準が強化されます。
+{end_no_review_rules}
+
+#### レビュー観点
+- review_rules.md（または coding-rules.md）に定義された重大度別チェック（セキュリティ、型安全、パターン準拠等）
+- coding-rules.md の [MUST] ルール違反がないか
+- レビュー対象外ファイル（review_rules.md で定義）はスキップ
+
+#### レビュー結果の判定
+
+| 重大度 | 検出時のアクション |
+|--------|-----------------|
+| 重大（セキュリティ・バグ） | 即修正 → 再レビュー |
+| 改善提案（品質・可読性） | 修正 → 再レビュー |
+| 軽微（スタイル等） | ログのみ、続行可 |
+
+#### 修正ループ（最大3回）
+1. レビューで問題を検出
+2. 問題箇所を修正
+3. 修正箇所のみ再レビュー
+4. 繰り返し（最大3回まで）
+5. 3回目で未解消の改善提案 → 「軽微」に降格して続行
+6. 3回目で未解消の重大指摘 → ユーザーに判断を委ねる
+7. レビューパス → 次の Phase へ
+
+{if_second_opinion}
+セカンドオピニオンが必要な場合は cmux-second-opinion で別AIにレビューを依頼する。
+{end_second_opinion}
 
 ### Phase 4: テスト実装
 
@@ -110,12 +141,19 @@ docker compose exec {service} {package_manager} install
 {test_command}
 ```
 
-### Phase 5: テストレビュー
+### Phase 5: テストレビューゲート
 
-テストコードをレビューする:
-- 十分なカバレッジの確認
-- エッジケースのチェック
-- テストの独立性の確認
+テストコードをレビューする。コードレビューゲートと同じ修正ループ構造を適用。
+
+#### テスト固有のレビュー観点
+- カバレッジが完了条件を満たしているか
+- エッジケース・エラーパスのテストがあるか
+- テストの独立性（他のテストに依存していないか）
+- AAA パターン（Arrange → Act → Assert）に従っているか
+
+#### レビュー結果の判定・修正ループ
+
+（Phase 3 と同じ判定テーブル・修正ループを適用）
 
 ### Phase 6: 品質ゲート
 
@@ -165,12 +203,18 @@ docker compose exec {service} {package_manager} install
 {test_command}
 ```
 
-### Phase 5: コードレビュー
+### Phase 5: コード＋テストレビューゲート
 
-実装コードとテストコードをまとめてレビューする:
-- coding-rules.md への準拠を確認
-- セキュリティ脆弱性のチェック
-- 適切なエラーハンドリングとテストカバレッジの確認
+実装コードとテストコードをまとめてレビューする。Phase 3（コードレビューゲート）と同じレビュー観点・判定テーブル・修正ループを適用。
+
+#### 追加のレビュー観点（テスト固有）
+- カバレッジが完了条件を満たしているか
+- エッジケース・エラーパスのテストがあるか
+- テストの独立性、AAA パターン準拠
+
+{if_second_opinion}
+セカンドオピニオンが必要な場合は cmux-second-opinion で別AIにレビューを依頼する。
+{end_second_opinion}
 
 ### Phase 6: 品質ゲート
 
@@ -220,12 +264,18 @@ docker compose exec {service} {package_manager} install
 {e2e_test_command}
 ```
 
-### Phase 5: コードレビュー
+### Phase 5: コード＋テストレビューゲート
 
-実装コードとテストコードをレビューする:
-- coding-rules.md への準拠を確認
+実装コードとテストコードをまとめてレビューする。Phase 3（コードレビューゲート）と同じレビュー観点・判定テーブル・修正ループを適用。
+
+#### 追加のレビュー観点（BDD固有）
 - E2Eシナリオカバレッジの確認
-- 適切なエラーハンドリングの確認
+- エッジケース・エラーパスのテストがあるか
+- テストの独立性、AAA パターン準拠
+
+{if_second_opinion}
+セカンドオピニオンが必要な場合は cmux-second-opinion で別AIにレビューを依頼する。
+{end_second_opinion}
 
 ### Phase 6: 品質ゲート
 
@@ -365,6 +415,25 @@ CIが失敗した場合:
 {end_no_agent_files}
 
 {end_parallel}
+
+{if_cmux_dispatch}
+
+## ディスパッチ戦略
+
+- **方式**: cmux
+- **実装・テスト**: cmux-delegate で別ペインの Claude Code に委任
+- **レビュー**: cmux-second-opinion で別AI（Codex等）に委任
+- **前提条件**: CMUX_SOCKET_PATH が設定されていること
+
+### cmux ディスパッチのフロー
+
+1. `CMUX_SOCKET_PATH` を確認
+2. cmux-delegate で実装者/テスターを別ペインに起動
+3. 実装/テスト完了を検知
+4. cmux-second-opinion でレビューを別AIに委任
+5. 結果を統合してPR作成
+
+{end_cmux_dispatch}
 
 ---
 
