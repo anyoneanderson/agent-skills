@@ -15,6 +15,7 @@
 | [spec-to-issue](skills/spec-to-issue/) | 仕様書から構造化されたGitHub Issueを自動生成 |
 | [spec-workflow-init](skills/spec-workflow-init/) | 対話形式でプロジェクト固有のissue-to-pr-workflow.mdを生成 |
 | [spec-implement](skills/spec-implement/) | 仕様書駆動で実装からPR作成まで自動実行、品質ゲート付き |
+| [cmux-fork](skills/cmux-fork/) | Claude Codeの会話を新しいcmuxペインまたはワークスペースにフォーク |
 
 ## インストール
 
