@@ -72,8 +72,8 @@ Agent: Creates new workspace → launches codex → sends review task → collec
 ### Cross-Directory Delegation
 
 ```
-User: "Run tests in gslide-generator"
-Agent: Creates workspace → cd ~/Documents/zenchaine/gslide-generator → launches claude → sends "run tests"
+User: "Run tests in my-other-project"
+Agent: Creates workspace → cd ~/projects/my-other-project → launches claude → sends "run tests"
 ```
 
 ### Delegate with Specific Direction

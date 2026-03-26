@@ -27,7 +27,7 @@
 | Property | Value |
 |----------|-------|
 | Command | `gemini` |
-| Auto-approve | N/A |
+| Auto-approve | Not available — Gemini CLI has no permission-skip option; always runs in interactive mode |
 | Prompt Pattern | `>` or prompt indicator |
 | Exit | `/exit` or Ctrl+C |
 | Startup Time | 2–5 seconds |

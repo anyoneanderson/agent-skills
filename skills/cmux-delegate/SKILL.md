@@ -50,15 +50,13 @@ which codex    # or whichever agent was specified
 
 ## Agent Profiles
 
-Select the agent based on user instruction. Default is Claude Code.
+Select the agent based on user instruction. Default is Claude Code with auto-approve.
 
-| Agent | Launch Command | Prompt Pattern | Exit Command |
-|---|---|---|---|
-| Claude Code | `claude` | `>` or idle prompt | `/exit` or Ctrl+C |
-| Claude Code (auto-approve) | `claude --dangerously-skip-permissions` | same | same |
-| Codex | `codex` | prompt display | `exit` or Ctrl+C |
-| Codex (auto-approve) | `codex --dangerously-bypass-approvals-and-sandbox` | same | same |
-| Gemini CLI | `gemini` | prompt display | `/exit` or Ctrl+C |
+| Agent | Interactive Command | Auto-Approve Command (default) | Prompt Pattern | Exit Command |
+|---|---|---|---|---|
+| Claude Code | `claude` | `claude --dangerously-skip-permissions` | `>` or idle prompt | `/exit` or Ctrl+C |
+| Codex | `codex` | `codex --dangerously-bypass-approvals-and-sandbox` | prompt display | `exit` or Ctrl+C |
+| Gemini CLI | `gemini` | *(no auto-approve option available — interactive only)* | prompt display | `/exit` or Ctrl+C |
 
 For agent details and custom agent definitions, see `references/agent-profiles.md`.
 
@@ -69,6 +67,7 @@ For agent details and custom agent definitions, see `references/agent-profiles.m
 Extract from the user's instruction:
 - **Task**: What to do (the prompt to send to the agent)
 - **Agent**: Which agent to use (default: Claude Code)
+- **Mode**: Auto-approve (default) or interactive. Use interactive only if user explicitly requests it (e.g., "interactive", "対話モード", "承認あり")
 - **Direction**: Where to place (default: new workspace)
 - **Directory**: Target directory if cross-directory (optional)
 
@@ -99,12 +98,26 @@ sleep 1
 
 ### Step 4: Launch Agent
 
-Send the agent launch command to the new surface:
+Select the launch command from the Agent Profiles table based on the agent and mode determined in Step 1. Default is **auto-approve mode**.
+
+**Auto-approve (default):**
+
+```bash
+# Claude Code
+cmux send --surface surface:{N} "claude --dangerously-skip-permissions\n"
+
+# Codex
+cmux send --surface surface:{N} "codex --dangerously-bypass-approvals-and-sandbox\n"
+
+# Gemini CLI (no auto-approve available — always interactive)
+cmux send --surface surface:{N} "gemini\n"
+```
+
+**Interactive mode (if user explicitly requested):**
 
 ```bash
 cmux send --surface surface:{N} "claude\n"
-# or for other agents:
-cmux send --surface surface:{N} "codex --dangerously-bypass-approvals-and-sandbox\n"
+cmux send --surface surface:{N} "codex\n"
 ```
 
 ### Step 5: Detect Agent Prompt (Polling)

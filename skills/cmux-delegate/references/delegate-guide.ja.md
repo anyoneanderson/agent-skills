@@ -72,8 +72,8 @@ cmux close-surface --surface surface:{N}          # サーフェスのみ終了
 ### ディレクトリ横断
 
 ```
-ユーザー: 「gslide-generator でテストを走らせて」
-エージェント: 新WS作成 → cd ~/Documents/zenchaine/gslide-generator → claude 起動 → "テスト実行" 送信
+ユーザー: 「my-other-project でテストを走らせて」
+エージェント: 新WS作成 → cd ~/projects/my-other-project → claude 起動 → "テスト実行" 送信
 ```
 
 ### 方向指定付き
