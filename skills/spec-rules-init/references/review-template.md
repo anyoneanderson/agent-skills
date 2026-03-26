@@ -49,3 +49,17 @@
 ### Review Modes
 - **QUICK**: High-impact only
 - **DEEP**: Includes minor improvement suggestions
+
+## 8. Documentation Update Check
+
+When code changes are made, verify that related documentation has been updated accordingly.
+
+Check targets:
+- **README.md** — Are install instructions, usage examples, and feature descriptions updated for new features?
+- **CLAUDE.md / AGENTS.md** — Are project rules and skill configuration changes reflected?
+- **coding-rules.md** — Are new rules or patterns added?
+- **issue-to-pr-workflow.md** — Are workflow changes reflected?
+- **API documentation** — Are endpoint additions/changes documented?
+- **.specs/ specifications** — Are design changes reflected in requirement.md / design.md / tasks.md?
+
+{auto_detected_doc_targets}
