@@ -94,12 +94,43 @@ Implement the feature following the coding rules.
 {dev_command}
 ```
 
-### Phase 3: Code Review
+### Phase 3: Code Review Gate
 
-Review the implementation code:
-- Verify coding-rules.md compliance
-- Check for security vulnerabilities
-- Ensure proper error handling
+{if_review_rules}
+Review implementation code based on `{review_rules_path}`.
+{end_review_rules}
+
+{if_no_review_rules}
+Review implementation code based on coding-rules.md.
+
+> review_rules.md has not been generated. Run `spec-rules-init --with-review-rules` to enhance review criteria.
+{end_no_review_rules}
+
+#### Review Criteria
+- Severity-based checks defined in review_rules.md (or coding-rules.md): security, type safety, pattern compliance, etc.
+- Check for [MUST] rule violations from coding-rules.md
+- Skip files excluded by review_rules.md
+
+#### Review Result Actions
+
+| Severity | Action on Detection |
+|----------|-------------------|
+| Critical (security/bugs) | Fix immediately → re-review |
+| Improvement (quality/readability) | Fix → re-review |
+| Minor (style) | Log only, may continue |
+
+#### Fix Loop (max 3 iterations)
+1. Detect issues in review
+2. Fix the issues
+3. Re-review only the fixed areas
+4. Repeat (up to 3 times)
+5. After 3rd iteration, unresolved improvements → downgrade to "minor" and continue
+6. After 3rd iteration, unresolved critical issues → ask user to decide (continue or stop)
+7. Review passes → proceed to next Phase
+
+{if_second_opinion}
+If a second opinion is needed, use cmux-second-opinion to request review from a different AI.
+{end_second_opinion}
 
 ### Phase 4: Test Implementation
 
@@ -110,12 +141,19 @@ Write tests for the implemented feature.
 {test_command}
 ```
 
-### Phase 5: Test Review
+### Phase 5: Test Review Gate
 
-Review the test code:
-- Verify sufficient coverage
-- Check edge cases
-- Ensure test isolation
+Review test code. Apply the same fix loop structure as the Code Review Gate.
+
+#### Test-Specific Review Criteria
+- Coverage meets completion criteria
+- Edge cases and error paths are tested
+- Test isolation (no dependencies on other tests)
+- Follows AAA pattern (Arrange → Act → Assert)
+
+#### Review Result Actions / Fix Loop
+
+(Apply same tables and loop as Phase 3)
 
 ### Phase 6: Quality Gate
 
@@ -165,12 +203,18 @@ Refactor while keeping tests green.
 {test_command}
 ```
 
-### Phase 5: Code Review
+### Phase 5: Code + Test Review Gate
 
-Review implementation and test code together:
-- Verify coding-rules.md compliance
-- Check for security vulnerabilities
-- Ensure proper error handling and test coverage
+Review implementation and test code together. Apply the same review criteria, result table, and fix loop as Phase 3 (Code Review Gate).
+
+#### Additional Criteria (Test-Specific)
+- Coverage meets completion criteria
+- Edge cases and error paths are tested
+- Test isolation, AAA pattern compliance
+
+{if_second_opinion}
+If a second opinion is needed, use cmux-second-opinion to request review from a different AI.
+{end_second_opinion}
 
 ### Phase 6: Quality Gate
 
@@ -220,12 +264,18 @@ Implement the feature to make all tests pass.
 {e2e_test_command}
 ```
 
-### Phase 5: Code Review
+### Phase 5: Code + Test Review Gate
 
-Review implementation and test code:
-- Verify coding-rules.md compliance
-- Check E2E scenario coverage
-- Ensure proper error handling
+Review implementation and test code together. Apply the same review criteria, result table, and fix loop as Phase 3 (Code Review Gate).
+
+#### Additional Criteria (BDD-Specific)
+- E2E scenario coverage
+- Edge cases and error paths are tested
+- Test isolation, AAA pattern compliance
+
+{if_second_opinion}
+If a second opinion is needed, use cmux-second-opinion to request review from a different AI.
+{end_second_opinion}
 
 ### Phase 6: Quality Gate
 
@@ -365,6 +415,25 @@ Implementation and test code generation run in parallel:
 {end_no_agent_files}
 
 {end_parallel}
+
+{if_cmux_dispatch}
+
+## Dispatch Strategy
+
+- **Method**: cmux
+- **Implementation / Testing**: Delegate to Claude Code in separate panes via cmux-delegate
+- **Review**: Delegate to another AI (Codex, etc.) via cmux-second-opinion
+- **Prerequisite**: CMUX_SOCKET_PATH must be set
+
+### cmux Dispatch Flow
+
+1. Verify `CMUX_SOCKET_PATH`
+2. Launch implementer/tester in separate panes via cmux-delegate
+3. Detect implementation/test completion
+4. Delegate review to another AI via cmux-second-opinion
+5. Integrate results and create PR
+
+{end_cmux_dispatch}
 
 ---
 

@@ -96,6 +96,16 @@ ls .eslintrc* biome.json 2>/dev/null
 find . -name "coding-rules.md" -maxdepth 3 2>/dev/null
 ```
 
+**Review rules file**:
+```bash
+find . -name "review_rules.md" -maxdepth 3 2>/dev/null
+```
+
+**cmux environment**:
+```bash
+echo $CMUX_SOCKET_PATH
+```
+
 **Present the detection results** to the user in a summary table:
 
 ```
@@ -109,6 +119,8 @@ Detected project environment:
   Database:          {detected}
   Lint:              {detected}
   Coding Rules:      {detected or "Not found"}
+  Review Rules:      {detected or "Not found"}
+  cmux:              {detected or "Not available"}
 ```
 
 Ask the user to confirm or correct the detection results before proceeding.
@@ -190,6 +202,17 @@ options:
   - "Parallel" / "実装とテストコード生成を並行して実行（高速・要エージェント分離）"
 ```
 
+**Round 6.5: Dispatch Method (only if Parallel selected AND cmux detected)**
+
+```
+question: "cmux environment detected. Use cmux for visible parallel execution?" /
+          "cmux 環境を検出しました。cmux で可視的な並列実行を使いますか？"
+header: "Dispatch"
+options:
+  - "Built-in Agent (Recommended)" / "組み込みサブエージェント（従来通り）"
+  - "cmux (Visible)" / "cmux で別ペインに起動（進捗がリアルタイムで見える）"
+```
+
 **Round 7: Agent Targets (only if Parallel selected)**
 
 Ask which agent definitions to generate. Do NOT decide targets based on `.claude/` / `.codex/` directory detection.
@@ -235,6 +258,11 @@ options:
    - If agent generation is skipped → keep `{if_no_agent_files}...{end_no_agent_files}`, otherwise remove
    - No typecheck command → remove `{if_typecheck}...{end_typecheck}`
    - No build command → remove `{if_build}...{end_build}`
+   - review_rules.md detected → keep `{if_review_rules}...{end_review_rules}`, remove `{if_no_review_rules}...{end_no_review_rules}`
+   - review_rules.md not detected → keep `{if_no_review_rules}...{end_no_review_rules}`, remove `{if_review_rules}...{end_review_rules}`
+   - cmux dispatch selected → keep `{if_cmux_dispatch}...{end_cmux_dispatch}` and `{if_second_opinion}...{end_second_opinion}`
+   - cmux dispatch not selected → remove both cmux/second-opinion blocks
+   - Replace `{review_rules_path}` with detected path (or placeholder)
 
 5. **Clean up** remaining placeholders and conditional markers
 
