@@ -187,7 +187,7 @@ fi
 ワークフローファイルに「Agent Roles」「Sub-agents」「エージェントロール」セクションがある場合:
 
 1. ロール定義を解析（例: implementer, reviewer, tester）
-2. ユーザーに並列実行の選択肢を提示
+2. ユーザーにマルチエージェント実行の選択肢を提示
 3. サブエージェント選択時: ランタイム別の方式でロール定義に基づいてエージェントを起動
 4. シングル選択時: 順次実行で続行
 
@@ -216,7 +216,7 @@ fi
 | Tester | workflow-tester | Write and run tests, verify coverage |
 ```
 
-**並列実行戦略テーブル** — 各フェーズでアクティブなロールを定義:
+**マルチエージェント役割分担戦略テーブル** — 各フェーズでアクティブなロールを定義:
 
 ```markdown
 | Phase | Implementer | Tester | Reviewer |
@@ -234,10 +234,10 @@ fi
 1. **サブエージェント識別子**: ロール割り当てテーブルの `Agent` 列の値を `subagent_type` として使用（例: `subagent_type: "workflow-implementer"`）
 2. **定義ファイルパス**: ワークフローの `Agent definition files` / `エージェント定義ファイル` セクションに記載があればそのパスを使用。未記載時はランタイム既定パスを使用
 3. **エージェントの責務**: `Responsibility` 列の値をタスクプロンプトのコンテキストとして使用
-4. **フェーズ実行順序**: 並列実行戦略テーブルを行ごとに上から順に実行:
+4. **フェーズ実行順序**: マルチエージェント役割分担戦略テーブルを行ごとに上から順に実行:
    - `-` のセルはそのフェーズでロールがアイドル状態であることを示す
    - `-` 以外のセルはそのフェーズでのロールのアクションを記述
-   - 同じフェーズ行でアクティブなロールは並列実行可能
+   - 同じフェーズ行でアクティブなロールは同時実行可能
    - フェーズは上から下に順次実行
 
 ### 例: ランタイム別の呼び出し
@@ -447,7 +447,64 @@ spec-implement には以下の安全装置が含まれています:
 
 cmux dispatch モードが選択された場合、サブエージェントは組み込み Agent ツールの代わりに cmux ワークスペースで起動されます。
 
-### エージェント起動パターン
+### ディスパッチ方式の選択
+
+1. **cmux-delegate スキルがインストール済みの場合**（推奨）:
+   - `Skill` ツールで `cmux-delegate` を呼び出す
+   - スキルが cmux CLI 操作（ワークスペース作成、エージェント起動、ポーリング、結果回収）を抽象化する
+   - **組み込み Agent ツールは使わない** — 必ず `cmux-delegate` スキルを使用する
+   - **安全ルール**: 合成したプロンプトや diff は先に一時ファイルへ書き出し、その内容を渡す。複数行テキストを `--task` / `--diff` のクォート文字列に直接埋め込まない
+   - 具体的な呼び出し例:
+     ```
+     # 実装者を Codex で起動
+     TASK_FILE=$(mktemp)
+     cat > "$TASK_FILE" <<'EOF'
+     You are a workflow-implementer.
+     {definition file content}
+
+     Task: Implement T001 — create user model following design section 2.3.
+     EOF
+     Skill:
+       skill: "cmux-delegate"
+       args: "--agent codex --task \"$(cat \"$TASK_FILE\")\""
+
+     # テスターを Codex で起動（実装者と並列）
+     TEST_TASK_FILE=$(mktemp)
+     cat > "$TEST_TASK_FILE" <<'EOF'
+     You are a workflow-tester.
+     {definition file content}
+
+     Task: Write tests for T001 — verify user model CRUD operations.
+     EOF
+     Skill:
+       skill: "cmux-delegate"
+       args: "--agent codex --task \"$(cat \"$TEST_TASK_FILE\")\""
+
+     # レビュアーを Claude で起動（実装・テスト完了後）
+     REVIEW_TASK_FILE=$(mktemp)
+     cat > "$REVIEW_TASK_FILE" <<'EOF'
+     You are a workflow-reviewer.
+     {definition file content}
+
+     Review the following changes against review_rules.md:
+     {git diff output}
+     EOF
+     Skill:
+       skill: "cmux-delegate"
+       args: "--agent claude --task \"$(cat \"$REVIEW_TASK_FILE\")\""
+     ```
+   - セカンドオピニオン実行:
+     ```
+     DIFF_FILE=$(mktemp)
+     git diff HEAD > "$DIFF_FILE"
+     Skill:
+       skill: "cmux-second-opinion"
+       args: "--diff \"$(cat \"$DIFF_FILE\")\" --rules '{path to review_rules.md}'"
+     ```
+2. **cmux-delegate スキルが未インストールの場合**（フォールバック）:
+   - 以下の cmux CLI パターンを Bash で直接実行する
+
+### エージェント起動パターン（低レベル・フォールバック用）
 
 ```bash
 # 1. ワークスペース作成
@@ -466,9 +523,15 @@ cmux send --surface surface:{N} "gemini\n"
 sleep 3
 cmux read-screen --surface surface:{N}
 
-# 4. タスク送信
-cmux send --surface surface:{N} "{task_prompt}"
-cmux send-key --surface surface:{N} return
+# 4. タスク送信（一時ファイル経由で改行やクォートを安全に保持）
+TASK_FILE=$(mktemp)
+cat > "$TASK_FILE" <<'EOF'
+{task_prompt}
+EOF
+while IFS= read -r line; do
+  cmux send --surface surface:{N} "$line"
+  cmux send-key --surface surface:{N} return
+done < "$TASK_FILE"
 
 # 5. 完了検出（段階的ポーリング: 5秒 → 10秒 → 30秒）
 cmux read-screen --surface surface:{N}
@@ -499,7 +562,7 @@ AI 列の値 → 起動コマンドのマッピング:
 | `gemini` | `gemini`（auto-approve なし） |
 | *(未指定)* | デフォルト: `claude --dangerously-skip-permissions` |
 
-### cmux での並列実行
+### cmux でのマルチエージェント実行
 
 戦略テーブルに従い、同一行のロールを並列起動:
 
@@ -526,9 +589,8 @@ AI 列の値 → 起動コマンドのマッピング:
    - 3回目で未解消の重大 → ユーザーに判断を委ねる
 5. **セカンドオピニオン**（cmux dispatch + second-opinion 有効時）:
    - セルフレビューループ通過後
-   - レビュアーエージェント（実装者と異なるAI）を cmux で起動
-   - diff + review_rules.md を送信
-   - 構造化レポートを回収
+   - `Skill` ツールで `cmux-second-opinion` スキルを呼び出す（推奨）。未インストールの場合はフォールバックとしてレビュアーエージェントを cmux で手動起動
+   - スキルが diff + review_rules.md を別AIに送信し、構造化レポートを回収する
    - 新たな重大指摘 → 追加修正ループ（1回のみ）
 6. **ゲート通過**: 未解消の重大指摘がない状態
 
@@ -543,10 +605,100 @@ Implementation Review Gate と同じ構造 + テスト固有の観点:
 
 ### セカンドオピニオン設定（ワークフローから）
 
-ワークフローでセカンドオピニオンの動作を指定可能:
+ワークフローの "Second Opinion" / "セカンドオピニオン" セクションから設定を読み取ります:
 
 | 設定 | 動作 |
 |------|------|
-| 「毎回実施」 | レビューゲートごとに自動実行 |
-| 「ユーザー要求時のみ」 | 実行前にユーザーに確認 |
-| 「実施しない」 | スキップ |
+| 「毎回実施」/ "Always" | レビューゲートごとに自動実行 |
+| 「ユーザー要求時のみ」/ "On request" | 実行前にユーザーに確認（AskUserQuestion） |
+| 「実施しない」/ "Never" | スキップ |
+| *(セクション未定義)* | デフォルト: 「ユーザー要求時のみ」 |
+
+**実行方法**: `Skill` ツールで `cmux-second-opinion` スキルを呼び出す:
+```
+DIFF_FILE=$(mktemp)
+git diff HEAD > "$DIFF_FILE"
+Skill:
+  skill: "cmux-second-opinion"
+  args: "--diff \"$(cat \"$DIFF_FILE\")\" --rules '{path to review_rules.md}'"
+```
+スキルが未インストールの場合は、レビュアーエージェントを cmux で手動起動してフォールバックする。
+
+## エージェント定義ファイルの注入
+
+サブエージェント起動時、エージェント定義ファイルの内容をタスクプロンプトに注入する必要があります。これにより、各エージェントがロール固有のルールと制約を認識した状態でタスクを実行します。
+
+### 注入手順
+
+1. ロールに対応する定義ファイルを読み込む:
+   - ワークフローの `Agent definition files` / `エージェント定義ファイル` セクションに記載があればそのパスを使用
+   - 未記載時はランタイム既定パス（例: `.claude/agents/workflow-implementer.md`）を使用
+2. 定義ファイルの内容をタスクプロンプトの先頭に付加する
+3. 定義ファイルが存在しない場合は、ロール割り当てテーブルの `Responsibility` 列をロール説明として使用
+
+### プロンプト構成テンプレート
+
+```
+You are a {role_name}.
+
+{content of agent definition file}
+
+Task: {actual task description from tasks.md}
+
+Context:
+- Design reference: {design.md section}
+- Coding rules: {path to coding-rules.md}
+- Review rules: {path to review_rules.md} (reviewer only)
+- Target files: {file list}
+```
+
+### 例: 組み込みサブエージェント（Claude Code）
+
+```text
+Agent:
+  subagent_type: workflow-implementer
+  prompt: |
+    You are a workflow-implementer.
+
+    {content of .claude/agents/workflow-implementer.md}
+
+    Task: Implement T001 — create user model following design section 2.3.
+    Target files: src/models/user.ts, src/models/user.test.ts
+    Coding rules: docs/development/coding-rules.md
+```
+
+### 例: cmux-delegate スキル経由
+
+```text
+TASK_FILE=$(mktemp)
+cat > "$TASK_FILE" <<'EOF'
+You are a workflow-implementer.
+{content of definition file}
+
+Task: Implement T001 — create user model.
+Target files: src/models/user.ts
+EOF
+Skill:
+  skill: "cmux-delegate"
+  args: "--agent codex --task \"$(cat \"$TASK_FILE\")\""
+```
+
+### レビュアーのプロンプト構成
+
+レビュアーは通常のタスクプロンプトに加え、レビュー対象の差分と基準を含めます:
+
+```
+You are a workflow-reviewer.
+
+{content of agent definition file}
+
+Review the following changes:
+{git diff output or changed files summary}
+
+Review criteria:
+- review_rules.md: {path}
+- coding-rules.md: {path}
+- design.md: {relevant section}
+
+Classify findings as: Critical / Improvement / Minor
+```
