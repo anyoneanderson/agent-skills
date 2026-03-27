@@ -507,8 +507,8 @@ cmux dispatch モードが選択された場合、サブエージェントは組
 ### エージェント起動パターン（低レベル・フォールバック用）
 
 ```bash
-# 1. ワークスペース作成
-WS=$(cmux new-workspace)
+# 1. ペイン分割（new-workspace は非ターミナル surface を作る可能性があるため使用しない）
+WS=$(cmux new-split right)
 # 出力: OK surface:{N} workspace:{N}
 
 # 2. エージェント起動（ロールテーブルの AI 列に基づきコマンド選択）

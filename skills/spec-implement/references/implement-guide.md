@@ -507,8 +507,8 @@ When cmux dispatch mode is selected, sub-agents are launched in separate cmux wo
 ### Agent Launch Pattern (low-level fallback)
 
 ```bash
-# 1. Create workspace
-WS=$(cmux new-workspace)
+# 1. Create split pane (do NOT use new-workspace — it may create a non-terminal surface)
+WS=$(cmux new-split right)
 # Output: OK surface:{N} workspace:{N}
 
 # 2. Launch agent (select command based on AI column in role table)
