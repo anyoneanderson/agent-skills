@@ -192,28 +192,30 @@ options:
   - "API + Browser E2E" / "上記 + Playwrightでクリティカルパスを検証"
 ```
 
-**Round 6: Parallel Execution**
+**Round 6: Execution Strategy**
 
+Show options based on cmux detection from Step 2.
+
+If cmux detected (CMUX_SOCKET_PATH is set):
 ```
-question: "Use parallel execution for implementation and tests?" / "実装とテストの並列実行を使いますか？"
-header: "Parallel"
+question: "Select your execution strategy" / "実行戦略を選択してください"
+header: "Strategy"
 options:
-  - "Sequential (Recommended)" / "メインエージェントが全工程を順番に実行（安全・シンプル）"
-  - "Parallel" / "実装とテストコード生成を並行して実行（高速・要エージェント分離）"
+  - "Single agent" / "単独実行 — メインエージェントが全工程を順番に実行（シンプル・安全）"
+  - "Multi-agent" / "マルチエージェント — 組み込みサブエージェントで役割分担"
+  - "Multi-agent (cmux) (Recommended)" / "マルチエージェント(cmux)（推奨） — cmux で別ペインに各ロールを起動（進捗がリアルタイムで見える）"
 ```
 
-**Round 6.5: Dispatch Method (only if Parallel selected AND cmux detected)**
-
+If cmux NOT detected:
 ```
-question: "cmux environment detected. Use cmux for visible parallel execution?" /
-          "cmux 環境を検出しました。cmux で可視的な並列実行を使いますか？"
-header: "Dispatch"
+question: "Select your execution strategy" / "実行戦略を選択してください"
+header: "Strategy"
 options:
-  - "Built-in Agent (Recommended)" / "組み込みサブエージェント（従来通り）"
-  - "cmux (Visible)" / "cmux で別ペインに起動（進捗がリアルタイムで見える）"
+  - "Single agent (Recommended)" / "単独実行（推奨） — メインエージェントが全工程を順番に実行（シンプル・安全）"
+  - "Multi-agent" / "マルチエージェント — 組み込みサブエージェントで役割分担"
 ```
 
-**Round 7: Agent Targets (only if Parallel selected)**
+**Round 7: Agent Targets (only if Multi-agent or Multi-agent (cmux) selected)**
 
 Ask which agent definitions to generate. Do NOT decide targets based on `.claude/` / `.codex/` directory detection.
 
@@ -227,7 +229,7 @@ options:
   - "Skip generation" / "生成しない"
 ```
 
-**Round 8: Agent AI Assignment (only if cmux dispatch selected in Round 6.5)**
+**Round 8: Agent AI Assignment (only if Multi-agent (cmux) selected in Round 6)**
 
 ```
 question: "Which AI to assign to each role?" / "各ロールにどのAIを割り当てますか？"
@@ -240,7 +242,7 @@ options:
 
 Use the selection to fill `{implementer_ai}`, `{tester_ai}`, `{reviewer_ai}` in the role table.
 
-**Round 8.5: Second Opinion (only if cmux dispatch selected in Round 6.5)**
+**Round 8.5: Second Opinion (only if Multi-agent (cmux) selected in Round 6)**
 
 ```
 question: "Run second opinion at review gates?" / "レビューゲートでセカンドオピニオンを実施しますか？"
@@ -276,7 +278,7 @@ options:
 
 4. **Handle conditional sections**:
    - Browser E2E not selected → remove `{if_browser_e2e}...{end_browser_e2e}` blocks
-   - Parallel not selected → remove `{if_parallel}...{end_parallel}` blocks
+   - Multi-agent not selected (Single agent chosen) → remove `{if_multi_agent}...{end_multi_agent}` blocks
    - If agent targets include Claude → keep `{if_claude_agents}...{end_claude_agents}`, otherwise remove
    - If agent targets include Codex → keep `{if_codex_agents}...{end_codex_agents}`, otherwise remove
    - If agent generation is skipped → keep `{if_no_agent_files}...{end_no_agent_files}`, otherwise remove
@@ -284,8 +286,8 @@ options:
    - No build command → remove `{if_build}...{end_build}`
    - review_rules.md detected → keep `{if_review_rules}...{end_review_rules}`, remove `{if_no_review_rules}...{end_no_review_rules}`
    - review_rules.md not detected → keep `{if_no_review_rules}...{end_no_review_rules}`, remove `{if_review_rules}...{end_review_rules}`
-   - cmux dispatch selected → keep `{if_cmux_dispatch}...{end_cmux_dispatch}` and `{if_second_opinion}...{end_second_opinion}`
-   - cmux dispatch not selected → remove both cmux/second-opinion blocks
+   - Multi-agent (cmux) selected → keep `{if_cmux_dispatch}...{end_cmux_dispatch}` and `{if_second_opinion}...{end_second_opinion}`
+   - Multi-agent (cmux) not selected → remove both cmux/second-opinion blocks
    - Replace `{review_rules_path}` with detected path (or placeholder)
    - Replace `{implementer_ai}`, `{tester_ai}`, `{reviewer_ai}` with selected AI values (from Round 8). Default: `claude`
    - If AI column not applicable (no cmux dispatch), remove `AI` column from role table
@@ -316,7 +318,7 @@ If an existing workflow file is detected (from Step 1 or during generation):
 
 ### Step 6: Sub-Agent Generation
 
-**Skip this step** if the user did not select parallel execution or selected "Skip generation" in Round 7.
+**Skip this step** if the user selected "Single agent" in Round 6 or selected "Skip generation" in Round 7.
 
 **Step 6a: Claude Code agents** (when Round 7 selection includes Claude):
 

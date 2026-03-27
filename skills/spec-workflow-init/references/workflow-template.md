@@ -375,11 +375,11 @@ If CI fails:
 
 ## Agent Roles (Optional)
 
-{if_parallel}
+{if_multi_agent}
 
-### Parallel Execution Strategy
+### Multi-Agent Role Assignment Strategy
 
-Implementation and test code generation run in parallel:
+Each workflow phase is delegated to a specialized agent:
 
 | Phase | Implementer | Tester | Reviewer |
 |-------|-------------|--------|----------|
@@ -414,7 +414,7 @@ Implementation and test code generation run in parallel:
 - Agent definition files are not generated. Set up sub-agents manually if needed.
 {end_no_agent_files}
 
-{end_parallel}
+{end_multi_agent}
 
 {if_cmux_dispatch}
 
