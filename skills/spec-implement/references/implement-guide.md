@@ -216,7 +216,7 @@ Workflow files typically define agent roles using two Markdown tables:
 | Tester | workflow-tester | Write and run tests, verify coverage |
 ```
 
-**Parallel Execution Strategy Table** — defines which roles are active in each phase:
+**Multi-Agent Role Assignment Strategy Table** — defines which roles are active in each phase:
 
 ```markdown
 | Phase | Implementer | Tester | Reviewer |
@@ -234,7 +234,7 @@ When spawning sub-agents:
 1. **Sub-agent identifier**: Use the `Agent` column value from the Role Assignment Table as `subagent_type` (e.g., `subagent_type: "workflow-implementer"`)
 2. **Definition file path**: Use role-specific path from workflow `Agent definition files` section if declared; otherwise use runtime defaults
 3. **Agent responsibility**: Use the `Responsibility` column value as context in the task prompt
-4. **Phase execution order**: Follow the Parallel Execution Strategy Table row by row:
+4. **Phase execution order**: Follow the Multi-Agent Role Assignment Strategy Table row by row:
    - Cells with `-` mean the role is idle in that phase
    - Non-`-` cells describe the role's action in that phase
    - Roles active in the same phase row can run in parallel
@@ -447,11 +447,68 @@ When `--dry-run` is specified, display the following and exit without making cha
 
 When cmux dispatch mode is selected, sub-agents are launched in separate cmux workspaces instead of using built-in Agent tools.
 
-### Agent Launch Pattern
+### Dispatch Method Selection
+
+1. **cmux-delegate skill is installed** (recommended):
+   - Use `Skill` tool to invoke `cmux-delegate` for each agent role
+   - The skill abstracts cmux CLI operations (workspace creation, agent launch, polling, result collection)
+   - **Do NOT use the built-in Agent tool** — always use `cmux-delegate` skill
+   - **Safety rule**: write the composed prompt or diff to a temporary file first, then pass the file contents. Do NOT inline multi-line content directly into a quoted `--task` or `--diff` argument.
+   - Concrete invocation examples:
+     ```
+     # Launch implementer with Codex
+     TASK_FILE=$(mktemp)
+     cat > "$TASK_FILE" <<'EOF'
+     You are a workflow-implementer.
+     {definition file content}
+
+     Task: Implement T001 — create user model following design section 2.3.
+     EOF
+     Skill:
+       skill: "cmux-delegate"
+       args: "--agent codex --task \"$(cat \"$TASK_FILE\")\""
+
+     # Launch tester with Codex (parallel with implementer)
+     TEST_TASK_FILE=$(mktemp)
+     cat > "$TEST_TASK_FILE" <<'EOF'
+     You are a workflow-tester.
+     {definition file content}
+
+     Task: Write tests for T001 — verify user model CRUD operations.
+     EOF
+     Skill:
+       skill: "cmux-delegate"
+       args: "--agent codex --task \"$(cat \"$TEST_TASK_FILE\")\""
+
+     # Launch reviewer with Claude (after implementation + tests complete)
+     REVIEW_TASK_FILE=$(mktemp)
+     cat > "$REVIEW_TASK_FILE" <<'EOF'
+     You are a workflow-reviewer.
+     {definition file content}
+
+     Review the following changes against review_rules.md:
+     {git diff output}
+     EOF
+     Skill:
+       skill: "cmux-delegate"
+       args: "--agent claude --task \"$(cat \"$REVIEW_TASK_FILE\")\""
+     ```
+   - Second opinion execution:
+     ```
+     DIFF_FILE=$(mktemp)
+     git diff HEAD > "$DIFF_FILE"
+     Skill:
+       skill: "cmux-second-opinion"
+       args: "--diff \"$(cat \"$DIFF_FILE\")\" --rules '{path to review_rules.md}'"
+     ```
+2. **cmux-delegate skill is NOT installed** (fallback):
+   - Execute the cmux CLI patterns below directly via Bash
+
+### Agent Launch Pattern (low-level fallback)
 
 ```bash
-# 1. Create workspace
-WS=$(cmux new-workspace)
+# 1. Create split pane (do NOT use new-workspace — it may create a non-terminal surface)
+WS=$(cmux new-split right)
 # Output: OK surface:{N} workspace:{N}
 
 # 2. Launch agent (select command based on AI column in role table)
@@ -466,9 +523,15 @@ cmux send --surface surface:{N} "gemini\n"
 sleep 3
 cmux read-screen --surface surface:{N}
 
-# 4. Send task
-cmux send --surface surface:{N} "{task_prompt}"
-cmux send-key --surface surface:{N} return
+# 4. Send task from a temporary file to preserve quotes/newlines safely
+TASK_FILE=$(mktemp)
+cat > "$TASK_FILE" <<'EOF'
+{task_prompt}
+EOF
+while IFS= read -r line; do
+  cmux send --surface surface:{N} "$line"
+  cmux send-key --surface surface:{N} return
+done < "$TASK_FILE"
 
 # 5. Monitor completion (graduated polling: 5s → 10s → 30s)
 cmux read-screen --surface surface:{N}
@@ -499,7 +562,7 @@ Map `AI` column values to launch commands:
 | `gemini` | `gemini` (no auto-approve available) |
 | *(missing)* | Default: `claude --dangerously-skip-permissions` |
 
-### Parallel Execution with cmux
+### Multi-Agent Execution with cmux
 
 Follow the strategy table — roles in the same row run in parallel:
 
@@ -526,9 +589,8 @@ The review gate replaces the simple self-review with a structured process:
    - After 3rd iteration: unresolved critical → ask user
 5. **Second opinion** (if cmux dispatch + second-opinion enabled):
    - After self-review loop passes
-   - Launch reviewer agent (different AI from implementer) in cmux workspace
-   - Send diff + review_rules.md
-   - Collect structured result
+   - Use `Skill` tool to invoke `cmux-second-opinion` skill (recommended), or launch reviewer agent manually in cmux workspace as fallback
+   - The skill sends diff + review_rules.md to a different AI and collects the structured result
    - New critical findings → 1 additional fix loop
 6. **Gate passes** when no unresolved critical issues remain
 
@@ -543,10 +605,100 @@ Same structure as Implementation Review Gate, with additional test-specific crit
 
 ### Second Opinion Settings (from workflow)
 
-The workflow may specify second opinion behavior:
+Read the setting from the workflow's "Second Opinion" / "セカンドオピニオン" section:
 
 | Setting | Behavior |
 |---------|----------|
 | "Always" / "毎回実施" | Auto-run at every review gate |
-| "On request" / "ユーザー要求時のみ" | Ask user before running |
+| "On request" / "ユーザー要求時のみ" | Ask user before running (AskUserQuestion) |
 | "Never" / "実施しない" | Skip second opinion |
+| *(section not found)* | Default: "On request" |
+
+**Execution**: Use `Skill` tool to invoke `cmux-second-opinion`:
+```
+DIFF_FILE=$(mktemp)
+git diff HEAD > "$DIFF_FILE"
+Skill:
+  skill: "cmux-second-opinion"
+  args: "--diff \"$(cat \"$DIFF_FILE\")\" --rules '{path to review_rules.md}'"
+```
+If the skill is not installed, fallback to manually launching a reviewer agent in a cmux workspace.
+
+## Agent Definition File Injection
+
+When spawning sub-agents, the content of agent definition files must be injected into the task prompt. This ensures each agent operates with full awareness of its role-specific rules and constraints.
+
+### Injection Steps
+
+1. Read the definition file for the role:
+   - Use path from workflow `Agent definition files` section if declared
+   - Otherwise use runtime defaults (e.g., `.claude/agents/workflow-implementer.md`)
+2. Prepend the definition file content to the task prompt
+3. If no definition file exists, use the `Responsibility` column from the role assignment table as the role description
+
+### Prompt Composition Template
+
+```
+You are a {role_name}.
+
+{content of agent definition file}
+
+Task: {actual task description from tasks.md}
+
+Context:
+- Design reference: {design.md section}
+- Coding rules: {path to coding-rules.md}
+- Review rules: {path to review_rules.md} (reviewer only)
+- Target files: {file list}
+```
+
+### Example: Built-in Sub-Agent (Claude Code)
+
+```text
+Agent:
+  subagent_type: workflow-implementer
+  prompt: |
+    You are a workflow-implementer.
+
+    {content of .claude/agents/workflow-implementer.md}
+
+    Task: Implement T001 — create user model following design section 2.3.
+    Target files: src/models/user.ts, src/models/user.test.ts
+    Coding rules: docs/development/coding-rules.md
+```
+
+### Example: Via cmux-delegate Skill
+
+```text
+TASK_FILE=$(mktemp)
+cat > "$TASK_FILE" <<'EOF'
+You are a workflow-implementer.
+{content of definition file}
+
+Task: Implement T001 — create user model.
+Target files: src/models/user.ts
+EOF
+Skill:
+  skill: "cmux-delegate"
+  args: "--agent codex --task \"$(cat \"$TASK_FILE\")\""
+```
+
+### Reviewer Prompt Composition
+
+The reviewer prompt includes the diff and review criteria in addition to the standard prompt:
+
+```
+You are a workflow-reviewer.
+
+{content of agent definition file}
+
+Review the following changes:
+{git diff output or changed files summary}
+
+Review criteria:
+- review_rules.md: {path}
+- coding-rules.md: {path}
+- design.md: {relevant section}
+
+Classify findings as: Critical / Improvement / Minor
+```

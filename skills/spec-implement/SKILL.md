@@ -54,13 +54,13 @@ Execute implementation from specifications to pull request, following project-sp
    **Workflow playbook** — search in order, use first found:
    1. `docs/development/issue-to-pr-workflow.md`
    2. `docs/issue-to-pr-workflow.md`
-   3. Fallback: `find . -name "issue-to-pr-workflow.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" | head -1`
+   3. Fallback: `find . -name "issue-to-pr-workflow.md" | grep -Ev '/(node_modules|\\.git|vendor|dist|build)/' | head -1`
    4. If not found → trigger fallback (see Phase 1)
 
    **Coding rules** — search in order, use first found:
    1. `docs/development/coding-rules.md`
    2. `docs/coding-rules.md`
-   3. Fallback: `find . -name "coding-rules.md" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/vendor/*" -not -path "*/dist/*" -not -path "*/build/*" | head -1`
+   3. Fallback: `find . -name "coding-rules.md" | grep -Ev '/(node_modules|\\.git|vendor|dist|build)/' | head -1`
    4. If not found → trigger fallback (see Phase 2)
 
    **Review rules** — search in order, use first found:
@@ -86,7 +86,7 @@ Execute implementation from specifications to pull request, following project-sp
      - Codex validation: `.codex/config.toml`
      - Claude Code validation: `.claude/agents/workflow-*.md`
    - If runtime cannot be determined, ask user to choose runtime
-   - Check whether workflow contains a parallel section (`Parallel Execution Strategy` / `Agent Roles`)
+   - Check whether workflow contains a multi-agent section (`Multi-Agent Role Assignment Strategy` / `Agent Roles`)
    - Parse optional workflow section for explicit agent file paths:
      - `Agent definition files:` / `エージェント定義ファイル:`
      - Extract paths for implementer / reviewer / tester from list items
@@ -153,35 +153,11 @@ AskUserQuestion:
 
 If enabled:
 - Run implementer and tester in parallel, then run reviewer after both complete.
-- Use explicit runtime-specific dispatch instructions, not narrative role assignment only.
-
-Codex path:
-- Required config: `.codex/config.toml` with `multi_agent = true` and `agents.workflow-*`
-- Agent definition file paths:
-  - First priority: paths declared in workflow `Agent definition files` section
-  - Fallback: runtime defaults (from `.codex/agents/` conventions)
-- Dispatch format (example):
-```text
-Task:
-  subagent_type: workflow-implementer
-  prompt: "Implement task T001 using design section 2.3. Edit implementation files only."
-
-Task:
-  subagent_type: workflow-tester
-  prompt: "Create tests for task T001. Edit test files only."
-```
-
-Claude Code path:
-- Required files:
-  - First priority: paths declared in workflow `Agent definition files` section
-  - Fallback defaults: `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`
-- Dispatch format: use Claude Code sub-agent call format with `subagent_type` set to workflow agent names (`workflow-implementer`, `workflow-tester`, `workflow-reviewer`).
-- Example (pseudocode):
-```text
-SubAgent:
-  subagent_type: workflow-implementer
-  prompt: "Implement task T001 using design section 2.3. Edit implementation files only."
-```
+- Require all of the following before parallel execution:
+  - runtime-specific multi-agent setup is valid
+  - agent definition files resolve from workflow paths or runtime defaults
+  - dispatch uses the explicit role table and strategy table, not narrative assignment only
+- Built-in dispatch examples are defined in Phase 6 and the reference guide.
 
 If disabled:
 - Continue with the existing single-agent sequential loop.
@@ -294,26 +270,46 @@ If the workflow file contains an "Agent Roles", "Sub-agents", or "エージェ�
 1. **Parse the Role Assignment Table** — find the Markdown table with columns like `Role | Agent | Responsibility`:
    - Extract each row's `Agent` column value → use as runtime sub-agent identifier (`subagent_type`)
    - Extract each row's `Responsibility` column value → use as context in the task prompt
-2. **Parse the Parallel Execution Strategy Table** (if present) — find the table with phase rows and role columns:
+2. **Parse the Multi-Agent Role Assignment Strategy Table** (if present) — find the table with phase rows and role columns:
    - Each row = a phase (execute sequentially, top to bottom)
    - Cells with `-` = role is idle in that phase
    - Non-`-` cells = role's action (roles active in the same row run in parallel)
 3. **Detect cmux dispatch**:
    - Check if workflow contains a "Dispatch Strategy" / "ディスパッチ戦略" section with `cmux`
    - Check `CMUX_SOCKET_PATH` environment variable
-   - Parse workflow role assignment table for optional `AI` column (maps roles to agents)
+   - Parse workflow role assignment table for optional `AI` column and map to launch commands:
+     | AI value | Launch command |
+     |----------|---------------|
+     | `claude` | `claude --dangerously-skip-permissions` |
+     | `codex` | `codex --dangerously-bypass-approvals-and-sandbox` |
+     | `gemini` | `gemini` |
+     | *(empty)* | Default: `claude --dangerously-skip-permissions` |
+   - **Pre-flight**: verify the executable name only, e.g. `command -v claude`, `command -v codex`, `command -v gemini`; warn and fallback if missing
 4. Present options to the user:
    ```
    AskUserQuestion:
      question: "Execution mode?" / "実行モードを選択してください"
      options:
-       - "Use sub-agents (parallel)" / "サブエージェント使用（並列）"
-       - "Sub-agents via cmux (visible)" / "cmux で可視化（並列）"  ← only if cmux detected
-       - "Single agent (sequential)" / "シングルエージェント（順次）"
+       - "Multi-agent (built-in)" / "マルチエージェント（組み込みサブエージェント）"
+       - "Multi-agent (cmux)" / "マルチエージェント（cmux で可視化）"  ← only if cmux detected
+       - "Single agent" / "単独実行（順次）"
    ```
 5. If sub-agents selected, branch by dispatch method:
-   - **Built-in Agent dispatch**: spawn via Codex Task or Claude Code sub-agent using `subagent_type`
-   - **cmux dispatch**: spawn via cmux CLI (new-workspace → send → poll → collect). Use `AI` column from role table to select agent command. See reference guide for cmux dispatch patterns.
+   - **Built-in Agent dispatch**: spawn via Codex Task or Claude Code sub-agent using `subagent_type`. Do NOT use cmux skills.
+   - **cmux dispatch**: compose the full prompt in a temporary file, then invoke `cmux-delegate` with the file contents. Do NOT inline multi-line prompt text directly into a quoted `--task '...'` argument.
+     ```
+     TASK_FILE=$(mktemp)
+     cat > "$TASK_FILE" <<'EOF'
+     You are a {role_name}.
+
+     {agent_definition_content}
+
+     Task: {task_prompt}
+     EOF
+     Skill: skill="cmux-delegate" args="--agent {ai_value} --task \"$(cat \"$TASK_FILE\")\""
+     ```
+     Do NOT use built-in Agent tool for cmux dispatch — always use `cmux-delegate` skill.
+   - **Agent context injection** (both dispatch methods): Read the role's agent definition file and prepend its content to the task prompt. If no definition file exists, use the Responsibility column as the role description. See reference guide for details.
    - Execute phases per strategy table (same-row roles run in parallel)
 6. If single agent selected: proceed with sequential execution below
 
@@ -329,7 +325,10 @@ For each unchecked task in `tasks.md`:
 3. Implement: create or modify target files
 4. 🔍 Implementation Review Gate:
    a. Load review_rules.md (if found in Phase 1 Step 4)
-   b. Review against review_rules.md + coding-rules.md + design.md
+   b. **Dispatch review by execution mode**:
+      - **Single agent**: Self-review against review_rules.md + coding-rules.md + design.md
+      - **Multi-agent (built-in)**: Spawn `workflow-reviewer` sub-agent with definition file content, changed files diff, and review criteria
+      - **Multi-agent (cmux)**: write the reviewer prompt to a temporary file, then call `cmux-delegate` with `args="--agent {reviewer_ai} --task \"$(cat \"$REVIEW_TASK_FILE\")\""`
    c. Severity classification:
       - Critical (security/bugs) → fix immediately → re-review
       - Improvement (quality/readability) → fix → re-review
@@ -338,8 +337,10 @@ For each unchecked task in `tasks.md`:
       - Fix → re-review only fixed areas → repeat
       - After 3rd: unresolved improvements → downgrade to minor
       - After 3rd: unresolved critical → ask user to decide
-   e. If cmux dispatch + second-opinion enabled:
-      - After self-review loop passes, run second opinion (see reference guide)
+   e. **Second opinion** (cmux mode only):
+      - Read setting from workflow ("Second Opinion" / "セカンドオピニオン" section):
+        - "Always" → auto-execute | "On request" → ask user | "Never" → skip | *(not found)* → "On request"
+      - Execute with a temporary diff file, e.g. `DIFF_FILE=$(mktemp)` → write diff to file → `Skill: skill="cmux-second-opinion" args="--diff \"$(cat \"$DIFF_FILE\")\" --rules '{review_rules_path}'"`
       - New critical findings → 1 additional fix loop
    f. Gate passes → proceed to Step 5
 5. If task includes test implementation:
@@ -413,9 +414,6 @@ After PR creation, monitor CI status if the workflow specifies CI verification c
 | Not a git repository | Error: "Must be in a git repository" / "gitリポジトリ内で実行してください" |
 | `gh` CLI not available | Error: guide user to install/authenticate gh CLI |
 | `.specs/` not found | Warning: switch to Issue-only minimal mode |
-| Parallel requested but runtime sub-agent config missing/invalid | Warning: explain missing setup, fallback to sequential mode |
-| Workflow-declared agent definition file path does not exist | Warning: explain missing file path, fallback to sequential mode |
-| Workflow references sub-agent names that are not configured in selected runtime | Warning: explain missing agent definitions, fallback to sequential mode |
 | Parallel file edit collision | Warning: stop parallel for current task, continue sequentially |
 | `requirement.md` missing | Warning: use Issue body as requirements source |
 | `tasks.md` missing | Warning: generate simple checklist from Issue |
@@ -432,25 +430,13 @@ After PR creation, monitor CI status if the workflow specifies CI verification c
 "Implement from spec for auth-feature"
 「auth-featureの仕様書から実装して」
 
-# With issue number
-"Implement spec --issue 42"
-「Issue #42の仕様を実装して」
-
 # Resume after interruption
 "Resume implementation --resume --spec .specs/auth-feature/"
 「実装を再開 --resume」
 
-# Dry run to preview plan
-"Show implementation plan --dry-run --spec .specs/auth-feature/"
-「実装計画を表示 --dry-run」
-
-# Force parallel mode (runtime-aware)
+# Force multi-agent mode (runtime-aware)
 "Implement from spec --spec .specs/auth-feature/ --parallel"
-「仕様書から並列実行で実装 --parallel」
-
-# Minimal mode (no specs)
-"Implement issue 42"
-「Issue 42を実装して」
+「仕様書からマルチエージェントで実装 --parallel」
 ```
 
 ## Post-Completion Actions
