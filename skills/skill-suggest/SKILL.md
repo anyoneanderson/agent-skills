@@ -77,9 +77,13 @@ Detect already-installed skills to avoid duplicate suggestions.
 
 1. List directory names under `.agents/skills/` (if exists)
 2. List directory names under `.claude/skills/` (if exists)
-3. Read `skills-lock.json` (if exists) for `source@skillId` pairs
+3. Read `skills-lock.json` (if exists) — format is a JSON object with `skills` key:
+   ```json
+   { "version": 1, "skills": { "<skillId>": { "source": "<owner/repo>", ... }, ... } }
+   ```
+   Extract each key as `skillId` and its `.source` value.
 
-**Build an installed set** of `skillId` values (directory names). If `skills-lock.json` exists, also keep `source@skillId` pairs for exact matching.
+**Build an installed set** of `skillId` values (directory names). If `skills-lock.json` exists, also keep `source + skillId` pairs for exact matching.
 
 ### Step 3: Search skills.sh API
 
@@ -172,11 +176,10 @@ AskUserQuestion:
   options:
     - "Install Tier 1 only (recommended)" / "Tier 1 のみインストール（推奨）"
     - "Install all suggested skills" / "提案されたスキルを全てインストール"
-    - "Select by number (e.g., 1,3,5)" / "番号で選択（例: 1,3,5）"
     - "Skip installation" / "インストールをスキップ"
 ```
 
-If "Select by number": accept comma-separated numbers (e.g., `1,2,3,5`) matching the `#` column.
+If the user wants to select specific skills, they can specify by number (e.g., "1,3,5") in a follow-up message. Accept comma-separated numbers matching the `#` column.
 
 ### Step 6: Install Selected Skills
 
@@ -192,13 +195,13 @@ If "Select by number": accept comma-separated numbers (e.g., `1,2,3,5`) matching
 **6b. Install each selected skill:**
 
 ```bash
-npx skills add <source>@<skillId> --agent <detected-agent> -y
+npx skills add <source> --skill <skillId> -a <detected-agent> -y
 ```
 
 If agent detection failed, fall back to:
 
 ```bash
-npx skills add <source>@<skillId> -y
+npx skills add <source> --skill <skillId> -y
 ```
 
 Execute installations sequentially. If one skill fails, log the error and continue with the remaining skills.
