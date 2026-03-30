@@ -4,6 +4,12 @@
 
 The `--feedback` option accepts both review results and test results. The file format is auto-detected:
 
+### Header Detection
+- The first metadata line must declare the feedback type: `type: review` or `type: test`
+- `type: review` means the file follows the spec-review contract
+- `type: test` means the file follows the spec-test contract
+- If the header is missing, fall back to section-based detection only as a best-effort compatibility path
+
 ### Review Result (from spec-review)
 - Contains `## Findings` section with `### Critical` / `### Improvement` / `### Minor`
 - Each finding has `**{rule-id}** {file}:{line} — {description}`

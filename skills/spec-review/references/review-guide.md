@@ -44,7 +44,8 @@ See SKILL.md Step 5 for the full template. Key points:
 
 | Context | Command | Notes |
 |---|---|---|
-| Task-scoped | `git log --oneline` to find task start commit, then `git diff {commit}...HEAD` | Most precise |
+| Task-scoped with explicit base | `git diff {base-commit}...HEAD` | Preferred when orchestrator passes `--base-commit` |
+| Task-scoped auto-detect | `git log --oneline` to find task start commit, then `git diff {commit}...HEAD` | Use only when the start commit is unambiguous |
 | Staged changes | `git diff --cached` | For pre-commit review |
 | Working tree | `git diff` | Unstaged changes |
 | PR scope | `git diff {base}...HEAD` | Full PR review |

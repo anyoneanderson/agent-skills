@@ -4,6 +4,12 @@
 
 `--feedback` オプションはレビュー結果とテスト結果の両方を受け付ける。ファイル形式は自動検出される：
 
+### ヘッダ判定
+- 最初のメタデータ行で `type: review` または `type: test` を宣言する
+- `type: review` は spec-review の契約に従うことを意味する
+- `type: test` は spec-test の契約に従うことを意味する
+- ヘッダがない場合のみ、互換性維持のため見出しベースの判定にフォールバックする
+
 ### レビュー結果（spec-review から）
 - `## Findings` セクションに `### Critical` / `### Improvement` / `### Minor` がある
 - 各指摘は `**{rule-id}** {file}:{line} — {description}` 形式

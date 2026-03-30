@@ -142,14 +142,15 @@ Task decomposition based on design document
 
 ## 3. Task Details
 
-### T001: Environment Setup
+### T001: Add Dependencies and Create Config Files
 - Requirement ID: — (foundation task)
 - Design reference: design.md L:45-60
 - Dependencies: None
 - Estimated time: 1 hour
 - Target files: package.json, .env
 - Done criteria:
-  - [ ] Dependencies installed
+  - [ ] Required dependencies are added to the project
+  - [ ] Configuration files are created with valid initial values
   - [ ] Development environment starts successfully
 - Parallel execution: Can run simultaneously with T002
 

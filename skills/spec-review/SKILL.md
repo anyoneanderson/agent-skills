@@ -28,6 +28,7 @@ Review code changes against project rules using a systematic rule × file matrix
 | Option | Description |
 |--------|-------------|
 | `--task {task-id}` | Review changes for a specific task (auto-detect diff) |
+| `--base-commit {sha}` | Base commit for task-scoped diff (recommended with `--task`) |
 | `--diff {file}` | Review a specific diff file (standalone use) |
 | `--spec {path}` | Path to .specs/ directory (for design consistency check) |
 | `--rules {path}` | Path to review_rules.md (auto-search if omitted) |
@@ -63,7 +64,8 @@ If no rules files found, use minimal defaults: security (no secrets, no injectio
 
 | Context | Diff Command |
 |---|---|
-| `--task {id}` specified | `git diff {task-start-commit}...HEAD` (commit before task implementation) |
+| `--task {id}` + `--base-commit {sha}` | `git diff {sha}...HEAD` |
+| `--task {id}` only | Auto-detect task start commit; if ambiguous, require `--base-commit` |
 | `--diff {file}` specified | Read the provided diff file directly |
 | Standalone (no options) | `git diff --cached` first; if empty, `git diff` (working tree) |
 | PR context | `git diff {base}...HEAD` |
@@ -150,6 +152,7 @@ type: review
 | Situation | Response |
 |---|---|
 | No diff available | Error: no changes to review |
+| `--task` without resolvable base commit | Error: ask for `--base-commit {sha}` |
 | No rules files found | Warning: use minimal defaults, proceed |
 | `--spec` provided but design.md missing | Warning: skip design consistency check |
 | `--output` directory doesn't exist | Create the directory |
@@ -158,7 +161,7 @@ type: review
 
 ```
 # Review a specific task's changes
-/spec-review --task T-007 --spec .specs/did-deactivation/
+/spec-review --task T-007 --base-commit abc1234 --spec .specs/did-deactivation/
 
 # Standalone review of current staged changes
 /spec-review

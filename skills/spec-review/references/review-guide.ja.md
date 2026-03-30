@@ -44,7 +44,8 @@ SKILL.md Step 5 の完全テンプレートを参照。要点：
 
 | コンテキスト | コマンド | 備考 |
 |---|---|---|
-| タスクスコープ | `git log --oneline` でタスク開始コミットを特定、`git diff {commit}...HEAD` | 最も正確 |
+| 明示的なベース付きタスクスコープ | `git diff {base-commit}...HEAD` | オーケストレーターが `--base-commit` を渡す場合の推奨形 |
+| 自動検出のタスクスコープ | `git log --oneline` でタスク開始コミットを特定、`git diff {commit}...HEAD` | 開始コミットが曖昧でない場合のみ使用 |
 | ステージ済み変更 | `git diff --cached` | コミット前レビュー用 |
 | ワーキングツリー | `git diff` | 未ステージの変更 |
 | PR スコープ | `git diff {base}...HEAD` | PR 全体レビュー |
