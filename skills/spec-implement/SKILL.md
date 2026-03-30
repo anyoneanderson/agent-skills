@@ -88,12 +88,14 @@ Post-creation verification — MUST NOT be on `main`, `master`, or `develop`.
 
 **Read `tasks.md` and process phases by role tag:**
 
+If a phase has NO role tag (legacy specs without `[code]`/`[orchestrator]`), treat it as `[code]` by default. This ensures backward compatibility with specs generated before v3.
+
 ```
 for each phase in tasks.md:
   if phase has [orchestrator] tag:
-    execute tasks directly (env setup, config, etc.)
+    execute tasks directly (run commands, check results — do NOT modify files)
 
-  if phase has [code] tag:
+  if phase has [code] tag (or NO tag — legacy fallback):
     for each unchecked task in phase:
       // Step 1: Implement
       invoke spec-code --issue {N} --task {task-id} --spec {path}

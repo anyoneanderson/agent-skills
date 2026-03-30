@@ -16,7 +16,7 @@ It acts as an execution engine that:
 ```
 1. Initial Checks
    ├── Verify working directory (git repo, gh CLI available)
-   ├── Parse options (--resume, --issue, --spec, --dry-run, --parallel, --no-parallel)
+   ├── Parse options (--resume, --issue, --spec, --dry-run)
    └── Locate spec directory (.specs/{feature}/)
 
 2. File Loading (flexible path search)

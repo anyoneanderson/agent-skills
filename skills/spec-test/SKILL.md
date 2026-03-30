@@ -8,7 +8,7 @@ description: |
   Works standalone or as part of the spec-implement pipeline.
 
   English triggers: "Test this task", "Run spec-test", "Create tests for task"
-  日本語トリガー: ��このタスクをテスト」「spec-testを実行」「タスクのテストを作成」
+  日本語トリガー: 「このタスクをテスト」「spec-testを実行」「タスクのテストを作成」
 license: MIT
 ---
 
@@ -94,6 +94,7 @@ Output to `--output` path (default: `.specs/{feature}/test-{task-id}.md`):
 
 ```markdown
 # Test: {task-id}
+type: test
 
 ## Meta
 - Tester: spec-test

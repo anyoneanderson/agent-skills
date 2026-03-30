@@ -8,7 +8,7 @@ description: |
   Supports --feedback mode to address review or test findings.
 
   English triggers: "Implement task", "Code this task", "Run spec-code"
-  日本語トリガー: 「タス��を実装」「このタスクをコーディング」「spec-codeを実行」
+  日本語トリガー: 「タスクを実装」「このタスクをコーディング」「spec-codeを実行」
 license: MIT
 ---
 
@@ -85,9 +85,14 @@ Read the design section referenced by the task (e.g., "design.md §4.2"):
 - Create or modify only the files specified in the task
 
 **Feedback mode** (`--feedback {file}`):
-- Read the feedback file (review result or test result)
-- For each Critical finding: fix the violation at the specified file:line
-- For each Improvement finding: fix if feasible
+
+The feedback file is auto-detected by its `type:` header line:
+
+- **type: review** → Read `## Findings` section. Fix Critical findings at specified file:line, then Improvements.
+- **type: test** → Read `## Test Cases` for failures and `## Completion Criteria Coverage` for uncovered criteria. Fix the failing tests by modifying implementation code.
+
+For both types:
+- Focus on items marked as FAIL or `- [ ]` (unchecked)
 - Do NOT modify code unrelated to the findings
 
 ### Step 4: Verify Completion Criteria

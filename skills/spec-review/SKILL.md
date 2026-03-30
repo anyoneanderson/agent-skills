@@ -115,6 +115,7 @@ Output to `--output` path (default: `.specs/{feature}/review-{task-id}.md`):
 
 ```markdown
 # Review: {task-id}
+type: review
 
 ## Meta
 - Reviewer: spec-review

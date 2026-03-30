@@ -104,8 +104,17 @@ options:
 ### 8. Output Structure
 
 **Role tags**: Each phase heading MUST include a role tag `[code]` or `[orchestrator]`:
-- `[code]` — Tasks that spec-code implements (code creation/modification)
-- `[orchestrator]` — Tasks that spec-implement executes directly (branch setup, quality gates, PR creation)
+- `[code]` — Tasks that create, modify, or generate files (spec-code handles these)
+- `[orchestrator]` — Tasks that only run commands and check results without modifying files (git/gh operations, test execution, PR creation)
+
+**Classification rule:**
+| What the task does | Role |
+|---|---|
+| Write/modify source files, config, schemas | `[code]` |
+| Generate files via commands (migrations, scaffolding) | `[code]` (generated output needs review) |
+| Run existing commands and check results (npm test, lint) | `[orchestrator]` |
+| Git/GitHub operations (branch, commit, PR) | `[orchestrator]` |
+| Progress tracking (tasks.md checkbox updates) | `[orchestrator]` |
 
 **Constraint**: One phase = one role. Do NOT mix `[code]` and `[orchestrator]` tasks in the same phase. If a phase has both types, split into separate phases.
 
@@ -119,9 +128,9 @@ Task decomposition based on design document
 
 ## 2. Task Summary
 
-### Phase 1: Foundation [orchestrator]
-- [ ] T001: Environment setup
-- [ ] T002: Database configuration
+### Phase 1: Setup & Configuration [code]
+- [ ] T001: Add dependencies and create config files
+- [ ] T002: Database schema and migration
 
 ### Phase 2: Core Implementation [code]
 - [ ] T003: [REQ-001] Authentication
