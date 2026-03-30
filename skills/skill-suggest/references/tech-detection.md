@@ -1,6 +1,22 @@
 # Tech Detection Rules
 
-Mapping rules for detecting tech stacks from manifest files. Only repository root files are scanned (no subdirectory traversal — monorepo is not supported).
+Mapping rules for detecting tech stacks from manifest files.
+
+## Monorepo Detection
+
+Check the repository root for these indicators:
+
+| Indicator | Monorepo Tool | Workspace Config |
+|---|---|---|
+| `turbo.json` | Turborepo | `workspaces` in root `package.json` |
+| `nx.json` | Nx | `projects` in `nx.json` or `workspace.json` |
+| `pnpm-workspace.yaml` | pnpm workspaces | `packages` in `pnpm-workspace.yaml` |
+| `lerna.json` | Lerna | `packages` in `lerna.json` |
+| `package.json` with `"workspaces"` field | npm/yarn workspaces | `workspaces` in `package.json` |
+
+If monorepo detected, resolve workspace directories from the config (expand globs like `apps/*`, `packages/*`) and scan each for manifest files. Also scan the repository root for shared configs (Dockerfile, `*.tf`, etc.).
+
+If not a monorepo, scan the repository root only.
 
 ## Manifest Files to Detect
 

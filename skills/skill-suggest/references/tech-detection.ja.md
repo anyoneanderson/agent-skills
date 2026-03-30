@@ -1,6 +1,22 @@
 # 技術検出ルール
 
-マニフェストファイルから技術スタックを検出するためのマッピングルール。リポジトリルートのファイルのみを走査する（サブディレクトリの走査は行わない — monorepo は非対応）。
+マニフェストファイルから技術スタックを検出するためのマッピングルール。
+
+## モノレポ検出
+
+リポジトリルートで以下の指標をチェックする：
+
+| 指標 | モノレポツール | ワークスペース設定 |
+|---|---|---|
+| `turbo.json` | Turborepo | ルート `package.json` の `workspaces` |
+| `nx.json` | Nx | `nx.json` の `projects` または `workspace.json` |
+| `pnpm-workspace.yaml` | pnpm workspaces | `pnpm-workspace.yaml` の `packages` |
+| `lerna.json` | Lerna | `lerna.json` の `packages` |
+| `package.json` に `"workspaces"` フィールドあり | npm/yarn workspaces | `package.json` の `workspaces` |
+
+モノレポが検出された場合、設定からワークスペースディレクトリを解決し（`apps/*`, `packages/*` 等のグロブを展開）、各ディレクトリのマニフェストファイルを走査する。リポジトリルートの共有設定（Dockerfile, `*.tf` 等）も走査する。
+
+モノレポでない場合、リポジトリルートのみ走査する。
 
 ## 検出対象のマニフェストファイル
 

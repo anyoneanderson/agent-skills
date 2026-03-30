@@ -33,9 +33,32 @@ Analyze the project tech stack and suggest optimal skills from the skills.sh reg
 
 ### Step 1: Detect Tech Stack
 
-Scan the **repository root only** (no subdirectory traversal — monorepo is not supported) for manifest files.
+#### 1a. Check for monorepo
 
-**Check for these files:**
+First, check if the repository is a monorepo by looking for these indicators at the root:
+
+| Indicator | Monorepo Tool |
+|---|---|
+| `turbo.json` | Turborepo |
+| `nx.json` | Nx |
+| `pnpm-workspace.yaml` | pnpm workspaces |
+| `lerna.json` | Lerna |
+| `package.json` with `"workspaces"` field | npm/yarn workspaces |
+
+#### 1b. Collect manifest files
+
+**If monorepo detected**: Find all workspace directories and scan each for manifest files. Use the workspace tool's config to locate packages:
+
+- **Turborepo / npm workspaces / yarn workspaces**: Read `workspaces` from root `package.json` (glob patterns like `apps/*`, `packages/*`)
+- **pnpm workspaces**: Read `packages` from `pnpm-workspace.yaml`
+- **Nx**: Read `projects` from `nx.json` or scan directories listed in `workspace.json`
+- **Lerna**: Read `packages` from `lerna.json`
+
+For each workspace directory, check for the manifest files listed below. Also check the repository root for shared configs (Dockerfile, `*.tf`, `tailwind.config.*`).
+
+**If not a monorepo**: Scan the repository root only.
+
+**Manifest files to check:**
 
 ```
 package.json, Cargo.toml, go.mod, requirements.txt, pyproject.toml,
@@ -43,6 +66,8 @@ Pipfile, Gemfile, pom.xml, build.gradle*, composer.json,
 Dockerfile, docker-compose.yml, docker-compose.yaml,
 *.tf, tsconfig.json, tailwind.config.*, .eslintrc*, components.json
 ```
+
+#### 1c. Extract dependencies
 
 **For each detected manifest**, read it and extract dependencies:
 
@@ -53,6 +78,8 @@ Dockerfile, docker-compose.yml, docker-compose.yaml,
 - `pyproject.toml` → parse `[project.dependencies]` or `[tool.poetry.dependencies]`
 - `Dockerfile` → extract FROM image name (language hint only)
 
+#### 1d. Classify and deduplicate
+
 **Map packages to technologies** using `references/tech-detection.md`. Classify each into:
 
 - **language** (e.g., TypeScript, Python)
@@ -60,7 +87,11 @@ Dockerfile, docker-compose.yml, docker-compose.yaml,
 - **library** (e.g., Prisma, Tailwind CSS, shadcn/ui)
 - **infra** (e.g., Docker, Terraform)
 
-**Generate search queries** per the rules in `references/tech-detection.md`:
+If the same technology is found in multiple workspaces, deduplicate (list it once). For the report, note the source workspace if monorepo (e.g., "Next.js 15 (apps/web)").
+
+#### 1e. Generate search queries
+
+Per the rules in `references/tech-detection.md`:
 
 - Frameworks → `"<name> best practices"`
 - Major libraries → `"<name>"` (short query)
