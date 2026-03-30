@@ -18,6 +18,7 @@
 | [cmux-fork](skills/cmux-fork/) | Claude Codeの会話を新しいcmuxペインまたはワークスペースにフォーク |
 | [cmux-delegate](skills/cmux-delegate/) | 別のcmuxペインまたはワークスペースでAIエージェントにタスクを委任 |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | cmux経由で別AIエージェントにコードや仕様書の独立レビューを依頼 |
+| [skill-suggest](skills/skill-suggest/) | プロジェクトの技術スタックを自動解析し、skills.shレジストリから最適なスキルを提案・インストール |
 
 ## インストール
 
@@ -36,6 +37,7 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
+npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 ```
 
 > **Note**: cmux スキルは [cmux](https://cmux.dev/)（macOS 14.0+）が必要で、cmux セッション内で実行する必要があります。
@@ -122,6 +124,14 @@ npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 > 自由にレビューしてもらって
 ```
 
+### ベストプラクティススキルを提案する
+
+```
+> おすすめスキルを教えて
+> スキルを提案して
+> ベストプラクティススキルを検索
+```
+
 ## 仕組み
 
 1. **spec-generator** が `.specs/{project}/` に構造化された仕様書を生成:
@@ -159,6 +169,10 @@ npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 8. **cmux-delegate** が別の cmux ワークスペースに AI エージェントを起動し、タスクを送信・監視・結果回収。Claude Code / Codex / Gemini CLI 対応。
 
 9. **cmux-second-opinion** が別の AI エージェントに独立したレビューを依頼。親と異なるエージェントを自動選択。コードレビュー・仕様書レビュー対応、基準モード3種。
+
+### プロジェクトセットアップ
+
+10. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
 
 ## 互換性
 
