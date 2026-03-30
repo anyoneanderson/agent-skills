@@ -22,6 +22,21 @@ Execute implementation from specifications to pull request, following project-sp
 3. English input → English output, use `references/implement-guide.md`
 4. Explicit override takes priority (e.g., "in English", "日本語で")
 
+## Non-Negotiable Gates (NEVER skip)
+
+> These gates are MANDATORY regardless of execution mode, time pressure, or task complexity.
+> Skipping any of these gates is a **violation** — treat as equivalent to pushing to `main`.
+
+| # | Gate | Phase | Trigger | Enforcement |
+|---|------|-------|---------|-------------|
+| 1 | Feature branch protection | Phase 5 | Before implementation | 🚨 BLOCKING — bash verification |
+| 2 | Execution mode selection | Phase 6 pre-loop | Before task loop | 🚨 BLOCKING — MUST call AskUserQuestion |
+| 3 | Implementation Review Gate | Phase 6 Step 4 | After each task's implementation | 🚨 BLOCKING — MUST print review output |
+| 4 | Test Review Gate | Phase 6 Step 5c | After each task's tests | 🚨 BLOCKING — MUST print review output |
+| 5 | Final Quality Gate | Phase 7 | After all tasks complete | 🚨 BLOCKING — MUST run commands + print results |
+
+**Silent skip = violation.** Each gate MUST produce visible output in the required format. If a gate's output block is missing from your response, the gate was NOT executed.
+
 ## Critical First Steps
 
 **BEFORE any implementation, execute these checks in order:**
@@ -285,7 +300,12 @@ If the workflow file contains an "Agent Roles", "Sub-agents", or "エージェ�
      | `gemini` | `gemini` |
      | *(empty)* | Default: `claude --dangerously-skip-permissions` |
    - **Pre-flight**: verify the executable name only, e.g. `command -v claude`, `command -v codex`, `command -v gemini`; warn and fallback if missing
-4. Present options to the user:
+4. > **🚨 BLOCKING GATE — Execution mode selection is MANDATORY**
+   >
+   > You MUST call AskUserQuestion below. Do NOT assume or infer the user's preference.
+   > Do NOT skip this step even if the user's message implies urgency or a specific workflow.
+   > Guessing "single agent" without asking = violation.
+
    ```
    AskUserQuestion:
      question: "Execution mode?" / "実行モードを選択してください"
@@ -323,7 +343,9 @@ For each unchecked task in `tasks.md`:
 1. Read task details (requirements ID, design reference, target files, completion criteria)
 2. Reference the corresponding design.md section
 3. Implement: create or modify target files
-4. 🔍 Implementation Review Gate:
+4. > 🚨 BLOCKING GATE — Implementation Review Gate
+   > Step 5 REQUIRES this gate = PASS. You MUST NOT proceed without printing the review output below.
+
    a. Load review_rules.md (if found in Phase 1 Step 4)
    b. **Dispatch review by execution mode**:
       - **Single agent**: Self-review against review_rules.md + coding-rules.md + design.md
@@ -342,17 +364,44 @@ For each unchecked task in `tasks.md`:
         - "Always" → auto-execute | "On request" → ask user | "Never" → skip | *(not found)* → "On request"
       - Execute with a temporary diff file, e.g. `DIFF_FILE=$(mktemp)` → write diff to file → `Skill: skill="cmux-second-opinion" args="--diff \"$(cat \"$DIFF_FILE\")\" --rules '{review_rules_path}'"`
       - New critical findings → 1 additional fix loop
-   f. Gate passes → proceed to Step 5
+   f. **MANDATORY output** — you MUST print this block (absence = violation):
+      ```
+      ---
+      ## Implementation Review Gate: {task_id}
+      - Iteration: {n}/3
+      - Rules checked: review_rules.md ({count} rules), coding-rules.md ({count} [MUST] rules)
+      - Critical: {count} → {fixed_count} fixed, {remaining_count} remaining
+      - Improvement: {count} → {fixed_count} fixed, {deferred_count} deferred
+      - Minor: {count} (logged only)
+      - Gate: PASS / FAIL
+      ---
+      ```
+   g. Gate PASS → proceed to Step 5. Gate FAIL after 3 iterations → ask user to decide.
 5. If task includes test implementation:
    a. Write tests following project test patterns
    b. Run tests to verify they pass
-   c. 🔍 Test Review Gate:
+   c. > 🚨 BLOCKING GATE — Test Review Gate
+      > Step 6 REQUIRES this gate = PASS. You MUST NOT proceed without printing the review output below.
+
       - Same fix loop structure as Implementation Review Gate
       - Additional test-specific criteria: coverage, edge cases, test isolation, AAA pattern
-      - Gate passes → proceed to Step 6
+      - **MANDATORY output** — you MUST print this block (absence = violation):
+        ```
+        ---
+        ## Test Review Gate: {task_id}
+        - Iteration: {n}/3
+        - Coverage: {percentage}%
+        - Edge cases tested: {yes/no}
+        - Test isolation: {yes/no}
+        - AAA pattern: {yes/no}
+        - Critical: {count} | Improvement: {count} | Minor: {count}
+        - Gate: PASS / FAIL
+        ---
+        ```
+      - Gate PASS → proceed to Step 6
 6. Update tasks.md: mark completion criteria (- [ ] → - [x])
 7. When all criteria pass: mark top-level task checkbox (- [x])
-8. Commit progress:
+8. Commit progress (REQUIRES: Step 4 gate = PASS AND Step 5c gate = PASS if tests exist):
    git add .specs/{feature}/tasks.md [+ implementation files]
    git commit -m "{commit message following project conventions}"
 ```
@@ -363,6 +412,11 @@ For each unchecked task in `tasks.md`:
 
 ### Phase 7: Final Quality Gate
 
+> **🚨 BLOCKING GATE — Final Quality Gate is MANDATORY**
+>
+> Phase 8 (PR Creation) MUST NOT proceed without this gate passing.
+> You MUST run ALL commands below and print the output block. Absence = violation.
+
 After all tasks are complete:
 
 1. Run test commands from the workflow (or language-appropriate default)
@@ -370,9 +424,27 @@ After all tasks are complete:
 3. Verify all `[MUST]` rules from coding-rules.md pass
 4. Verify all CLAUDE.md conditional rules pass
 5. If any check fails → fix → recheck
-6. All checks pass → proceed to PR creation
+
+**MANDATORY output** — you MUST print this block before proceeding to Phase 8:
+```
+---
+## Final Quality Gate
+- Tests: PASS / FAIL ({count} tests, {coverage}% coverage)
+- Lint: PASS / FAIL / SKIPPED (no lint command)
+- Typecheck: PASS / FAIL / SKIPPED (no typecheck command)
+- Build: PASS / FAIL / SKIPPED (no build command)
+- [MUST] rules: {checked_count}/{total_count} passed
+- CLAUDE.md rules: {checked_count}/{total_count} passed
+- Gate: PASS / FAIL
+---
+```
+
+6. Gate PASS → proceed to PR creation. Gate FAIL → fix and recheck.
 
 ### Phase 8: PR Creation
+
+> **Pre-check**: Phase 8 REQUIRES Phase 7 Final Quality Gate = PASS.
+> If the `## Final Quality Gate` output block does not appear earlier in your response, STOP and execute Phase 7 first.
 
 Follow the workflow's PR template. Use `{base_branch}` detected in Phase 1:
 
