@@ -1,472 +1,28 @@
 ---
 name: spec-implement
 description: |
-  Specification-driven implementation — Execute implementation from specs to PR.
+  Specification-driven implementation orchestrator — Coordinate spec-code, spec-review,
+  and spec-test to implement from specs to PR.
 
-  Reads issue-to-pr-workflow.md as playbook, enforces coding-rules.md as quality gates,
-  tracks progress via tasks.md checkboxes with resume capability.
+  Reads issue-to-pr-workflow.md as playbook, delegates implementation to spec-code,
+  review to spec-review, testing to spec-test. Manages fix loops, task progression,
+  and PR creation. Does NOT write implementation code or perform reviews itself.
 
   English triggers: "Implement from spec", "Start implementation", "Execute spec tasks"
   日本語トリガー: 「仕様書から実装」「実装を開始」「specタスクを実行」
 license: MIT
 ---
 
-# spec-implement — Spec-Driven Implementation to PR
+# spec-implement — Orchestrator for Spec-Driven Implementation
 
-Execute implementation from specifications to pull request, following project-specific workflows and enforcing coding rules.
+Coordinate worker skills (spec-code, spec-review, spec-test) to implement from specifications to pull request. This skill does NOT write code or review — it delegates.
 
 ## Language Rules
 
 1. **Auto-detect input language** → output in the same language
 2. Japanese input → Japanese output, use `references/implement-guide.ja.md`
 3. English input → English output, use `references/implement-guide.md`
-4. Explicit override takes priority (e.g., "in English", "日本語で")
-
-## Non-Negotiable Gates (NEVER skip)
-
-> These gates are MANDATORY regardless of execution mode, time pressure, or task complexity.
-> Skipping any of these gates is a **violation** — treat as equivalent to pushing to `main`.
-
-| # | Gate | Phase | Trigger | Enforcement |
-|---|------|-------|---------|-------------|
-| 1 | Feature branch protection | Phase 5 | Before implementation | 🚨 BLOCKING — bash verification |
-| 2 | Execution mode selection | Phase 6 pre-loop | Before task loop | 🚨 BLOCKING — MUST call AskUserQuestion |
-| 3 | Implementation Review Gate | Phase 6 Step 4 | After each task's implementation | 🚨 BLOCKING — MUST print review output |
-| 4 | Test Review Gate | Phase 6 Step 5c | After each task's tests | 🚨 BLOCKING — MUST print review output |
-| 5 | Final Quality Gate | Phase 7 | After all tasks complete | 🚨 BLOCKING — MUST run commands + print results |
-
-**Silent skip = violation.** Each gate MUST produce visible output in the required format. If a gate's output block is missing from your response, the gate was NOT executed.
-
-## Critical First Steps
-
-**BEFORE any implementation, execute these checks in order:**
-
-1. **Verify environment**:
-   - Run `pwd` to confirm working directory
-   - Run `git status` to confirm inside a git repository
-   - Run `gh auth status` to confirm GitHub CLI access
-
-2. **Parse user input for options**:
-   - `--resume` → resume from last uncompleted task
-   - `--issue {N}` → specify GitHub Issue number
-   - `--spec {path}` → specify `.specs/` directory path
-   - `--dry-run` → show execution plan without making changes
-   - `--parallel` → force parallel execution if environment is ready
-   - `--no-parallel` → force sequential execution
-
-3. **Locate spec directory**:
-   - If `--spec` provided → use that path
-   - If issue body contains `.specs/` path → use that
-   - Otherwise → scan `.specs/` and ask user to select:
-     ```
-     AskUserQuestion:
-       question: "Which spec to implement?" / "どの仕様書を実装しますか？"
-       options: [list discovered .specs/ directories]
-     ```
-
-4. **Locate and read project files** (in this order):
-
-   **Workflow playbook** — search in order, use first found:
-   1. `docs/development/issue-to-pr-workflow.md`
-   2. `docs/issue-to-pr-workflow.md`
-   3. Fallback: `find . -name "issue-to-pr-workflow.md" | grep -Ev '/(node_modules|\\.git|vendor|dist|build)/' | head -1`
-   4. If not found → trigger fallback (see Phase 1)
-
-   **Coding rules** — search in order, use first found:
-   1. `docs/development/coding-rules.md`
-   2. `docs/coding-rules.md`
-   3. Fallback: `find . -name "coding-rules.md" | grep -Ev '/(node_modules|\\.git|vendor|dist|build)/' | head -1`
-   4. If not found → trigger fallback (see Phase 2)
-
-   **Review rules** — search in order, use first found:
-   1. `docs/development/review_rules.md`
-   2. `docs/review_rules.md`
-   3. Fallback: `find . -name "review_rules.md" -not -path "*/node_modules/*" -not -path "*/.git/*" | head -1`
-   4. If not found → log info, continue without review rules (coding-rules.md only for review gates)
-
-   **Project instruction files** — read all that exist:
-   - `CLAUDE.md` (project root)
-   - `src/CLAUDE.md` (source-level rules)
-   - `test/CLAUDE.md` (test-level rules)
-   - `AGENTS.md` (agent definitions)
-
-   **Spec files**:
-   - `.specs/{feature}/requirement.md` → what to build
-   - `.specs/{feature}/design.md` → how to build it
-   - `.specs/{feature}/tasks.md` → task breakdown with checkboxes
-
-5. **Detect parallel-capable agent environment (runtime-aware)**:
-   - Determine active runtime from the current execution environment (do NOT infer runtime solely from repository directories)
-   - Use repository files only for runtime setup validation:
-     - Codex validation: `.codex/config.toml`
-     - Claude Code validation: `.claude/agents/workflow-*.md`
-   - If runtime cannot be determined, ask user to choose runtime
-   - Check whether workflow contains a multi-agent section (`Multi-Agent Role Assignment Strategy` / `Agent Roles`)
-   - Parse optional workflow section for explicit agent file paths:
-     - `Agent definition files:` / `エージェント定義ファイル:`
-     - Extract paths for implementer / reviewer / tester from list items
-     - Use extracted paths as first priority for validation and dispatch context
-     - If section is absent, fallback to runtime defaults
-   - Validate runtime-specific sub-agent setup:
-     - Codex: `.codex/config.toml` has `[features] multi_agent = true` and `agents.workflow-*`
-     - Claude Code: agent files from workflow section exist; if absent, use defaults (`.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`)
-   - If any required condition is missing, continue in sequential mode
-
-## Execution Flow
-
-### Phase 1: Workflow Loading
-
-Read the workflow file (located in Step 4) and interpret each section as instructions to follow:
-
-| Workflow Section | Action |
-|-----------------|--------|
-| Development Environment | Extract setup commands, environment variables |
-| Issue Analysis and Setup | Follow branch naming convention, issue reading steps |
-| Branch Strategy / PR Target | **Extract base branch** (e.g., `develop`, `main`) and PR target branch |
-| Phased Implementation | Follow implementation order and guidelines |
-| Agent Roles / Sub-agents | Extract agent role definitions (if present) |
-| Agent Definition Files (Optional) | Extract explicit sub-agent definition file paths |
-| Testing | Extract test commands and coverage thresholds |
-| PR Creation and Quality Gates | Extract pre-PR checks and PR template |
-| CI/CD Monitoring | Extract CI verification commands |
-| Commit Message Rules | Extract commit message format and language requirements |
-
-**Follow sections top-to-bottom.** Replace `{variable}` placeholders with actual values (issue number, branch name, etc.). Treat "MUST" and "required" keywords as mandatory; treat "optional" and "if applicable" as conditional.
-
-**Base branch detection** — determine `{base_branch}` from the workflow:
-1. Look for "branch strategy", "base branch", "PR target", "develop", "main" in the workflow
-2. If the workflow specifies a branch (e.g., `develop`), use it as `{base_branch}`
-3. Default fallback: `main`
-
-**Fallback (no workflow file):**
-If no workflow file is found:
-```
-AskUserQuestion:
-  question: "Workflow file not found. Generate it?" / "ワークフローファイルが見つかりません。生成しますか？"
-  options:
-    - "Run spec-workflow-init" / "spec-workflow-initを実行"
-    - "Continue without workflow" / "ワークフローなしで続行"
-```
-If continuing without workflow, use minimal flow: Issue analysis → branch → implement → test → PR. Use `main` as `{base_branch}`.
-
-### Phase 1.5: Parallel Mode Resolution (Runtime-Aware)
-
-Enable parallel mode only when ALL are true:
-
-1. Workflow includes a parallel section with role assignment
-2. Runtime-specific sub-agent configuration is valid
-3. User did not pass `--no-parallel` (or explicitly passed `--parallel`)
-
-If runtime cannot be determined from execution context, confirm runtime before dispatch:
-```
-AskUserQuestion:
-  question: "Which runtime should execute sub-agents?" / "どのランタイムでサブエージェント実行しますか？"
-  options:
-    - "Codex runtime" / "Codexで実行"
-    - "Claude Code runtime" / "Claude Codeで実行"
-```
-
-If enabled:
-- Run implementer and tester in parallel, then run reviewer after both complete.
-- Require all of the following before parallel execution:
-  - runtime-specific multi-agent setup is valid
-  - agent definition files resolve from workflow paths or runtime defaults
-  - dispatch uses the explicit role table and strategy table, not narrative assignment only
-- Built-in dispatch examples are defined in Phase 6 and the reference guide.
-
-If disabled:
-- Continue with the existing single-agent sequential loop.
-
-### Phase 2: Quality Rules Loading
-
-Read the coding rules file (located in Step 4) and parse rule structure:
-
-```
-## {Category}
-### [{Severity}] {Rule Name}
-- {Rule detail}
-```
-
-Apply rules by severity:
-
-| Severity | On Violation | Action |
-|----------|-------------|--------|
-| `[MUST]` | Error | Stop → fix → recheck before continuing |
-| `[SHOULD]` | Warning | Log warning → continue |
-| `[MAY]` | Info | Log info only |
-
-**Check timing:**
-- **Before task**: Review rules relevant to the task's category
-- **During code generation**: Self-check against `[MUST]` rules
-- **After task**: Verify completion criteria + rule compliance
-- **Final gate**: Check all `[MUST]` rules across all changes
-
-**Fallback (no rules file):**
-If no coding rules file is found:
-```
-AskUserQuestion:
-  question: "Coding rules not found. Generate them?" / "コーディングルールが見つかりません。生成しますか？"
-  options:
-    - "Run spec-rules-init" / "spec-rules-initを実行"
-    - "Continue without rules" / "ルールなしで続行"
-```
-If continuing without rules, use CLAUDE.md or AGENTS.md as fallback reference if available.
-
-### Phase 3: Project Instruction Loading
-
-Read all project instruction files found in Step 4 (`CLAUDE.md`, `src/CLAUDE.md`, `test/CLAUDE.md`, `AGENTS.md`).
-
-These files contain project-specific conditional rules, environment constraints, and coding conventions. Apply them with the same enforcement level as `[MUST]` rules from coding-rules.md:
-
-- **Extract conditional rules**: IF-THEN patterns, conditional instructions, and environment-specific constraints (e.g., "when using Docker...", "if the project has...") are mandatory action triggers
-- **Extract environment constraints**: Docker requirements, package manager restrictions, etc.
-- **Extract commit conventions**: Commit message language, format, co-author requirements
-- **Extract test patterns**: Required test helpers, test structure conventions
-- **Merge with coding-rules.md**: These rules supplement (not replace) coding-rules.md
-
-If neither coding-rules.md nor any CLAUDE.md files exist, proceed with framework defaults only.
-
-### Phase 4: Issue Analysis
-
-If `--issue {N}` is provided or an issue number is found in context:
-```bash
-gh issue view {N} --json title,body,labels,assignees
-```
-
-Extract from the issue:
-- Feature overview and requirements
-- Spec directory path (if referenced)
-- Phase/task checklists
-- Assignees and labels
-
-### Phase 5: Branch Creation
-
-> **🚨 BLOCKING GATE — Feature branch is MANDATORY**
->
-> Implementation MUST NOT proceed on `main`, `master`, or `develop` branches.
-> This gate cannot be skipped. Violation = immediate stop.
-
-Follow the workflow's branch naming convention:
-```bash
-git checkout {base_branch} && git pull origin {base_branch}
-git checkout -b feature/issue-{N}-{brief-description}
-```
-
-Where `{base_branch}` is the branch detected in Phase 1 (default: `main`).
-
-**Protected branch list** — by default: `main`, `master`, `develop`.
-If the workflow file defines a "protected branches" or "branch protection" section, use that list instead.
-
-If `--resume` is active and the branch already exists, switch to it instead.
-
-**Post-creation verification:**
-```bash
-current_branch=$(git branch --show-current)
-if [ "$current_branch" = "main" ] || [ "$current_branch" = "master" ] || [ "$current_branch" = "develop" ]; then
-  echo "🚨 ERROR: Cannot implement on protected branch: $current_branch"
-  echo "Create a feature branch first."
-  exit 1
-fi
-```
-
-This check MUST pass before proceeding to Phase 6. If it fails, stop and ask the user for guidance.
-
-### Phase 6: Spec-Driven Task Loop
-
-**Pre-loop: Agent role detection**
-
-If the workflow file contains an "Agent Roles", "Sub-agents", or "エージェントロール" section:
-
-0. **Parse explicit agent file paths** (if present):
-   - Read workflow section `Agent definition files:` / `エージェント定義ファイル:`
-   - Build a map of role → definition file path (implementer/reviewer/tester)
-   - If no section exists, use runtime defaults
-
-1. **Parse the Role Assignment Table** — find the Markdown table with columns like `Role | Agent | Responsibility`:
-   - Extract each row's `Agent` column value → use as runtime sub-agent identifier (`subagent_type`)
-   - Extract each row's `Responsibility` column value → use as context in the task prompt
-2. **Parse the Multi-Agent Role Assignment Strategy Table** (if present) — find the table with phase rows and role columns:
-   - Each row = a phase (execute sequentially, top to bottom)
-   - Cells with `-` = role is idle in that phase
-   - Non-`-` cells = role's action (roles active in the same row run in parallel)
-3. **Detect cmux dispatch**:
-   - Check if workflow contains a "Dispatch Strategy" / "ディスパッチ戦略" section with `cmux`
-   - Check `CMUX_SOCKET_PATH` environment variable
-   - Parse workflow role assignment table for optional `AI` column and map to launch commands:
-     | AI value | Launch command |
-     |----------|---------------|
-     | `claude` | `claude --dangerously-skip-permissions` |
-     | `codex` | `codex --dangerously-bypass-approvals-and-sandbox` |
-     | `gemini` | `gemini` |
-     | *(empty)* | Default: `claude --dangerously-skip-permissions` |
-   - **Pre-flight**: verify the executable name only, e.g. `command -v claude`, `command -v codex`, `command -v gemini`; warn and fallback if missing
-4. > **🚨 BLOCKING GATE — Execution mode selection is MANDATORY**
-   >
-   > You MUST call AskUserQuestion below. Do NOT assume or infer the user's preference.
-   > Do NOT skip this step even if the user's message implies urgency or a specific workflow.
-   > Guessing "single agent" without asking = violation.
-
-   ```
-   AskUserQuestion:
-     question: "Execution mode?" / "実行モードを選択してください"
-     options:
-       - "Multi-agent (built-in)" / "マルチエージェント（組み込みサブエージェント）"
-       - "Multi-agent (cmux)" / "マルチエージェント（cmux で可視化）"  ← only if cmux detected
-       - "Single agent" / "単独実行（順次）"
-   ```
-5. If sub-agents selected, branch by dispatch method:
-   - **Built-in Agent dispatch**: spawn via Codex Task or Claude Code sub-agent using `subagent_type`. Do NOT use cmux skills.
-   - **cmux dispatch**: compose the full prompt in a temporary file, then invoke `cmux-delegate` with the file contents. Do NOT inline multi-line prompt text directly into a quoted `--task '...'` argument.
-     ```
-     TASK_FILE=$(mktemp)
-     cat > "$TASK_FILE" <<'EOF'
-     You are a {role_name}.
-
-     {agent_definition_content}
-
-     Task: {task_prompt}
-     EOF
-     Skill: skill="cmux-delegate" args="--agent {ai_value} --task \"$(cat \"$TASK_FILE\")\""
-     ```
-     Do NOT use built-in Agent tool for cmux dispatch — always use `cmux-delegate` skill.
-   - **Agent context injection** (both dispatch methods): Read the role's agent definition file and prepend its content to the task prompt. If no definition file exists, use the Responsibility column as the role description. See reference guide for details.
-   - Execute phases per strategy table (same-row roles run in parallel)
-6. If single agent selected: proceed with sequential execution below
-
-See reference guide for table format examples and runtime-specific sub-agent invocation patterns.
-
-**Read specs in order:** `requirement.md` → `design.md` → `tasks.md`
-
-For each unchecked task in `tasks.md`:
-
-```
-1. Read task details (requirements ID, design reference, target files, completion criteria)
-2. Reference the corresponding design.md section
-3. Implement: create or modify target files
-4. > 🚨 BLOCKING GATE — Implementation Review Gate
-   > Step 5 REQUIRES this gate = PASS. You MUST NOT proceed without printing the review output below.
-
-   a. Load review_rules.md (if found in Phase 1 Step 4)
-   b. **Dispatch review by execution mode**:
-      - **Single agent**: Self-review against review_rules.md + coding-rules.md + design.md
-      - **Multi-agent (built-in)**: Spawn `workflow-reviewer` sub-agent with definition file content, changed files diff, and review criteria
-      - **Multi-agent (cmux)**: write the reviewer prompt to a temporary file, then call `cmux-delegate` with `args="--agent {reviewer_ai} --task \"$(cat \"$REVIEW_TASK_FILE\")\""`
-   c. Severity classification:
-      - Critical (security/bugs) → fix immediately → re-review
-      - Improvement (quality/readability) → fix → re-review
-      - Minor (style) → log only, continue
-   d. Fix loop (max 3 iterations):
-      - Fix → re-review only fixed areas → repeat
-      - After 3rd: unresolved improvements → downgrade to minor
-      - After 3rd: unresolved critical → ask user to decide
-   e. **Second opinion** (cmux mode only):
-      - Read setting from workflow ("Second Opinion" / "セカンドオピニオン" section):
-        - "Always" → auto-execute | "On request" → ask user | "Never" → skip | *(not found)* → "On request"
-      - Execute with a temporary diff file, e.g. `DIFF_FILE=$(mktemp)` → write diff to file → `Skill: skill="cmux-second-opinion" args="--diff \"$(cat \"$DIFF_FILE\")\" --rules '{review_rules_path}'"`
-      - New critical findings → 1 additional fix loop
-   f. **MANDATORY output** — you MUST print this block (absence = violation):
-      ```
-      ---
-      ## Implementation Review Gate: {task_id}
-      - Iteration: {n}/3
-      - Rules checked: review_rules.md ({count} rules), coding-rules.md ({count} [MUST] rules)
-      - Critical: {count} → {fixed_count} fixed, {remaining_count} remaining
-      - Improvement: {count} → {fixed_count} fixed, {deferred_count} deferred
-      - Minor: {count} (logged only)
-      - Gate: PASS / FAIL
-      ---
-      ```
-   g. Gate PASS → proceed to Step 5. Gate FAIL after 3 iterations → ask user to decide.
-5. If task includes test implementation:
-   a. Write tests following project test patterns
-   b. Run tests to verify they pass
-   c. > 🚨 BLOCKING GATE — Test Review Gate
-      > Step 6 REQUIRES this gate = PASS. You MUST NOT proceed without printing the review output below.
-
-      - Same fix loop structure as Implementation Review Gate
-      - Additional test-specific criteria: coverage, edge cases, test isolation, AAA pattern
-      - **MANDATORY output** — you MUST print this block (absence = violation):
-        ```
-        ---
-        ## Test Review Gate: {task_id}
-        - Iteration: {n}/3
-        - Coverage: {percentage}%
-        - Edge cases tested: {yes/no}
-        - Test isolation: {yes/no}
-        - AAA pattern: {yes/no}
-        - Critical: {count} | Improvement: {count} | Minor: {count}
-        - Gate: PASS / FAIL
-        ---
-        ```
-      - Gate PASS → proceed to Step 6
-6. Update tasks.md: mark completion criteria (- [ ] → - [x])
-7. When all criteria pass: mark top-level task checkbox (- [x])
-8. Commit progress (REQUIRES: Step 4 gate = PASS AND Step 5c gate = PASS if tests exist):
-   git add .specs/{feature}/tasks.md [+ implementation files]
-   git commit -m "{commit message following project conventions}"
-```
-
-**Commit messages:** Follow format/language from coding-rules.md or CLAUDE.md. Default: `feat: {task-id} complete — {brief description}`. See reference guide for details.
-
-**No specs fallback:** If `.specs/` is missing, use Issue body as guide and generate a simple checklist. See reference guide for details.
-
-### Phase 7: Final Quality Gate
-
-> **🚨 BLOCKING GATE — Final Quality Gate is MANDATORY**
->
-> Phase 8 (PR Creation) MUST NOT proceed without this gate passing.
-> You MUST run ALL commands below and print the output block. Absence = violation.
-
-After all tasks are complete:
-
-1. Run test commands from the workflow (or language-appropriate default)
-2. Run lint/typecheck commands from the workflow (if specified)
-3. Verify all `[MUST]` rules from coding-rules.md pass
-4. Verify all CLAUDE.md conditional rules pass
-5. If any check fails → fix → recheck
-
-**MANDATORY output** — you MUST print this block before proceeding to Phase 8:
-```
----
-## Final Quality Gate
-- Tests: PASS / FAIL ({count} tests, {coverage}% coverage)
-- Lint: PASS / FAIL / SKIPPED (no lint command)
-- Typecheck: PASS / FAIL / SKIPPED (no typecheck command)
-- Build: PASS / FAIL / SKIPPED (no build command)
-- [MUST] rules: {checked_count}/{total_count} passed
-- CLAUDE.md rules: {checked_count}/{total_count} passed
-- Gate: PASS / FAIL
----
-```
-
-6. Gate PASS → proceed to PR creation. Gate FAIL → fix and recheck.
-
-### Phase 8: PR Creation
-
-> **Pre-check**: Phase 8 REQUIRES Phase 7 Final Quality Gate = PASS.
-> If the `## Final Quality Gate` output block does not appear earlier in your response, STOP and execute Phase 7 first.
-
-Follow the workflow's PR template. Use `{base_branch}` detected in Phase 1:
-
-```bash
-gh pr create \
-  --title "{type}: {description} (closes #{N})" \
-  --body "{PR body following workflow template}" \
-  --base {base_branch}
-```
-
-Where `{base_branch}` comes from Phase 1 workflow detection (default: `main`).
-
-Verify `--base {base_branch}` matches the workflow's branch strategy before creating the PR.
-
-**Safety guards:**
-- Do NOT create PR if tests are failing
-- Do NOT force push
-- Do NOT push directly to main/master
-- Do NOT target wrong base branch (verify against workflow)
-- Ask for user confirmation before large-scale code deletions
-
-After PR creation, monitor CI status if the workflow specifies CI verification commands.
+4. Explicit override takes priority
 
 ## Options
 
@@ -475,51 +31,161 @@ After PR creation, monitor CI status if the workflow specifies CI verification c
 | `--resume` | Resume from last uncompleted task in tasks.md |
 | `--issue {N}` | Specify GitHub Issue number for context |
 | `--spec {path}` | Specify .specs/ directory path (default: auto-detect) |
-| `--dry-run` | Show execution plan without making any changes (output format: see reference guide) |
-| `--parallel` | Force parallel mode (requires valid runtime sub-agent setup for Codex or Claude Code) |
-| `--no-parallel` | Disable parallel mode and run sequentially |
+| `--dry-run` | Show execution plan without making any changes |
+
+## Critical First Steps
+
+**BEFORE any implementation, execute these checks in order:**
+
+1. **Verify environment**: `pwd`, `git status`, `gh auth status`
+
+2. **Parse user input**: Extract `--resume`, `--issue`, `--spec`, `--dry-run` options
+
+3. **Locate spec directory**:
+   - If `--spec` provided → use that path
+   - If issue body contains `.specs/` path → use that
+   - Otherwise → scan `.specs/` and ask user to select
+
+4. **Locate and read project files**:
+   - **Workflow**: `docs/development/issue-to-pr-workflow.md` → `docs/` → find → fallback
+   - **Coding rules**: `docs/development/coding-rules.md` → `docs/` → find → fallback
+   - **Review rules**: `docs/development/review_rules.md` → `docs/` → find → optional
+   - **Project instructions**: `CLAUDE.md`, `AGENTS.md`
+   - **Spec files**: `requirement.md`, `design.md`, `tasks.md`
+
+## Execution Flow
+
+### Phase 1-3: Load Context
+
+Read workflow, coding rules, and project instructions. Same search/fallback logic as before — see `references/implement-guide.md` for details.
+
+Extract from workflow:
+- Base branch (default: `main`)
+- Branch naming convention
+- Commit message format
+- Test/lint/build commands
+- Dispatch strategy and agent definitions (if present)
+
+### Phase 4: Issue Analysis
+
+If `--issue {N}` is provided:
+```bash
+gh issue view {N} --json title,body,labels,assignees
+```
+
+### Phase 5: Branch Creation
+
+> **🚨 BLOCKING — Feature branch is MANDATORY**
+
+```bash
+git checkout {base_branch} && git pull origin {base_branch}
+git checkout -b feature/issue-{N}-{brief-description}
+```
+
+Post-creation verification — MUST NOT be on `main`, `master`, or `develop`.
+
+### Phase 6: Task Loop (Orchestration)
+
+**Read `tasks.md` and process phases by role tag:**
+
+```
+for each phase in tasks.md:
+  if phase has [orchestrator] tag:
+    execute tasks directly (env setup, config, etc.)
+
+  if phase has [code] tag:
+    for each unchecked task in phase:
+      // Step 1: Implement
+      invoke spec-code --issue {N} --task {task-id} --spec {path}
+
+      // Step 2: Review
+      invoke spec-review --task {task-id} --spec {path}
+      read .specs/{feature}/review-{task-id}.md
+
+      // Step 3: Fix loop (max 3 iterations)
+      iteration = 0
+      while review gate == FAIL AND iteration < 3:
+        invoke spec-code --task {task-id} --spec {path} --feedback .specs/{feature}/review-{task-id}.md
+        invoke spec-review --task {task-id} --spec {path}
+        read .specs/{feature}/review-{task-id}.md
+        iteration++
+
+      if FAIL after 3 iterations:
+        ask user to decide (fix manually / skip / abort)
+
+      // Step 4: Test
+      invoke spec-test --task {task-id} --spec {path}
+      read .specs/{feature}/test-{task-id}.md
+
+      if test gate == FAIL:
+        invoke spec-code --task {task-id} --spec {path} --feedback .specs/{feature}/test-{task-id}.md
+        invoke spec-test --task {task-id} --spec {path}
+
+      // Step 5: Mark complete (ONLY if review AND test PASS)
+      if review gate == PASS AND test gate == PASS:
+        update tasks.md checkbox: - [ ] → - [x]
+        commit tasks.md update
+```
+
+**Dispatch modes:**
+
+When invoking worker skills, the method depends on execution mode:
+
+| Mode | How to invoke |
+|---|---|
+| Single agent | Call the skill directly in the current session |
+| cmux dispatch | `cmux-delegate --agent {ai} --task "/spec-code --issue {N} --task {id} --spec {path}"` |
+
+For cmux dispatch:
+1. Read workflow's dispatch strategy and agent definition file paths
+2. Map roles to agents (implementer/tester → cmux-delegate, reviewer → cmux-second-opinion)
+3. Pass skill commands — worker skills handle their own context loading via §4.0
+
+**Key rule: Do NOT write implementation code yourself. Do NOT perform reviews yourself. Always delegate to worker skills.**
+
+### Phase 7: Final Quality Gate
+
+After all tasks complete:
+
+1. Run test commands from workflow (or language defaults)
+2. Run lint/typecheck commands (if specified)
+3. Verify all tasks in tasks.md are checked
+4. If any check fails → fix via spec-code --feedback → recheck
+
+### Phase 8: PR Creation
+
+```bash
+gh pr create \
+  --title "{type}: {description} (closes #{N})" \
+  --body "{PR body following workflow template}" \
+  --base {base_branch}
+```
+
+**Safety guards:**
+- Do NOT create PR if tests are failing
+- Do NOT force push or push to main/master
+- Verify base branch matches workflow
 
 ## Error Handling
 
 | Situation | Response |
-|-----------|----------|
-| Not a git repository | Error: "Must be in a git repository" / "gitリポジトリ内で実行してください" |
-| `gh` CLI not available | Error: guide user to install/authenticate gh CLI |
+|---|---|
+| Not a git repository | Error: must be in a git repository |
+| `gh` CLI not available | Error: guide user to install/auth |
 | `.specs/` not found | Warning: switch to Issue-only minimal mode |
-| Parallel file edit collision | Warning: stop parallel for current task, continue sequentially |
-| `requirement.md` missing | Warning: use Issue body as requirements source |
+| `requirement.md` missing | Warning: use Issue body as requirements |
 | `tasks.md` missing | Warning: generate simple checklist from Issue |
-| `[MUST]` rule violation | Error: stop, fix, recheck before continuing |
-| Tests failing before PR | Block PR creation, report failures |
-| Branch already exists | Ask: switch to it or create new |
-| On protected branch (main/master/develop) | 🚨 BLOCKING: stop immediately, require feature branch |
-| Workflow/rules file not at expected path | Search alternate paths before declaring missing |
-
-## Usage Examples
-
-```
-# Full implementation from spec
-"Implement from spec for auth-feature"
-「auth-featureの仕様書から実装して」
-
-# Resume after interruption
-"Resume implementation --resume --spec .specs/auth-feature/"
-「実装を再開 --resume」
-
-# Force multi-agent mode (runtime-aware)
-"Implement from spec --spec .specs/auth-feature/ --parallel"
-「仕様書からマルチエージェントで実装 --parallel」
-```
+| On protected branch | 🚨 BLOCKING: stop, require feature branch |
+| Worker skill not installed | Error: suggest `npx skills add anyoneanderson/agent-skills --skill {name}` |
+| Review FAIL after 3 iterations | Ask user to decide |
+| Test FAIL after fix attempt | Ask user to decide |
 
 ## Post-Completion Actions
-
-After PR is created:
 
 ```
 AskUserQuestion:
   question: "PR created. What's next?" / "PRを作成しました。次は？"
   options:
     - "Monitor CI status" / "CIステータスを監視"
-    - "Review the PR diff" / "PR差分を確認"
     - "Done" / "完了"
 ```
