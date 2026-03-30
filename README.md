@@ -14,7 +14,10 @@ Reusable AI agent skills for specification-driven development.
 | [spec-rules-init](skills/spec-rules-init/) | Extract project conventions and generate unified coding-rules.md |
 | [spec-to-issue](skills/spec-to-issue/) | Create structured GitHub Issues from spec documents |
 | [spec-workflow-init](skills/spec-workflow-init/) | Generate project-specific issue-to-pr-workflow.md with interactive dialogue |
-| [spec-implement](skills/spec-implement/) | Execute spec-driven implementation from specs to PR with quality gates |
+| [spec-code](skills/spec-code/) | Autonomously implement a single task from spec documents |
+| [spec-review](skills/spec-review/) | Structured code review with rule × file matrix approach |
+| [spec-test](skills/spec-test/) | Create and run tests based on task completion criteria |
+| [spec-implement](skills/spec-implement/) | Orchestrate spec-code, spec-review, spec-test from specs to PR |
 | [cmux-fork](skills/cmux-fork/) | Fork Claude Code conversation into a new cmux pane or workspace |
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
@@ -33,6 +36,9 @@ npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-code -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-review -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-test -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
@@ -92,7 +98,27 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > Convert spec to GitHub issue
 ```
 
-### Implement from specs to PR
+### Implement a single task
+
+```
+> /spec-code --issue 42 --task T-003 --spec .specs/auth-feature/
+> /spec-code --task T-007 --feedback .specs/feature/review-T-007.md
+```
+
+### Review code changes
+
+```
+> /spec-review --task T-003 --spec .specs/auth-feature/
+> /spec-review (standalone — review current diff)
+```
+
+### Test a task implementation
+
+```
+> /spec-test --task T-003 --spec .specs/auth-feature/
+```
+
+### Orchestrate full implementation to PR
 
 ```
 > Implement from spec --issue 42
@@ -151,13 +177,26 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
    - `docs/coding-rules.md` — Implementation quality gates
    - `docs/review_rules.md` — Review criteria with severity-based output policies (CI / review gate / second opinion)
 
-5. **spec-implement** reads the specs, follows the workflow, enforces coding rules, and creates a PR:
-   - Reads `.specs/{project}/` for implementation guidance
-   - Follows `docs/issue-to-pr-workflow.md` as playbook
-   - Enforces `docs/coding-rules.md` as quality gates
-   - **Review gates** with fix loops (max 3 iterations) using `review_rules.md`
-   - Tracks progress via `tasks.md` checkboxes (resumable)
-   - Optional: **cmux dispatch** for visible sub-agent execution with agent selection per role
+5. **spec-code** autonomously implements a single task from spec documents:
+   - Reads all specs (requirement.md, design.md, tasks.md) for full context
+   - Follows coding-rules.md and project conventions
+   - Supports `--feedback` mode to address review or test findings
+
+6. **spec-review** performs structured code review:
+   - Rule × file matrix approach (every rule checked against every changed file)
+   - Outputs findings to `review-{task-id}.md` for spec-code --feedback
+   - Works standalone for manual reviews
+
+7. **spec-test** creates and runs tests:
+   - Extracts test requirements from task completion criteria
+   - Detects existing test patterns and frameworks
+   - Outputs results to `test-{task-id}.md`
+
+8. **spec-implement** orchestrates the full pipeline (does NOT write code or review itself):
+   - Delegates: spec-code → spec-review → fix loop → spec-test
+   - Processes `[code]` phases via worker skills, `[orchestrator]` phases directly
+   - Updates tasks.md ONLY after review AND test PASS
+   - Optional: **cmux dispatch** for parallel sub-agent execution
    - Creates PR with quality gates passed
 
 ### cmux Skills (optional, requires [cmux](https://cmux.dev/))

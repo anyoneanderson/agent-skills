@@ -14,7 +14,10 @@
 | [spec-rules-init](skills/spec-rules-init/) | プロジェクト規約を抽出し、統一的なcoding-rules.mdを生成 |
 | [spec-to-issue](skills/spec-to-issue/) | 仕様書から構造化されたGitHub Issueを自動生成 |
 | [spec-workflow-init](skills/spec-workflow-init/) | 対話形式でプロジェクト固有のissue-to-pr-workflow.mdを生成 |
-| [spec-implement](skills/spec-implement/) | 仕様書駆動で実装からPR作成まで自動実行、品質ゲート付き |
+| [spec-code](skills/spec-code/) | 仕様書から1タスクを自律的に実装 |
+| [spec-review](skills/spec-review/) | ルール×ファイルのマトリックスによる構造化コードレビュー |
+| [spec-test](skills/spec-test/) | タスク完了条件に基づくテスト作成・実行 |
+| [spec-implement](skills/spec-implement/) | spec-code/review/testをオーケストレーションし仕様書からPRまで |
 | [cmux-fork](skills/cmux-fork/) | Claude Codeの会話を新しいcmuxペインまたはワークスペースにフォーク |
 | [cmux-delegate](skills/cmux-delegate/) | 別のcmuxペインまたはワークスペースでAIエージェントにタスクを委任 |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | cmux経由で別AIエージェントにコードや仕様書の独立レビューを依頼 |
@@ -33,6 +36,9 @@ npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-to-issue -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-code -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-review -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-test -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
@@ -92,7 +98,27 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > specからIssue作成
 ```
 
-### 仕様書から実装してPRを作成する
+### 1タスクを実装する
+
+```
+> /spec-code --issue 42 --task T-003 --spec .specs/auth-feature/
+> /spec-code --task T-007 --feedback .specs/feature/review-T-007.md
+```
+
+### コードレビューする
+
+```
+> /spec-review --task T-003 --spec .specs/auth-feature/
+> /spec-review （スタンドアロン — 現在の diff をレビュー）
+```
+
+### テストを実行する
+
+```
+> /spec-test --task T-003 --spec .specs/auth-feature/
+```
+
+### 仕様書から実装してPRを作成する（オーケストレーション）
 
 ```
 > 仕様書から実装 --issue 42
@@ -153,13 +179,26 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
    - `docs/coding-rules.md` — 実装品質ゲート
    - `docs/review_rules.md` — レビュー基準（重大度別出力方針: CI / レビューゲート / セカンドオピニオン）
 
-6. **spec-implement** が仕様書を読み、ワークフローに従い、コーディングルールを適用してPRを作成:
-   - `.specs/{project}/` から実装ガイダンスを読み込み
-   - `docs/issue-to-pr-workflow.md` をプレイブックとして追従
-   - `docs/coding-rules.md` を品質ゲートとして強制適用
-   - **レビューゲート**（修正ループ最大3回）で `review_rules.md` を参照
-   - `tasks.md` のチェックボックスで進捗管理（再開可能）
-   - オプション: **cmux dispatch** でサブエージェントを可視化、ロール別エージェント選択
+6. **spec-code** が仕様書から1タスクを自律的に実装:
+   - 全仕様書（requirement.md, design.md, tasks.md）を読んでコンテキスト把握
+   - coding-rules.md とプロジェクト規約に従う
+   - `--feedback` モードでレビュー/テスト結果への対応が可能
+
+7. **spec-review** が構造化コードレビューを実行:
+   - ルール × ファイルのマトリックスで漏れなく照合
+   - 結果を `review-{task-id}.md` に出力（spec-code --feedback で使用）
+   - スタンドアロンで手動レビューにも使える
+
+8. **spec-test** がテストを作成・実行:
+   - タスク完了条件からテスト要件を抽出
+   - 既存のテストパターンとフレームワークを検出
+   - 結果を `test-{task-id}.md` に出力
+
+9. **spec-implement** がパイプライン全体をオーケストレーション（自分ではコードもレビューも書かない）:
+   - 委任: spec-code → spec-review → fix loop → spec-test
+   - `[code]` フェーズはワーカースキルに委任、`[orchestrator]` フェーズは直接実行
+   - review + test 両方 PASS 後にのみ tasks.md を更新
+   - オプション: **cmux dispatch** でサブエージェント並列実行
    - 品質ゲート通過後にPRを作成
 
 ### cmux スキル（オプション、[cmux](https://cmux.dev/) が必要）
