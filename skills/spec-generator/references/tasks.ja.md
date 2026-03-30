@@ -103,6 +103,14 @@ options:
 
 ### 8. 出力構造
 
+**ロールタグ**: 各フェーズ見出しにはロールタグ `[code]` または `[orchestrator]` を必ず付与する：
+- `[code]` — spec-code が実装するタスク（コードの作成・修正）
+- `[orchestrator]` — spec-implement が直接実行するタスク（ブランチ作成、品質ゲート、PR作成）
+
+**制約**: 1フェーズ = 1ロール。`[code]` と `[orchestrator]` のタスクを同じフェーズに混在させない。両方ある場合はフェーズを分割する。
+
+レビューとテストは明示的なタスクにしない — spec-implement オーケストレーターが全ての `[code]` タスクに対して自動的に spec-review → fix loop → spec-test を適用する。
+
 ```markdown
 # タスクリスト - [プロジェクト名]
 
@@ -111,17 +119,17 @@ options:
 
 ## 2. タスク一覧
 
-### Phase 1: 基盤構築
+### Phase 1: 基盤構築 [orchestrator]
 - [ ] T001: 環境構築
 - [ ] T002: データベース設定
 
-### Phase 2: コア実装
+### Phase 2: コア実装 [code]
 - [ ] T003: [REQ-001] 認証機能
 - [ ] T004: [REQ-002] データ管理
 
-### Phase 3: テスト・ドキュメント
-- [ ] T005: ユニットテスト
-- [ ] T006: ドキュメント更新
+### Phase 3: 品質・リリース [orchestrator]
+- [ ] T005: Final Quality Gate
+- [ ] T006: PR作成
 
 ## 3. タスク詳細
 

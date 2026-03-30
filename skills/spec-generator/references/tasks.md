@@ -103,6 +103,14 @@ options:
 
 ### 8. Output Structure
 
+**Role tags**: Each phase heading MUST include a role tag `[code]` or `[orchestrator]`:
+- `[code]` — Tasks that spec-code implements (code creation/modification)
+- `[orchestrator]` — Tasks that spec-implement executes directly (branch setup, quality gates, PR creation)
+
+**Constraint**: One phase = one role. Do NOT mix `[code]` and `[orchestrator]` tasks in the same phase. If a phase has both types, split into separate phases.
+
+Review and testing are NOT explicit tasks — they are automatically applied to every `[code]` task by the spec-implement orchestrator (spec-review → fix loop → spec-test).
+
 ```markdown
 # Task List — [Project Name]
 
@@ -111,17 +119,17 @@ Task decomposition based on design document
 
 ## 2. Task Summary
 
-### Phase 1: Foundation
+### Phase 1: Foundation [orchestrator]
 - [ ] T001: Environment setup
 - [ ] T002: Database configuration
 
-### Phase 2: Core Implementation
+### Phase 2: Core Implementation [code]
 - [ ] T003: [REQ-001] Authentication
 - [ ] T004: [REQ-002] Data management
 
-### Phase 3: Testing & Documentation
-- [ ] T005: Unit tests
-- [ ] T006: Documentation updates
+### Phase 3: Quality & Release [orchestrator]
+- [ ] T005: Final Quality Gate
+- [ ] T006: PR creation
 
 ## 3. Task Details
 
