@@ -18,6 +18,7 @@ Reusable AI agent skills for specification-driven development.
 | [cmux-fork](skills/cmux-fork/) | Fork Claude Code conversation into a new cmux pane or workspace |
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
+| [skill-suggest](skills/skill-suggest/) | Auto-detect project tech stack and suggest optimal skills from skills.sh registry |
 
 ## Installation
 
@@ -36,6 +37,7 @@ npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
+npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 ```
 
 > **Note**: cmux skills require [cmux](https://cmux.dev/) (macOS 14.0+) and must be run inside a cmux session.
@@ -122,6 +124,14 @@ npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 > Second opinion, freely review
 ```
 
+### Suggest best practice skills
+
+```
+> Suggest skills for this project
+> What skills should I install?
+> Find best practice skills
+```
+
 ## How It Works
 
 1. **spec-generator** produces a structured spec in `.specs/{project}/`:
@@ -157,6 +167,10 @@ npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 7. **cmux-delegate** launches an AI agent in a separate cmux workspace, sends a task, monitors completion, and collects results. Supports Claude Code, Codex, Gemini CLI.
 
 8. **cmux-second-opinion** gets an independent review from a different AI agent. Automatically selects an agent different from the parent. Supports code review and spec review with 3 criteria modes.
+
+### Project Setup
+
+9. **skill-suggest** analyzes the project's manifest files (package.json, Cargo.toml, etc.), searches the skills.sh registry for matching best-practice skills, and installs them with agent-targeted installation to prevent unwanted directory creation.
 
 ## Compatibility
 
