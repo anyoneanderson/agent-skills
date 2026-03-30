@@ -19,8 +19,8 @@ Analyze the project tech stack and suggest optimal skills from the skills.sh reg
 ## Language Rules
 
 1. **Auto-detect input language** → output in the same language
-2. Japanese input → Japanese output, use `references/tech-detection.ja.md` and `references/known-official.ja.md`
-3. English input → English output, use `references/tech-detection.md` and `references/known-official.md`
+2. Japanese input → Japanese output, use `references/tech-detection.ja.md`
+3. English input → English output, use `references/tech-detection.md`
 4. Explicit override takes priority (e.g., "in English", "日本語で")
 
 ## Options
@@ -110,23 +110,20 @@ Collect all results from all queries into a combined list.
 
 ### Step 4: Score, Rank, and Filter
 
-**4a. Remove duplicates**: If the same `skillId` appears from multiple queries, keep the entry with the highest `installs`.
+**4a. Remove duplicates**: If the same `skillId` appears from multiple queries, keep the entry with the highest `installs`. If the same purpose skill exists from multiple sources, keep the one with the highest `installs`.
 
-**4b. Check official status**: Read `references/known-official.md` for the list of official source owners. Extract the owner from `source` (split on `/`, take first segment). If owner is in the official list → mark as official.
-
-**4c. Assign tiers**:
+**4b. Assign tiers** based on install count only:
 
 | Condition | Tier |
 |---|---|
-| Official source | Tier 1 |
-| installs >= 10,000 | Tier 1 |
-| installs >= 1,000 | Tier 2 |
-| installs >= 100 | Tier 3 |
+| installs >= 10,000 | Tier 1 (high adoption) |
+| installs >= 1,000 | Tier 2 (moderate adoption) |
+| installs >= 100 | Tier 3 (emerging) |
 | installs < 100 | Exclude (do not suggest) |
 
-**4d. Exclude installed**: Cross-reference with Step 2 installed set. Mark matching skills as "already installed" instead of suggesting them.
+**4c. Exclude installed**: Cross-reference with Step 2 installed set. Mark matching skills as "already installed" instead of suggesting them.
 
-**4e. Set default selection**: Only Tier 1 skills are "default selected". Tier 2 and Tier 3 are opt-in (user must explicitly choose them). This is a supply-chain safety measure.
+**4d. Set default selection**: Only Tier 1 skills (10K+ installs) are "default selected". Tier 2 and Tier 3 are opt-in (user must explicitly choose them). This is a supply-chain safety measure — high install count serves as a community-verified trust signal.
 
 ### Step 5: Present Report
 
@@ -145,18 +142,18 @@ Display the results in the user's language (per Language Rules).
 
 ## Recommended Skills / おすすめスキル
 
-### Tier 1 (default selected / デフォルト選択)
+### Tier 1 (10K+ installs, default selected / デフォルト選択)
 
-| # | Skill | Installs | Official | Reason |
-|---|---|---|---|---|
-| 1 | `vercel-labs/agent-skills@vercel-react-best-practices` | 253K | ✓ Vercel | Uses React 19 |
-| 2 | `shadcn/ui@shadcn` | 45.8K | ✓ shadcn | Uses shadcn/ui |
+| # | Skill | Installs | Reason |
+|---|---|---|---|
+| 1 | `vercel-labs/agent-skills` → `vercel-react-best-practices` | 253K | Uses React 19 |
+| 2 | `shadcn/ui` → `shadcn` | 45.8K | Uses shadcn/ui |
 
-### Tier 2 (opt-in / 選択式)
+### Tier 2 (1K+ installs, opt-in / 選択式)
 
-| # | Skill | Installs | Official | Reason |
-|---|---|---|---|---|
-| 3 | `sickn33/antigravity-awesome-skills@prisma-expert` | 2.9K | - | Uses Prisma 6 |
+| # | Skill | Installs | Reason |
+|---|---|---|---|
+| 3 | `sickn33/antigravity-awesome-skills` → `prisma-expert` | 2.9K | Uses Prisma 6 |
 
 ### Tier 3 (opt-in / 選択式)
 ...
