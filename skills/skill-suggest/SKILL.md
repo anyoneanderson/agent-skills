@@ -4,7 +4,7 @@ description: |
   Auto-detect project tech stack and suggest optimal skills from skills.sh registry.
 
   Analyzes manifest files (package.json, Cargo.toml, go.mod, etc.), searches the skills.sh
-  API, scores results by official status and install count, and installs selected skills
+  API, scores results by install count, and installs selected skills
   with agent-targeted installation to prevent unwanted directory creation.
 
   English triggers: "Suggest skills", "Find best practice skills", "What skills should I install"
@@ -47,14 +47,14 @@ First, check if the repository is a monorepo by looking for these indicators at 
 
 #### 1b. Collect manifest files
 
-**If monorepo detected**: Find all workspace directories and scan each for manifest files. Use the workspace tool's config to locate packages:
+**If monorepo detected**: Find all workspace directories and scan each for manifest files. Always scan the repository root manifests too, because a monorepo may keep shared or primary dependencies at the root. Use the workspace tool's config to locate packages:
 
 - **Turborepo / npm workspaces / yarn workspaces**: Read `workspaces` from root `package.json` (glob patterns like `apps/*`, `packages/*`)
 - **pnpm workspaces**: Read `packages` from `pnpm-workspace.yaml`
-- **Nx**: Read `projects` from `nx.json` or scan directories listed in `workspace.json`
+- **Nx**: Read `projects` from `nx.json`, scan directories listed in `workspace.json`, or recursively find `project.json` files and use their parent directories as workspace roots
 - **Lerna**: Read `packages` from `lerna.json`
 
-For each workspace directory, check for the manifest files listed below. Also check the repository root for shared configs (Dockerfile, `*.tf`, `tailwind.config.*`).
+For each workspace directory, check for the manifest files listed below. Also check the repository root for the same manifest files plus shared configs (Dockerfile, `*.tf`, `tailwind.config.*`).
 
 **If not a monorepo**: Scan the repository root only.
 
@@ -80,7 +80,7 @@ Dockerfile, docker-compose.yml, docker-compose.yaml,
 
 #### 1d. Classify and deduplicate
 
-**Map packages to technologies** using `references/tech-detection.md`. Classify each into:
+**Map packages to technologies** using the language-appropriate reference file from `references/tech-detection.md` or `references/tech-detection.ja.md`. Classify each into:
 
 - **language** (e.g., TypeScript, Python)
 - **framework** (e.g., Next.js, Django)

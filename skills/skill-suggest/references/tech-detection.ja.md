@@ -9,12 +9,14 @@
 | 指標 | モノレポツール | ワークスペース設定 |
 |---|---|---|
 | `turbo.json` | Turborepo | ルート `package.json` の `workspaces` |
-| `nx.json` | Nx | `nx.json` の `projects` または `workspace.json` |
+| `nx.json` | Nx | `nx.json` の `projects`、`workspace.json`、または検出した `project.json` |
 | `pnpm-workspace.yaml` | pnpm workspaces | `pnpm-workspace.yaml` の `packages` |
 | `lerna.json` | Lerna | `lerna.json` の `packages` |
 | `package.json` に `"workspaces"` フィールドあり | npm/yarn workspaces | `package.json` の `workspaces` |
 
-モノレポが検出された場合、設定からワークスペースディレクトリを解決し（`apps/*`, `packages/*` 等のグロブを展開）、各ディレクトリのマニフェストファイルを走査する。リポジトリルートの共有設定（Dockerfile, `*.tf` 等）も走査する。
+モノレポが検出された場合、設定からワークスペースディレクトリを解決し（`apps/*`, `packages/*` 等のグロブを展開）、各ディレクトリのマニフェストファイルを走査する。モノレポでは依存関係をルートに置く構成も多いため、リポジトリルートのマニフェストも必ず走査する。加えて、リポジトリルートの共有設定（Dockerfile, `*.tf` 等）も走査する。
+
+Nx では `nx.json` に全 project が列挙されているとは限らない。`projects` が無い、または不完全な場合は `workspace.json` を確認し、それでも不足する場合は `project.json` を再帰的に探索して、その親ディレクトリをワークスペースルートとして扱う。
 
 モノレポでない場合、リポジトリルートのみ走査する。
 

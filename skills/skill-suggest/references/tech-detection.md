@@ -9,12 +9,14 @@ Check the repository root for these indicators:
 | Indicator | Monorepo Tool | Workspace Config |
 |---|---|---|
 | `turbo.json` | Turborepo | `workspaces` in root `package.json` |
-| `nx.json` | Nx | `projects` in `nx.json` or `workspace.json` |
+| `nx.json` | Nx | `projects` in `nx.json`, `workspace.json`, or discovered `project.json` files |
 | `pnpm-workspace.yaml` | pnpm workspaces | `packages` in `pnpm-workspace.yaml` |
 | `lerna.json` | Lerna | `packages` in `lerna.json` |
 | `package.json` with `"workspaces"` field | npm/yarn workspaces | `workspaces` in `package.json` |
 
-If monorepo detected, resolve workspace directories from the config (expand globs like `apps/*`, `packages/*`) and scan each for manifest files. Also scan the repository root for shared configs (Dockerfile, `*.tf`, etc.).
+If monorepo detected, resolve workspace directories from the config (expand globs like `apps/*`, `packages/*`) and scan each for manifest files. Always scan the repository root manifests too, since some monorepos keep shared or primary dependencies there. Also scan the repository root for shared configs (Dockerfile, `*.tf`, etc.).
+
+For Nx, do not assume `nx.json` always lists every project. If `projects` is missing or incomplete, fall back to `workspace.json`, then recursively find `project.json` files and treat each parent directory as a workspace root.
 
 If not a monorepo, scan the repository root only.
 
