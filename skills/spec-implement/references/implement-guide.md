@@ -47,17 +47,18 @@ It acts as an execution engine that:
    ├── If runtime is ambiguous, ask user to choose
    └── If setup is invalid, fallback to single-agent sequential mode
 
-6. Task Loop
-   ├── Agent role detection (if defined in workflow)
-   ├── Read next unchecked task from tasks.md
-   ├── Reference design.md for implementation details
-   ├── Implement the task
-   ├── 🔍 Implementation review (design.md + coding-rules.md + CLAUDE.md)
-   ├── Test implementation (if applicable)
-   ├── 🔍 Test review (coverage + pattern verification)
-   ├── Run quality checks
-   ├── Update tasks.md checkbox (- [ ] → - [x])
-   └── Commit progress (following project commit conventions)
+6. Task Loop (Orchestrator delegates to worker skills)
+   ├── Parse role tags: [orchestrator] phases → execute directly
+   ├── [code] phases → for each unchecked task:
+   │   ├── invoke spec-code --task {id} --spec {path}
+   │   ├── invoke spec-review --task {id} --spec {path}
+   │   ├── read review-{id}.md → fix loop (max 3):
+   │   │   └── invoke spec-code --feedback review-{id}.md → re-review
+   │   ├── invoke spec-test --task {id} --spec {path}
+   │   ├── if test FAIL → invoke spec-code --feedback test-{id}.md → re-test
+   │   ├── if review PASS AND test PASS → update tasks.md checkbox
+   │   └── commit progress
+   └── Key: orchestrator does NOT write code or review — always delegates
 
 7. Final Quality Gate
    ├── Run all tests (from workflow)
