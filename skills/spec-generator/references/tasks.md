@@ -118,7 +118,7 @@ options:
 
 **Constraint**: One phase = one role. Do NOT mix `[code]` and `[orchestrator]` tasks in the same phase. If a phase has both types, split into separate phases.
 
-Review and testing are NOT explicit tasks — they are automatically applied to every `[code]` task by the spec-implement orchestrator (spec-review → fix loop → spec-test).
+**Review gate rule**: After every `[code]` phase, insert an `[orchestrator]` review gate phase. This phase runs spec-review and spec-test against all tasks in the preceding `[code]` phase. This ensures reviews are never skipped — they are visible in tasks.md as explicit checkboxes.
 
 ```markdown
 # Task List — [Project Name]
@@ -132,12 +132,18 @@ Task decomposition based on design document
 - [ ] T001: Add dependencies and create config files
 - [ ] T002: Database schema and migration
 
+### Phase 1-R: Setup Review Gate [orchestrator]
+- [ ] T001-R: spec-review + spec-test for Phase 1
+
 ### Phase 2: Core Implementation [code]
 - [ ] T003: [REQ-001] Authentication
 - [ ] T004: [REQ-002] Data management
 
+### Phase 2-R: Core Implementation Review Gate [orchestrator]
+- [ ] T003-R: spec-review + spec-test for Phase 2
+
 ### Phase 3: Quality & Release [orchestrator]
-- [ ] T005: Final Quality Gate
+- [ ] T005: Final Quality Gate (build, lint, typecheck)
 - [ ] T006: PR creation
 
 ## 3. Task Details

@@ -118,7 +118,7 @@ options:
 
 **制約**: 1フェーズ = 1ロール。`[code]` と `[orchestrator]` のタスクを同じフェーズに混在させない。両方ある場合はフェーズを分割する。
 
-レビューとテストは明示的なタスクにしない — spec-implement オーケストレーターが全ての `[code]` タスクに対して自動的に spec-review → fix loop → spec-test を適用する。
+**レビューゲートルール**: 全ての `[code]` フェーズの後に、`[orchestrator]` のレビューゲートフェーズを挿入する。このフェーズは、直前の `[code]` フェーズの全タスクに対して spec-review と spec-test を実行する。これにより、レビューが tasks.md に明示的なチェックボックスとして表示され、スキップされることがなくなる。
 
 ```markdown
 # タスクリスト - [プロジェクト名]
@@ -132,12 +132,18 @@ options:
 - [ ] T001: 依存パッケージ追加・設定ファイル作成
 - [ ] T002: データベーススキーマ・マイグレーション
 
+### Phase 1-R: セットアップ レビューゲート [orchestrator]
+- [ ] T001-R: Phase 1 の spec-review + spec-test 実行
+
 ### Phase 2: コア実装 [code]
 - [ ] T003: [REQ-001] 認証機能
 - [ ] T004: [REQ-002] データ管理
 
+### Phase 2-R: コア実装 レビューゲート [orchestrator]
+- [ ] T003-R: Phase 2 の spec-review + spec-test 実行
+
 ### Phase 3: 品質・リリース [orchestrator]
-- [ ] T005: Final Quality Gate
+- [ ] T005: Final Quality Gate（ビルド・Lint・型チェック）
 - [ ] T006: PR作成
 
 ## 3. タスク詳細

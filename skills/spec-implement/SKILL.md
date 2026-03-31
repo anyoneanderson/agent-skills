@@ -90,43 +90,28 @@ Post-creation verification — MUST NOT be on `main`, `master`, or `develop`.
 
 If a phase has NO role tag (legacy specs without `[code]`/`[orchestrator]`), treat it as `[code]` by default. This ensures backward compatibility with specs generated before v3.
 
+**Review gate phases**: Phases with `-R` suffix (e.g., `Phase 2-R: Review Gate [orchestrator]`) are review gates. When processing these, run spec-review + spec-test for each task in the preceding `[code]` phase.
+
 ```
 for each phase in tasks.md:
-  if phase has [orchestrator] tag:
+  if phase has [orchestrator] tag AND phase name contains "Review Gate":
+    // This is a review gate — run spec-review + spec-test for preceding [code] tasks
+    for each task in the preceding [code] phase:
+      invoke spec-review --task {task-id} --spec {path}
+      read review result → if FAIL, run fix loop (spec-code --feedback → re-review, max 3)
+      invoke spec-test --task {task-id} --spec {path}
+      read test result → if FAIL, run fix loop (spec-code --feedback → re-test)
+      if review PASS AND test PASS: mark review gate task checkbox
+
+  elif phase has [orchestrator] tag:
     execute tasks directly (run commands, check results — do NOT modify files)
 
-  if phase has [code] tag (or NO tag — legacy fallback):
+  elif phase has [code] tag (or NO tag — legacy fallback):
     for each unchecked task in phase:
-      // Step 1: Implement
+      // Implement only — review/test happens in the Review Gate phase
       invoke spec-code --issue {N} --task {task-id} --spec {path}
-
-      // Step 2: Review
-      invoke spec-review --task {task-id} --spec {path}
-      read .specs/{feature}/review-{task-id}.md
-
-      // Step 3: Fix loop (max 3 iterations)
-      iteration = 0
-      while review gate == FAIL AND iteration < 3:
-        invoke spec-code --task {task-id} --spec {path} --feedback .specs/{feature}/review-{task-id}.md
-        invoke spec-review --task {task-id} --spec {path}
-        read .specs/{feature}/review-{task-id}.md
-        iteration++
-
-      if FAIL after 3 iterations:
-        ask user to decide (fix manually / skip / abort)
-
-      // Step 4: Test
-      invoke spec-test --task {task-id} --spec {path}
-      read .specs/{feature}/test-{task-id}.md
-
-      if test gate == FAIL:
-        invoke spec-code --task {task-id} --spec {path} --feedback .specs/{feature}/test-{task-id}.md
-        invoke spec-test --task {task-id} --spec {path}
-
-      // Step 5: Mark complete (ONLY if review AND test PASS)
-      if review gate == PASS AND test gate == PASS:
-        update tasks.md checkbox: - [ ] → - [x]
-        commit tasks.md update
+      mark task checkbox: - [ ] → - [x]
+      commit progress
 ```
 
 **Dispatch modes:**
