@@ -73,3 +73,14 @@ Before submitting, verify:
 2. All referenced files exist
 3. No hardcoded MCP tool names (e.g., `mcp__serena__`, `Context7`)
 4. SKILL.md is under 500 lines
+
+## コーディングルール
+
+実装時のコーディングルールは以下のファイルに従ってください:
+- [docs/coding-rules.md](docs/coding-rules.md) — spec-rules-init で生成された品質ルール集
+- [docs/review_rules.md](docs/review_rules.md) — コードレビュー・セカンドオピニオン用のレビュー基準
+
+## Development Workflow
+
+開発フロー（Issue → 実装 → PR）は以下のファイルに従ってください:
+- [docs/issue-to-pr-workflow.md](docs/issue-to-pr-workflow.md) — spec-workflow-init で生成された開発ワークフロー
