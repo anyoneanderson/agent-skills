@@ -181,6 +181,32 @@ sub-questions:
 `max_cost_usd`, `allowed_mcp_servers` (list). Also writes the constant
 `rubric_stagnation_n: 3` — not asked, baked in (`design §9.7`).
 
+### Wiring (T-016)
+
+Each Round 7 answer flows to a specific runtime consumer:
+
+| Answer | `_config.yml` key | Consumer | Enforcement |
+|---|---|---|---|
+| max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — allow stop when `_state.json.iterations >= max` |
+| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | Allow stop when `_state.json.wall_time_sec >= max` |
+| max_cost_usd | `max_cost_usd` | `stop-guard.sh` | Allow stop when `_state.json.cost_usd >= max` |
+| allowed_mcp_servers | `allowed_mcp_servers` | `.harness/scripts/mcp-allowlist.sh` | strict hook_level only — deny `mcp__<server>__*` if `<server>` not in list |
+| (constant) | `rubric_stagnation_n: 3` | `stop-guard.sh` | Allow stop when `_state.json.rubric_stagnation_count >= n` |
+
+Update paths:
+
+- `harness-init` Step 2 writes these to `.harness/_config.yml` atomically.
+- `harness-loop` maintains the corresponding `_state.json` counters
+  (`iterations`, `wall_time_sec`, `cost_usd`, `rubric_stagnation_count`)
+  during each sprint.
+- `harness-rules-update` may raise caps only after a completed sprint (never
+  mid-sprint) to avoid Principal Skinner evasion.
+
+**Input validation**: if the user types a value outside the stated `range`,
+re-ask once with the range in the error message. If they insist on an
+out-of-range value, accept it but append `⚠ out-of-recommended-range` to
+that line in `_config.yml` as a comment.
+
 ---
 
 ## Summary
