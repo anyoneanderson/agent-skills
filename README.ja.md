@@ -24,6 +24,7 @@
 | [skill-suggest](skills/skill-suggest/) | プロジェクトの技術スタックを自動解析し、skills.shレジストリから最適なスキルを提案・インストール |
 | [harness-init](skills/harness-init/) | Harness 制御ループ（Planner/Generator/Evaluator サブエージェント・hooks・ガードスクリプト・耐性ファイル）をプロジェクトに導入 |
 | [harness-plan](skills/harness-plan/) | /harness の epic を計画: 対話で product-spec.md を起草、bundling 判定付き roadmap.md を導出、sprint 毎に tracker Issue を起票 |
+| [harness-loop](skills/harness-loop/) | GAN 制御ループを実行: sprint 毎に contract を交渉し、Generator ⇄ Evaluator を rubric 収束まで反復、PR を作成。interactive / continuous / autonomous-ralph / scheduled 4 モードと Principal Skinner 停止ガード対応 |
 
 ## インストール
 
@@ -48,6 +49,7 @@ npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
 npx skills add anyoneanderson/agent-skills --skill harness-plan -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 ```
 
 > **Note**: cmux スキルは [cmux](https://cmux.dev/)（macOS 14.0+）が必要で、cmux セッション内で実行する必要があります。
