@@ -14,10 +14,16 @@ It acts as an execution engine that:
 ## Full Execution Flow
 
 ```
+0. Role Guard — orchestrator only, never write code/review/tests yourself
+
 1. Initial Checks
    ├── Verify working directory (git repo, gh CLI available)
    ├── Parse options (--resume, --issue, --spec, --dry-run)
-   └── Locate spec directory (.specs/{feature}/)
+   ├── Check cmux availability ($CMUX_SOCKET_PATH)
+   └── Locate spec directory 🚨 BLOCKING
+       ├── Always scan .specs/ (even if Issue body has a path)
+       ├── If found → use it and proceed
+       └── If not found → ask user for path or suggest spec-generator
 
 2. File Loading (flexible path search)
    ├── issue-to-pr-workflow.md (playbook)
