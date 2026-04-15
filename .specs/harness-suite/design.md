@@ -120,7 +120,7 @@ skills/
 ### 3.2 harness-plan
 
 **入力**: ユーザのプロンプト（"認証まわり一式" 等の簡素な what）
-**出力**: `.harness/<epic>/product-spec.md` / `roadmap.md` / `sprints/sprint-N/contract.md` / GitHub Issues（tracker=github）/ `.harness/<epic>/pending-issues.md`（tracker=gitlab/none）
+**出力**: `.harness/<epic>/product-spec.md` / `roadmap.md` / `sprints/sprint-N/contract.md` / GitHub Issues（tracker=github）/ `.harness/<epic>/pending-issues.md`（tracker=gitlab）
 
 **処理フロー**:
 1. Planner sub-agent を起動（Claude）
@@ -128,10 +128,10 @@ skills/
 3. Planner が roadmap.md を生成（sprint分解 + bundling 判定）
 4. ユーザに roadmap を提示し承認（**常時 interactive 固定**。非対話モードで暗黙承認してはならない — REQ-021）
 5. 各 sprint の contract.md 雛形を生成
-6. Orchestrator が tracker に応じて起票
-   - `github`: `gh issue create` でループ起票
-   - `gitlab` / `none`: `.harness/<epic>/pending-issues.md` に起票相当の payload を記録（`shared_state.md` は sprint 単位のため harness-plan では使わない）
-   - `gh` CLI 不在時はこの skill を abort（サイレントフォールバック禁止）
+6. Orchestrator が tracker に応じて起票（REQ-023）
+   - `github`: `gh issue create` でループ起票。`gh` 不在時はこの skill を abort（サイレントフォールバック禁止）
+   - `gitlab`: `.harness/<epic>/pending-issues.md` に起票相当の payload を記録（`shared_state.md` は sprint 単位のため harness-plan では使わない）
+   - `none`: 起票せず。`progress.md` に tracker なしモード行を記録
 7. 最初の sprint について `harness-loop` を起動
 
 > **通信プロトコル**: Planner / Generator / Evaluator の書き込み権限は §9.5（Shared-read / Isolated-write）に従う。共有ファイル（shared_state.md）は Orchestrator のみが書き、各エージェントは自分専用の `feedback/{role}-{iter}.md` に append する。

@@ -51,7 +51,10 @@ Anthropic が提唱する **Harness Engineering**（"Agent = Model + Harness"）
 - **[REQ-020]** 人間と Planner エージェントが **product-spec.md** を作成すること（What / Why / Out of Scope / Constraints のみ。"How" は書かない）。
 - **[REQ-021]** Planner が product-spec から **roadmap.md** を生成し、sprint 単位（=feature 単位）に分解すること。生成後は利用者承認を必須とし、承認ゲートは常に interactive（AskUserQuestion）で運用すること。mode の選択は `harness-loop` 起動時（REQ-078）であるため、`harness-plan` 時点では mode を根拠に承認をスキップしてはならない。自律承認を明示的に要求する場合は `--auto-approve-roadmap` フラグを利用者が明示指定する場合に限り許容する。
 - **[REQ-022]** Planner が **密結合判定**を行い、各 sprint に `bundling: bundled | split` フラグを付与すること。bundled の場合は複数 feature を 1 PR にまとめる。
-- **[REQ-023]** Orchestrator が roadmap に基づき GitHub Issue を sprint 数だけ自動起票すること（GitLab/なしは設定により分岐）。tracker が `github` 以外の場合、GitHub Issue 相当の payload を `.harness/<epic>/pending-issues.md` に記録すること（sprint 単位で運用される `shared_state.md` は harness-plan 時点では未生成のため利用しない）。`gh` CLI 不在時は tracker の種別にかかわらず skill を abort し、サイレントフォールバックしないこと。
+- **[REQ-023]** Orchestrator が roadmap に基づき GitHub Issue を sprint 数だけ自動起票すること（GitLab/なしは設定により分岐）。tracker ごとの挙動:
+  - `github`: `gh issue create` で sprint 毎に起票。`gh` CLI が PATH にない場合はこの skill を abort し、他 tracker へのサイレントフォールバックを禁止する（利用者合意のない tracker 種別変更は audit trail を破壊するため）。
+  - `gitlab`: v1 では CLI 連携せず、GitHub Issue 相当の payload を `.harness/<epic>/pending-issues.md` に記録する（sprint 単位で運用される `shared_state.md` は harness-plan 時点では未生成のため利用しない）。
+  - `none`: 一切起票せず、進捗は `.harness/<epic>/roadmap.md` と git のみで追跡する。`progress.md` に tracker なしモードを示す 1 行を残す。
 
 ### harness-loop
 
