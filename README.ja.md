@@ -26,6 +26,18 @@
 | [harness-plan](skills/harness-plan/) | /harness の epic を計画: 対話で product-spec.md を起草、bundling 判定付き roadmap.md を導出、sprint 毎に tracker Issue を起票 |
 | [harness-loop](skills/harness-loop/) | GAN 制御ループを実行: sprint 毎に contract を交渉し、Generator ⇄ Evaluator を rubric 収束まで反復、PR を作成。interactive / continuous / autonomous-ralph / scheduled 4 モードと Principal Skinner 停止ガード対応 |
 
+### /spec と /harness — 使い分け
+
+2 つの系列は **排他ではなく相補**。典型的にはプロジェクトの lifecycle に沿って順次使い分ける:
+
+| フェーズ | 活動 | 使うスキル |
+|---|---|---|
+| Phase 0 | リポジトリ骨格・スキーマ・UI トーン・アーキ決定 | `/spec-generator`（人間との壁打ち） |
+| Phase 1 | 規約・ワークフローの文書化 | `/spec-rules-init` / `/spec-workflow-init` → `docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` を生成 |
+| Phase 2 | 機能量産（自律スプリント開発） | `/harness-init` → `/harness-plan` → `/harness-loop` |
+
+`docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` は **両系列の共有基盤**（ASM-008）。/harness 系はこれらを再生成せず、`/spec-rules-init` / `/spec-workflow-init` が先に走った前提で動く。`harness-init` は不在を検出すると `/spec-rules-init` の事前実行を案内するが、不在のままでも rubric カバレッジを落として継続可能。
+
 ## インストール
 
 ```bash

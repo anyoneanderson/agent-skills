@@ -4,6 +4,23 @@
 
 `(Recommended)` マーカーは説明ではなくオプション名に付与（UI 上に表示されるため）。
 
+## Prerequisites 質問（Round 1 の前）
+
+`docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` のいずれかが不在の場合、Round 1 に入る**前**に以下を尋ねる（SKILL.md §Prerequisites / ASM-008）:
+
+```
+question: "Shared rules files are missing under docs/. Proceed anyway?" /
+          "docs/ の共有ルールファイルが不在です。続行しますか？"
+
+options:
+  - name: "Run /spec-rules-init first (Recommended) / 先に /spec-rules-init を実行（推奨）"
+    description: "harness-init を中断して共有基盤を先に生成。その後 harness-init を再開"
+  - name: "Proceed without them (reduced rubric coverage) / 無しで続行（rubric カバレッジ低下）"
+    description: "harness は動作するが Evaluator の Craft 軸「coding-rules 遵守」は採点対象外になる"
+```
+
+「先に /spec-rules-init を実行（推奨）」が選ばれたら案内を出して生成を行わず停止。「無しで続行」が選ばれたら Round 1 に進み、`_config.yml` に `shared_foundation: missing` を付記して runtime で Craft 軸採点を適応させる。
+
 ---
 
 ## Round 1 — プロジェクト種別
