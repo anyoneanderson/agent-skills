@@ -235,6 +235,7 @@ Emit to the user:
 - [hearing-questions.md](references/hearing-questions.md) — bilingual question text
 - [rubric-presets.md](references/rubric-presets.md) — axis sets per project type
 - [hooks-templates.md](references/hooks-templates.md) — settings.json by level
+- [claudemd-patch.md](references/claudemd-patch.md) — idempotent CLAUDE.md pointer patch
 - [resilience-schema.md](references/resilience-schema.md) — progress/state/metrics schemas
 - [templates/](references/templates/) — product-spec, sprint-contract, shared_state
 
