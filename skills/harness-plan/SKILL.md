@@ -65,10 +65,13 @@ Always execute before any write:
 2. `tail -100 .harness/progress.md` (if it exists)
 3. `cat .harness/_state.json` (if it exists)
 
-In interactive mode, if `_state.json.phase ∈ {product-spec-draft,
-roadmap-draft, issues-pending}`, the skill offers **resume** vs **restart**
-via `AskUserQuestion`. In non-interactive modes, it always resumes from
-the cursor position.
+If `_state.json.phase ∈ {product-spec-draft, roadmap-draft,
+roadmap-approved, issues-pending}`, the skill offers **resume** vs
+**restart** via `AskUserQuestion`. `harness-plan` runs prior to
+`harness-loop` so `mode` is not yet decided — the Boot Sequence here
+always behaves interactively. If the user invoked with
+`--auto-approve-roadmap`, resume is chosen automatically; otherwise the
+user confirms.
 
 ## Execution Flow (10 steps)
 
@@ -89,7 +92,7 @@ if .harness/<any-epic>/product-spec.md exists:
 most recently modified `.harness/<epic>/` directory if state is silent.
 "Start new" prompts for epic name (Step 2). "Cancel" exits cleanly.
 
-In non-interactive modes, the skill always continues when state is
+With `--auto-approve-roadmap`, the skill always continues when state is
 populated, else starts new with a derived epic name (kebab-case from
 the first 3 non-stopword tokens of the user prompt).
 
@@ -133,13 +136,17 @@ Key enforcement (from the guide):
 - Success Signals may be empty; mark `success_signals: unspecified` in
   frontmatter if so
 
-Set `_state.json.phase = "product-spec-draft"` at step start; update to
-`"product-spec-done"` on completion.
+Set `_state.json.phase = "product-spec-draft"` at step start. Keep it at
+`"product-spec-draft"` until the Planner declares the spec complete via
+the cross-check checklist; the transition out happens when Step 5 begins
+(phase is advanced to `"roadmap-draft"` there).
 
 Before moving to Step 5, the Planner runs the **cross-check checklist**
-from the guide. Any "no" answer re-opens the relevant section
-(interactive) or emits a `TODO(product-spec):` line to `progress.md`
-(non-interactive).
+from the guide. Any "no" answer re-opens the relevant section via
+`AskUserQuestion`. If the skill was invoked with `--auto-approve-roadmap`
+(interview was pre-filled or resumed without user intervention), emit a
+`TODO(product-spec):` line to `progress.md` instead of re-opening — the
+user must resolve before harness-loop starts.
 
 Commit: `git add .harness/<epic>/product-spec.md && git commit -m "harness-plan: product-spec for <epic>"`.
 
@@ -162,16 +169,25 @@ The Planner must:
   citing one of the four coupling axes (schema, auth, UI, contract)
 - Enforce reciprocal `bundled_with` references
 - Cap sprints at 6 per epic; if more, pause and advise the user to split
-  the epic (interactive) or truncate with a `TODO(epic-split)` note
-  (non-interactive)
+  the epic. With `--auto-approve-roadmap`, truncate with a
+  `TODO(epic-split)` note in `progress.md` for post-hoc resolution
 - Cap bundle size at 3 sprints
 
 Set `_state.json.phase = "roadmap-draft"` at step start.
 
 ### Step 6: Roadmap Approval (T-024)
 
+The roadmap approval gate is **always interactive** per REQ-021. The
+`mode` value (`interactive` / `continuous` / `autonomous-ralph` /
+`scheduled`) is selected at `harness-loop` startup (REQ-078), not at
+`harness-init`, so `harness-plan` has no basis for implicit acceptance.
+The only exception is explicit user override via the
+`--auto-approve-roadmap` flag (see §Usage).
+
+Default path (no flag):
+
 ```
-AskUserQuestion (interactive only):
+AskUserQuestion:
   question: "Roadmap: <N> sprints, <M> bundle groups. Approve?" /
             "Roadmap: <N> sprints, <M> bundle。承認？"
   (Show Sprint Summary table from roadmap.md as description)
@@ -188,12 +204,12 @@ AskUserQuestion (interactive only):
   `progress.md`
 - **Cancel** → write `progress.md` line, leave roadmap.md as draft, exit
 
-In non-interactive modes (`continuous` / `autonomous-ralph` / `scheduled`,
-per ASM-007), skip the prompt entirely. Acceptance is implicit from the
-mode the user selected at `harness-init`. The user can still intervene
-before Step 7 by manually editing `roadmap.md` and re-running this skill.
+With `--auto-approve-roadmap` flag: skip the prompt and proceed to
+Step 7 directly. Append one progress line recording auto-approval
+(`[<ts>] auto-approved via --auto-approve-roadmap`). The user takes
+responsibility for pre-reviewing roadmap.md before invoking this mode.
 
-Set `_state.json.phase = "roadmap-approved"` on approval.
+Set `_state.json.phase = "roadmap-approved"` on approval (either path).
 
 Commit: `git add .harness/<epic>/roadmap.md && git commit -m "harness-plan: roadmap for <epic>"`.
 
@@ -220,22 +236,35 @@ create an empty `evidence/` subdirectory.
 
 ### Step 8: Create Tracker Issues (T-023)
 
-Dispatch on `_config.yml.tracker`. Full detail in
+Set `_state.json.phase = "issues-pending"` at step start so resume after
+a mid-loop failure can locate the correct entry point. Dispatch on
+`_config.yml.tracker`. Full detail in
 [issue-create.md](references/issue-create.md):
 
 - `github` → `gh issue create` per sprint, with duplicate detection and
-  epic-link formatting
-- `gitlab` → record pending payloads to `shared_state.md` under
-  `## PendingIssues`; no CLI call in v1
+  epic-link formatting. On every successful create, append to
+  `_state.json.sprint_issues[<n>]` atomically so resume can skip
+  already-created sprints
+- `gitlab` → record pending payloads to
+  `.harness/<epic>/pending-issues.md` (an epic-level ledger file owned by
+  harness-plan). `shared_state.md` is sprint-scoped and does not exist
+  yet at this phase — never write there. No CLI call in v1
 - `none` → skip; emit one progress line noting tracker-free mode
 
-On each successful create, append to `_state.json.sprint_issues[<n>]`.
-On failure mid-loop, partial state is preserved and resume-safe (see
-guide §Recovery).
+**`gh` CLI absence**: if `tracker == github` and `gh` is missing, abort
+the skill. Do not silently fall back to gitlab / none — the user's
+tracker choice is load-bearing for the audit trail (REQ-023).
 
-### Step 9: Update `_state.json`
+On failure mid-loop, `_state.json.phase` stays at `"issues-pending"` and
+partial `sprint_issues` is preserved. Resume re-enters Step 8 and the
+duplicate-detection path in `issue-create.md` skips the already-created
+sprints.
 
-Atomic write to `.harness/_state.json`:
+### Step 9: Finalize Handoff Cursor in `_state.json`
+
+Step 8 already transitioned `phase` to `"ready-for-loop"` and built up
+`sprint_issues` incrementally. Step 9 finalizes the remaining cursor
+fields that `harness-loop` reads on its Boot Sequence:
 
 ```json
 {
@@ -245,8 +274,6 @@ Atomic write to `.harness/_state.json`:
   "iteration": 0,
   "last_agent": "planner",
   "next_action": "harness-loop:negotiate-sprint-1",
-  "sprint_issues": { ... from Step 8 ... },
-  "epic_issue": <from Step 8 pre-flight>,
   "completed": false,
   "pending_human": false,
   "aborted_reason": null
@@ -254,8 +281,10 @@ Atomic write to `.harness/_state.json`:
 ```
 
 Preserve all other fields written by `harness-init` (`max_iterations`,
-`max_wall_time_sec`, `max_cost_usd`, `mode`, etc.). Use a merge, not a
-replace, via `jq '.foo = "bar"'` on the existing file.
+`max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers`, etc.). The
+`mode` field is **not** set here — it is written by `harness-loop` on
+startup (REQ-078). Use a merge, not a replace, via
+`jq '.foo = "bar"'` on the existing file.
 
 ### Step 10: Summary Report
 
@@ -280,11 +309,11 @@ Also append one progress line:
 |---|---|
 | `.harness/_config.yml` missing | Error: "Run /harness-init first." |
 | `jq` not found | Error: "Install `jq` — all harness tooling requires it." |
-| Epic name collision | Re-ask in interactive; append `-N` suffix in non-interactive |
-| Planner exceeds 6 sprints | Pause (interactive) or truncate with TODO note (non-interactive) |
+| Epic name collision | Re-ask by default; append `-N` suffix with `--auto-approve-roadmap` |
+| Planner exceeds 6 sprints | Pause by default; truncate with TODO note with `--auto-approve-roadmap` |
 | Bundle size > 3 | Hard-split by Planner; log decision to `progress.md` |
 | Reciprocal `bundled_with` mismatch | Planner regenerates once; fail if still broken |
-| `gh` CLI missing when tracker=github | Abort per [issue-create.md](references/issue-create.md) |
+| `gh` CLI missing when tracker=github | Abort per [issue-create.md](references/issue-create.md). Do not fall back to gitlab / none |
 | Roadmap approval cancelled | Leave draft roadmap.md, exit. Re-run continues |
 | Write failure mid-flow | Partial state preserved; `progress.md` records failure line; resume-safe |
 
@@ -302,10 +331,20 @@ Also append one progress line:
 
 # Replan an existing epic (edit product-spec or roadmap externally first)
 /harness-plan --replan
+
+# Skip the roadmap approval gate (user pre-reviews roadmap.md themselves)
+/harness-plan --auto-approve-roadmap
 ```
 
 `--replan` re-enters at Step 5 (roadmap generation) using the existing
 `product-spec.md` as input.
+
+`--auto-approve-roadmap` is the sole mechanism for bypassing the
+interactive approval gate in Step 6. The skill does not infer autonomy
+from `_config.yml` or from any harness-loop mode — those are decided
+after this skill finishes. If this flag is passed, the user takes
+responsibility for reviewing `roadmap.md` before invoking; the flag is
+logged to `progress.md` as an audit trail.
 
 ## What harness-plan does NOT do
 

@@ -11,11 +11,16 @@ Dispatch on `_config.yml.tracker`:
 | Tracker | Behaviour |
 |---|---|
 | `github` | Use `gh issue create` per sprint (primary path) |
-| `gitlab` | v1: record intended issue payloads to `shared_state.md` under a `## PendingIssues` section, skip CLI call. v2 will add glab integration |
+| `gitlab` | v1: record intended issue payloads to `.harness/<epic>/pending-issues.md` (an epic-level ledger owned by harness-plan), skip CLI call. v2 will add glab integration |
 | `none` | Skip entirely. Sprint progress lives in `.harness/` and git only. Write a single line to `progress.md` noting no-tracker mode |
 
 All three paths still update `_state.json.sprint_issues` with either the
 issue URL (GitHub) or a placeholder token (`gitlab:pending`, `none:ledger`).
+
+> `shared_state.md` is **sprint-scoped** and lives under
+> `.harness/<epic>/sprints/sprint-<n>-<feature>/`. It does not exist at
+> the time `harness-plan` runs. Never write Pending payloads there — use
+> the epic-level `pending-issues.md` file instead.
 
 ## GitHub Path
 
@@ -29,11 +34,14 @@ Before iterating sprints, verify:
 3. A **parent epic issue** exists — either:
    - Passed in via `--epic <number>` flag on `/harness-plan`, or
    - Created fresh with the product-spec body as the epic issue (Planner
-     asks via `AskUserQuestion` in interactive mode; in non-interactive
-     modes the skill creates a new epic issue by default and records its
-     number in `_state.json.epic_issue`)
+     asks via `AskUserQuestion`; with `--auto-approve-roadmap` the skill
+     creates a new epic issue by default and records its number in
+     `_state.json.epic_issue`)
 
-If `gh` is not on PATH, fall back to `gitlab` behaviour (ledger-only).
+If `gh` is not on PATH, **abort** the skill with install guidance per
+REQ-023. Do not fall back to `gitlab` or `none` — silent fallback
+corrupts the audit trail by changing tracker identity without the user's
+consent.
 
 ### Per-sprint create
 
@@ -95,9 +103,9 @@ query: gh issue list --label harness,sprint --search "in:title [sprint-${n}] ${f
 - If **no match**: create as normal.
 - If **exactly one open match**: reuse its URL; do not create a duplicate.
 - If **multiple matches** or **closed-only match**: pause with an
-  `AskUserQuestion` (interactive mode) or write
-  `TODO(issue-dup): sprint-${n}` to `progress.md` and skip creation (non-
-  interactive). The user resolves manually.
+  `AskUserQuestion`. With `--auto-approve-roadmap`, instead write
+  `TODO(issue-dup): sprint-${n}` to `progress.md` and skip creation.
+  Either way, the user resolves the ambiguity manually before the loop.
 
 Never force-create. Duplicate issues fragment the audit trail and break the
 `_state.json.sprint_issues` mapping.
@@ -126,10 +134,14 @@ label colours or descriptions.
 
 ## GitLab Path (v1)
 
-Write each sprint's intended issue payload into the epic's
-`shared_state.md` under the `## PendingIssues` section:
+Write each sprint's intended issue payload to
+`.harness/<epic>/pending-issues.md` — an epic-level ledger file that
+`harness-plan` owns. The file is created if absent and appended to for
+each sprint:
 
 ```markdown
+# Pending Issues (tracker=gitlab, v1 — awaiting glab integration)
+
 ## PendingIssues
 
 - sprint-1 login: split, risk=medium, deps=[], awaiting glab
@@ -140,6 +152,13 @@ Write each sprint's intended issue payload into the epic's
 v2 will introduce `glab issue create` with the same body structure. The
 payload format above is chosen so v2 can parse and submit without
 regenerating.
+
+> **Why not `shared_state.md`?** `shared_state.md` is sprint-scoped
+> (`sprints/sprint-<n>-<feature>/shared_state.md`) and is owned by
+> `harness-loop` as a Planner ⇄ Generator ⇄ Evaluator communication
+> ledger. It does not exist at the time `harness-plan` runs, and
+> harness-plan writes above the sprint level. The epic-level
+> `pending-issues.md` cleanly separates these concerns.
 
 ## None Path
 
@@ -154,7 +173,17 @@ and per-sprint directory names.
 
 ## `_state.json` Updates
 
-After all sprint issues are created (or skipped), Planner writes once:
+Phase transitions for the Issue-creation step (design §9.2):
+
+1. **At loop start**, set `phase = "issues-pending"` so a mid-loop
+   failure can be detected on resume and routed back into this step.
+2. **After each successful `gh issue create`**, atomically append to
+   `sprint_issues[<n>]`. Never batch — each write is resume-safe on its
+   own.
+3. **After all sprints are created (or skipped per tracker)**, set
+   `phase = "ready-for-loop"` as the handoff signal to `harness-loop`.
+
+Final state example:
 
 ```json
 {

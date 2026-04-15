@@ -152,17 +152,22 @@ bundling 後、Planner は以下順序で:
 ## 承認ゲート（T-024）
 
 `harness-plan` は Sprint Summary 表と bundle groups を `AskUserQuestion` で
-提示する（interactive モードのみ）。選択肢:
+提示する。REQ-021 により、このゲートは **常時 interactive 固定**。
+`harness-loop` の `mode`（continuous / autonomous-ralph / scheduled）は
+後続で決まるため、mode を根拠に承認スキップしてはならない。
+
+選択肢:
 
 - **そのまま承認**: contract 生成と Issue 起票に進む
 - **変更を要求**: 利用者が変更を入力 → Planner が再生成 → ループ
 - **キャンセル**: 部分状態を progress.md に書き、終了
 
-非対話モード（`continuous` / `autonomous-ralph` / `scheduled`, ASM-007）では
-承認は **暗黙**: roadmap はそのまま受理され Issue が起票される。利用者は
-`harness-init` のモード選択時点で合意している。事後修正が必要な場合は、
-利用者が手動でループを停止し、対象 sprint が negotiation に入る前に
-`roadmap.md` を編集する。
+唯一の回避手段は `/harness-plan` に対する明示的な `--auto-approve-roadmap`
+フラグのみ。指定時は AskUserQuestion をスキップし監査行を `progress.md` に
+追記する。利用者は事前に生成済み `roadmap.md` をレビューしたうえで
+フラグを付ける責任を負う。事後修正が必要な場合は手動で `roadmap.md` を編集し、
+対象 sprint が `harness-loop` の negotiation に入る前に
+`/harness-plan --replan` を再実行する。
 
 ## contract 生成への受け渡し
 

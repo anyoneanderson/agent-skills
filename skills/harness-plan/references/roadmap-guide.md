@@ -159,18 +159,23 @@ After bundling, Planner orders sprints:
 ## Approval Gate (T-024)
 
 `harness-plan` surfaces the Sprint Summary table and bundle groups via
-`AskUserQuestion` (interactive mode only). Options:
+`AskUserQuestion`. Per REQ-021, this gate is **always interactive** —
+the `harness-loop` `mode` (continuous / autonomous-ralph / scheduled) is
+decided later and cannot be used to short-circuit roadmap approval.
+
+Options:
 
 - **Approve as-is**: proceed to contract/Issue generation
 - **Request changes**: user types changes; Planner regenerates; loop
 - **Cancel**: write partial state to progress.md, exit
 
-In non-interactive modes (`continuous` / `autonomous-ralph` / `scheduled`,
-per ASM-007), approval is **implicit**: the roadmap is accepted and Issues
-are created. The user has accepted this at `harness-init` mode selection.
-If the roadmap needs post-hoc correction, the user must pause the loop
-manually and edit `roadmap.md` before the affected sprint enters
-negotiation.
+The sole bypass is the explicit `--auto-approve-roadmap` flag on
+`/harness-plan`. When passed, the skill skips the prompt and appends an
+audit line to `progress.md`. The user takes responsibility for
+pre-reviewing the generated `roadmap.md` before invocation. If the
+roadmap needs post-hoc correction, the user must edit `roadmap.md`
+manually and re-run `/harness-plan --replan` before the affected sprint
+enters negotiation in `harness-loop`.
 
 ## Handoff to Contract Generation
 
