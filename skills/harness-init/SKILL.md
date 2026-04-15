@@ -183,8 +183,13 @@ If not, create it with only this pointer block.
 Create empty but valid:
 
 - `.harness/progress.md` — with header comment explaining append-only
-- `.harness/_state.json` — schema v1, all required keys set, `completed: false`,
-  `current_epic: null`, `current_sprint: 0`, `phase: negotiation`
+- `.harness/_state.json` — schema v1; all required keys from
+  [resilience-schema.md](references/resilience-schema.md) §\_state.json, including
+  `completed: false`, `pending_human: false`, `current_epic: null`,
+  `current_sprint: 0`, `phase: "negotiation"`, `iteration: 0`,
+  `cumulative_cost_usd: 0`, `rubric_stagnation_count: 0`, and
+  `start_time: <ISO-8601 now>`. These names are canonical — `stop-guard.sh`
+  and other scripts read them verbatim
 - `.harness/metrics.jsonl` — empty file
 
 Add `.harness/*.backup-*` to `.gitignore` if that file exists.

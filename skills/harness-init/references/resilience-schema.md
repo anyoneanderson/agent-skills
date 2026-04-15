@@ -107,7 +107,8 @@ to decide the next action.
   "completed": false,
   "pending_human": false,
   "aborted_reason": null,
-  "mode": "autonomous-ralph"
+  "mode": "autonomous-ralph",
+  "rubric_stagnation_count": 0
 }
 ```
 
@@ -133,6 +134,8 @@ to decide the next action.
 | `pending_human` | bool | yes | True when Tier-A guard or ambiguous-request (v2) is triggered |
 | `aborted_reason` | string\|null | yes | Non-null when a Principal Skinner condition fired |
 | `mode` | enum | yes | `interactive \| continuous \| autonomous-ralph \| scheduled` |
+| `rubric_stagnation_count` | int | yes | Consecutive iterations with no rubric improvement; reset on any axis upgrade |
+| `stop_hook_active` | bool | no | Anti-recursion flag managed by `stop-guard.sh` |
 
 ### Update rules
 

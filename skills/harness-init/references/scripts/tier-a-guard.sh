@@ -39,7 +39,10 @@ done < "$PATTERNS_FILE"
 
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 mkdir -p "$(dirname "$PROGRESS_FILE")"
-printf '- %s | TIER-A MATCH | pattern=%q | cmd=%q\n' "$ts" "$matched" "$cmd" >> "$PROGRESS_FILE"
+# NB: format string must not start with "-" (some printf impls parse it as
+# an option). Use "%s\n" with a pre-built line.
+log_line="- ${ts} | TIER-A MATCH | pattern=${matched} | cmd=${cmd}"
+printf '%s\n' "$log_line" >> "$PROGRESS_FILE"
 
 if [ "$WARN_ONLY" = "1" ]; then
   printf '{}\n'

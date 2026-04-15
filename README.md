@@ -22,6 +22,7 @@ Reusable AI agent skills for specification-driven development.
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
 | [skill-suggest](skills/skill-suggest/) | Auto-detect project tech stack and suggest optimal skills from skills.sh registry |
+| [harness-init](skills/harness-init/) | Install the Harness control loop (Planner/Generator/Evaluator sub-agents, hooks, guard scripts, resilience files) into a project |
 
 ## Installation
 
@@ -44,6 +45,7 @@ npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
 ```
 
 > **Note**: cmux skills require [cmux](https://cmux.dev/) (macOS 14.0+) and must be run inside a cmux session.
@@ -158,6 +160,14 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > Find best practice skills
 ```
 
+### Install the Harness control loop
+
+```
+> Initialize harness
+> Set up /harness
+> Install harness engineering
+```
+
 ## How It Works
 
 1. **spec-generator** produces a structured spec in `.specs/{project}/`:
@@ -210,6 +220,8 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 ### Project Setup
 
 9. **skill-suggest** analyzes the project's manifest files (package.json, Cargo.toml, etc.), searches the skills.sh registry for matching best-practice skills, and installs them with agent-targeted installation to prevent unwanted directory creation.
+
+10. **harness-init** installs the Harness control loop into a project. Hears environment settings (project type, generator backend, evaluator tools, hook enforcement level, Principal Skinner limits, MCP allow-list) once, then generates Planner/Generator/Evaluator sub-agents, `.claude/settings.json` hooks, guard scripts (`progress-append`, `restore-after-compact`, `stop-guard`, `tier-a-guard`, `mcp-allowlist`, `wrap-untrusted`), and resilience files (`.harness/progress.md`, `_state.json`, `metrics.jsonl`). Prepares the project for the `/harness-plan` → `/harness-loop` → `/harness-rules-update` series.
 
 ## Compatibility
 

@@ -50,10 +50,15 @@ allow する：
 |---|---|---|---|
 | ループ完了 | `completed` | — | false |
 | 人間待ち | `pending_human` | — | false |
-| 反復上限 | `iterations` | `max_iterations` | 8 |
-| 壁時間上限 | `wall_time_sec` | `max_wall_time_sec` | 28800（8h） |
-| コスト上限 | `cost_usd` | `max_cost_usd` | 20.0 |
+| 反復上限 | `iteration` | `max_iterations` | 8 |
+| 壁時間上限 | `start_time` → 経過秒 | `max_wall_time_sec` | 28800（8h） |
+| コスト上限 | `cumulative_cost_usd` | `max_cost_usd` | 20.0 |
 | Rubric 停滞 | `rubric_stagnation_count` | `rubric_stagnation_n` | 3 |
+
+キー名は `references/resilience-schema.ja.md` §\_state.json に準拠。
+`stop-guard.sh` は上限値を `_state.json` 優先で読み（sprint 毎の個別上書きを
+可能にする）、なければ `_config.yml` を参照する。壁時間は
+`now - start_time` で導出。
 
 それ以外は `{"decision":"block", "reason":"..."}` を返し、Claude Code が
 エージェントを再プロンプトする。再帰防止に `.stop_hook_active` を見る。
@@ -98,7 +103,7 @@ echo '{"tool_name":"mcp__evil__do_thing"}' \
   | .harness/scripts/mcp-allowlist.sh
 
 # stop-guard — 進行中ループを模擬
-jq '.iterations=3 | .completed=false' .harness/_state.json > /tmp/s.json
+jq '.iteration=3 | .completed=false | .start_time="2026-04-15T00:00:00Z"' .harness/_state.json > /tmp/s.json
 mv /tmp/s.json .harness/_state.json
 echo '{"stop_hook_active":false}' | .harness/scripts/stop-guard.sh
 

@@ -98,7 +98,8 @@ restore: from=<source> preserved=<tokens>
   "completed": false,
   "pending_human": false,
   "aborted_reason": null,
-  "mode": "autonomous-ralph"
+  "mode": "autonomous-ralph",
+  "rubric_stagnation_count": 0
 }
 ```
 
@@ -124,6 +125,8 @@ restore: from=<source> preserved=<tokens>
 | `pending_human` | bool | yes | Tier-A guard 発動時 / 曖昧要求（v2）時に true |
 | `aborted_reason` | string\|null | yes | Principal Skinner 発動時に non-null |
 | `mode` | enum | yes | `interactive \| continuous \| autonomous-ralph \| scheduled` |
+| `rubric_stagnation_count` | int | yes | 連続で rubric が改善しなかった iteration 数（どれかの軸が向上した時点で 0 にリセット） |
+| `stop_hook_active` | bool | no | `stop-guard.sh` が管理する再帰防止フラグ |
 
 ### 更新ルール
 

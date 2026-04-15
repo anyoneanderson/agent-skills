@@ -54,10 +54,15 @@ any of:
 |---|---|---|---|
 | Loop done | `completed` | — | false |
 | Human needed | `pending_human` | — | false |
-| Iteration cap | `iterations` | `max_iterations` | 8 |
-| Wall-time cap | `wall_time_sec` | `max_wall_time_sec` | 28800 (8h) |
-| Cost cap | `cost_usd` | `max_cost_usd` | 20.0 |
+| Iteration cap | `iteration` | `max_iterations` | 8 |
+| Wall-time cap | `start_time` → elapsed | `max_wall_time_sec` | 28800 (8h) |
+| Cost cap | `cumulative_cost_usd` | `max_cost_usd` | 20.0 |
 | Rubric stagnation | `rubric_stagnation_count` | `rubric_stagnation_n` | 3 |
+
+Names match `references/resilience-schema.md` §\_state.json. `stop-guard.sh`
+reads runtime caps from `_state.json` first (so per-sprint overrides work)
+and falls back to `_config.yml`. Elapsed wall-time is derived as
+`now - start_time`.
 
 Otherwise it returns `{"decision":"block", "reason":"..."}` and Claude Code
 re-prompts the agent. The hook itself respects `.stop_hook_active` to
@@ -107,7 +112,7 @@ echo '{"tool_name":"mcp__evil__do_thing"}' \
 # → {"decision":"deny","reason":"mcp-allowlist: server \"evil\" not in allow-list ..."}
 
 # stop-guard — simulate an in-progress loop
-jq '.iterations=3 | .completed=false' .harness/_state.json > /tmp/s.json
+jq '.iteration=3 | .completed=false | .start_time="2026-04-15T00:00:00Z"' .harness/_state.json > /tmp/s.json
 mv /tmp/s.json .harness/_state.json
 echo '{"stop_hook_active":false}' | .harness/scripts/stop-guard.sh
 # → {"decision":"block","reason":"harness loop incomplete: ..."}
