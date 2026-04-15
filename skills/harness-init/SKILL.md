@@ -155,10 +155,10 @@ Read existing `.claude/settings.json` if any; compute the hooks patch based
 on `hook_level`. See [references/hooks-templates.md](references/hooks-templates.md).
 
 ```
-compute patch → show diff via AskUserQuestion → on approve: apply
-                                              → on reject: write to
-                                                .claude/settings.harness.json.proposed
-                                                and report
+compute patch → merge non-clobberingly (see references/settings-merge.md)
+             → show diff via AskUserQuestion
+             → on approve: atomic-write .claude/settings.json
+             → on reject: write .claude/settings.harness.json.proposed and report
 ```
 
 Never clobber hooks added by other skills or the user.
@@ -235,6 +235,7 @@ Emit to the user:
 - [hearing-questions.md](references/hearing-questions.md) — bilingual question text
 - [rubric-presets.md](references/rubric-presets.md) — axis sets per project type
 - [hooks-templates.md](references/hooks-templates.md) — settings.json by level
+- [settings-merge.md](references/settings-merge.md) — non-clobbering merge algorithm
 - [claudemd-patch.md](references/claudemd-patch.md) — idempotent CLAUDE.md pointer patch
 - [resilience-schema.md](references/resilience-schema.md) — progress/state/metrics schemas
 - [templates/](references/templates/) — product-spec, sprint-contract, shared_state
