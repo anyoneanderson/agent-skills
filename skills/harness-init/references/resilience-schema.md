@@ -135,7 +135,12 @@ to decide the next action.
 | `aborted_reason` | string\|null | yes | Non-null when a Principal Skinner condition fired |
 | `mode` | enum | yes | `interactive \| continuous \| autonomous-ralph \| scheduled` |
 | `rubric_stagnation_count` | int | yes | Consecutive iterations with no rubric improvement; reset on any axis upgrade |
-| `stop_hook_active` | bool | no | Anti-recursion flag managed by `stop-guard.sh` |
+
+> `stop_hook_active` is **not** a persistent `_state.json` field. It is a
+> stdin-only flag supplied by Claude Code's hook runner to prevent Stop-hook
+> recursion, and `stop-guard.sh` only reads it (`jq -r '.stop_hook_active'`
+> on the hook payload). If a future version needs a durable anti-recursion
+> counter, it should be added here as a new field.
 
 ### Update rules
 
@@ -145,9 +150,11 @@ to decide the next action.
   `last_commit`, `cumulative_cost_usd`, and relevant `features_pass_fail`.
 - Never delete. On abort, set `aborted_reason` and `completed: false`.
   Resume is then a conscious user decision.
-- `stop_hook_active` (self-managed anti-infinite-loop flag): when set to
-  true by `stop-guard.sh`, the next Stop hook exits 0 immediately. It is
-  cleared at the start of each iteration.
+- `.stop_hook_active` is read by `stop-guard.sh` from the Stop-hook stdin
+  payload, not from `_state.json`. Claude Code sets it to `true` on the
+  recursive call that follows a previous `{"decision":"block"}` decision,
+  so the second invocation short-circuits and exits 0. No persistence is
+  required on our side.
 
 ### Schema migration
 

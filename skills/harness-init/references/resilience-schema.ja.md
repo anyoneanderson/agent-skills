@@ -126,14 +126,21 @@ restore: from=<source> preserved=<tokens>
 | `aborted_reason` | string\|null | yes | Principal Skinner 発動時に non-null |
 | `mode` | enum | yes | `interactive \| continuous \| autonomous-ralph \| scheduled` |
 | `rubric_stagnation_count` | int | yes | 連続で rubric が改善しなかった iteration 数（どれかの軸が向上した時点で 0 にリセット） |
-| `stop_hook_active` | bool | no | `stop-guard.sh` が管理する再帰防止フラグ |
+
+> `stop_hook_active` は `_state.json` の永続フィールドでは **ない**。Claude
+> Code の hook runner が Stop hook の stdin payload に乗せて渡す再帰防止用
+> フラグで、`stop-guard.sh` はそれを `jq -r '.stop_hook_active'` で読むだけ。
+> 将来的に永続カウンタが必要になった場合はここに新フィールドとして追加する。
 
 ### 更新ルール
 
 - アトミック書き込み: `_state.json.tmp` → `fsync` → `rename`。部分書き込みを観測可能にしない
 - iteration 終了ごとに更新: `iteration` / `last_agent` / `next_action` / `last_commit` / `cumulative_cost_usd` / 該当 `features_pass_fail`
 - 削除しない。abort 時も `aborted_reason` を設定し `completed: false` のまま残す。resume はユーザの意識的判断に委ねる
-- `stop_hook_active`（無限ループ防止フラグ、自前管理）: `stop-guard.sh` が true にセットすると、次の Stop hook は即 exit 0。iteration 開始時にクリア
+- `.stop_hook_active` は `_state.json` ではなく Stop hook の stdin payload
+  から `stop-guard.sh` が読むフィールド。Claude Code が前回の
+  `{"decision":"block"}` に続く再帰呼び出しで `true` をセットするので、
+  次回の呼び出しは短絡して exit 0 する。こちら側での永続管理は不要
 
 ### スキーマ migration
 
