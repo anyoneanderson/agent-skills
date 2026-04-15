@@ -210,8 +210,11 @@ Write contract final frontmatter: populated `acceptance_scenarios`,
 
 ### Step 5: Contract Freeze and Commit
 
-1. `git add .harness/<epic>/sprints/sprint-<n>-*/contract.md
-   .harness/<epic>/sprints/sprint-<n>-*/shared_state.md`
+1. `git add .harness/<epic>/sprints/sprint-<n>-*/` — captures
+   `contract.md`, `shared_state.md`, the negotiation-round feedback
+   files (`feedback/generator-<r>.md`, `feedback/evaluator-<r>.md`,
+   `feedback/planner-ruling.md` if present) and any evidence from
+   negotiation. The whole audit trail lands in one commit
 2. `git commit -m "harness-loop: sprint-<n> contract frozen"`
 3. Store the SHA in `_state.json.last_commit`
 4. Append `progress.md`: `decision: sprint-<n> contract frozen @ <SHA>`

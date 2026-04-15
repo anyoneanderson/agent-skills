@@ -23,9 +23,11 @@ iter）で amortise すると Boot は経過時間の約 1%。
 
 ## ラッパースクリプトテンプレート
 
-loop 開始時にユーザが `autonomous-ralph` を選んだ時点で
-`.harness/scripts/ralph-loop.sh` として配置する。harness-init がベースを
-出荷し、harness-loop Step 2 はモード選択時のみ本ファイルを書き出す。
+以下が正準の `ralph-loop.sh`。`autonomous-ralph` を初めて選んだ時点で
+`.harness/scripts/ralph-loop.sh` に配置する（`harness-loop` の Step 2
+がモード選択時に書き出す。v1 では `harness-init` は出荷しない）。
+プロジェクトごとに 1 ファイル運用で、プロジェクト側の修正は git で
+バージョン管理した場合のみ再インストール後も維持される。
 
 ```bash
 #!/usr/bin/env bash
@@ -145,8 +147,10 @@ while :; do
 done
 ```
 
-`_config.yml.scheduled_ralph_every` で `RALPH_EVERY` を設定（デフォルト 5）。
-`harness-init` が `scheduled` 選択可能時に setup 時に記録する。
+`RALPH_EVERY` の解決順序: `/harness-loop` 呼び出し時の
+`--ralph-every <N>` CLI フラグ → `RALPH_EVERY` 環境変数 → リテラル
+デフォルト `5`。v1 では `_config.yml` から読まない
+（`harness-init` は本キーを把握していない）。
 
 ## 夜間運用
 

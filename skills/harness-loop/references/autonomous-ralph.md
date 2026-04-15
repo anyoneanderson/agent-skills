@@ -23,9 +23,11 @@ sprint (8 iter default), Boot is ~1% of elapsed time.
 
 ## Wrapper script template
 
-Install as `.harness/scripts/ralph-loop.sh` when the user picks
-`autonomous-ralph` at loop start. harness-init ships the baseline;
-harness-loop Step 2 writes this file only when mode is selected.
+The template below is the authoritative `ralph-loop.sh`. Install it at
+`.harness/scripts/ralph-loop.sh` the first time `autonomous-ralph` is
+selected (`harness-loop` Step 2 writes it on mode selection; it is not
+shipped by `harness-init` in v1). Keep one copy per project — a
+project-local edit survives re-installs only if you version it in git.
 
 ```bash
 #!/usr/bin/env bash
@@ -145,9 +147,10 @@ while :; do
 done
 ```
 
-`_config.yml.scheduled_ralph_every` sets `RALPH_EVERY` (default 5).
-`harness-init` records this at setup time when `scheduled` is
-selectable.
+`RALPH_EVERY` comes from (in order): the `--ralph-every <N>` CLI flag
+passed to `/harness-loop`, the `RALPH_EVERY` env var, or the literal
+default `5`. v1 does not read this from `_config.yml`; `harness-init`
+is not aware of the key.
 
 ## Running overnight
 

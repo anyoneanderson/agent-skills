@@ -123,7 +123,7 @@ Orchestrator は Planner に以下を含む単一プロンプトを渡す:
 2. 各 `feedback/generator-<r>.md`（round 1..3）
 3. 各 `feedback/evaluator-<r>.md`（round 1..3）
 4. 該当する rubric プリセット
-   (`../../rubric-presets.ja.md#<project-type>`)
+   (`../../harness-init/references/rubric-presets.ja.md#<project-type>`)
 5. 固定指示:
 
 ```

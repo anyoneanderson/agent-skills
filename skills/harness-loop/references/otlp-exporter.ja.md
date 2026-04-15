@@ -15,10 +15,12 @@ REQ-092 を扱う。`.harness/metrics.jsonl` を読んで OpenTelemetry Protocol
 
 ## インストール
 
-`harness-init` は `hook_level == strict` の時
-`.harness/scripts/metrics-exporter.sh` を配置する。スクリプトは
-idempotent ではない: 2 回起動すると cursor ファイルで tail reader が race
-する。常にプロジェクトあたり 1 インスタンスのみ動作させる。
+v1 では `harness-init` は `.harness/scripts/metrics-exporter.sh` を
+出荷しない。strict モード採用時に本ファイル末尾のテンプレートから手動で
+作成する（将来 `/harness-loop --install-metrics-exporter` サブコマンド化
+予定）。スクリプトは idempotent ではない: 2 回起動すると cursor ファイルで
+tail reader が race する。常にプロジェクトあたり 1 インスタンスのみ動作
+させる。
 
 典型的なデプロイパターン:
 

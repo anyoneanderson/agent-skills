@@ -126,7 +126,8 @@ The Orchestrator passes the Planner a single prompt containing:
 1. `contract.md` current draft (frontmatter + acceptance scenarios)
 2. Each `feedback/generator-<r>.md` (rounds 1..3)
 3. Each `feedback/evaluator-<r>.md` (rounds 1..3)
-4. The relevant rubric preset (`../../rubric-presets.md#<project-type>`)
+4. The relevant rubric preset
+   (`../../harness-init/references/rubric-presets.md#<project-type>`)
 5. A fixed instruction:
 
 ```

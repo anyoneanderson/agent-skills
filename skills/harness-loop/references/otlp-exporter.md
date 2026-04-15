@@ -15,8 +15,10 @@ ships but is a no-op.
 
 ## Install
 
-`harness-init` places `.harness/scripts/metrics-exporter.sh` when
-`hook_level == strict`. The script is idempotent: running it twice
+`.harness/scripts/metrics-exporter.sh` is not shipped by `harness-init`
+in v1. Create it manually from the template at the end of this file
+(or a future `/harness-loop --install-metrics-exporter` subcommand when
+strict mode is in use). The script is not idempotent: running it twice
 starts two tail readers that race on the cursor file. Always ensure
 only one instance runs per project.
 
