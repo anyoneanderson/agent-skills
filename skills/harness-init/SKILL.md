@@ -236,6 +236,7 @@ Emit to the user:
 - [rubric-presets.md](references/rubric-presets.md) — axis sets per project type
 - [hooks-templates.md](references/hooks-templates.md) — settings.json by level
 - [settings-merge.md](references/settings-merge.md) — non-clobbering merge algorithm
+- [scripts.md](references/scripts.md) — guard scripts in `.harness/scripts/`
 - [claudemd-patch.md](references/claudemd-patch.md) — idempotent CLAUDE.md pointer patch
 - [resilience-schema.md](references/resilience-schema.md) — progress/state/metrics schemas
 - [templates/](references/templates/) — product-spec, sprint-contract, shared_state

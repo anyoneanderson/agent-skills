@@ -1,0 +1,62 @@
+# Tier-A destructive-operation patterns (POSIX ERE, one per line).
+# Matched against .tool_input.command by .harness/scripts/tier-a-guard.sh.
+# On hit (strict mode) the command is denied and _state.json.pending_human=true.
+# Blank lines and # comments are ignored.
+
+# --- Privilege escalation ---
+^[[:space:]]*sudo([[:space:]]|$)
+^[[:space:]]*doas([[:space:]]|$)
+
+# --- Filesystem destruction ---
+(^|[[:space:]])rm[[:space:]]+(-[a-zA-Z]*[rRf]+[a-zA-Z]*[[:space:]]+)+(/|~|\$HOME)
+(^|[[:space:]])rm[[:space:]]+-rf?[[:space:]]+/[^[:space:]]*
+(^|[[:space:]])find[[:space:]].*-delete
+mkfs(\.|[[:space:]])
+(^|[[:space:]])dd[[:space:]]+.*of=/dev/
+
+# --- Git destructive ---
+git[[:space:]]+push[[:space:]]+.*--force([[:space:]]|$|-)
+git[[:space:]]+push[[:space:]]+.*-f([[:space:]]|$)
+git[[:space:]]+reset[[:space:]]+--hard
+git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f
+git[[:space:]]+branch[[:space:]]+-D
+git[[:space:]]+filter-(branch|repo)
+git[[:space:]]+update-ref[[:space:]]+-d
+
+# --- Database destructive (case-insensitive match is handled by user regex) ---
+(DROP|drop)[[:space:]]+(TABLE|DATABASE|SCHEMA|table|database|schema)
+(TRUNCATE|truncate)([[:space:]]+TABLE)?[[:space:]]
+(DELETE|delete)[[:space:]]+FROM[[:space:]].*[^W][^H][^E][^R][^E]*$
+
+# --- Publish / release ---
+npm[[:space:]]+publish
+yarn[[:space:]]+publish
+pnpm[[:space:]]+publish
+cargo[[:space:]]+publish
+gem[[:space:]]+push
+twine[[:space:]]+upload
+gh[[:space:]]+release[[:space:]]+create
+gh[[:space:]]+release[[:space:]]+delete
+
+# --- Cloud destructive ---
+aws[[:space:]]+s3[[:space:]]+rb
+aws[[:space:]]+s3[[:space:]]+rm[[:space:]]+.*--recursive
+aws[[:space:]]+.*[[:space:]]delete-(cluster|instance|bucket|table|function)
+gcloud[[:space:]]+.*[[:space:]]delete([[:space:]]|$)
+gsutil[[:space:]]+rm[[:space:]]+-r
+az[[:space:]]+.*[[:space:]]delete([[:space:]]|$)
+kubectl[[:space:]]+delete[[:space:]]+(ns|namespace|pv|pvc|node)
+terraform[[:space:]]+destroy
+docker[[:space:]]+system[[:space:]]+prune[[:space:]]+.*-a
+helm[[:space:]]+uninstall
+
+# --- Package manager uninstall/global ---
+npm[[:space:]]+uninstall[[:space:]]+.*--global
+pip[[:space:]]+uninstall[[:space:]]+.*-y
+brew[[:space:]]+uninstall[[:space:]]+--force
+
+# --- Process / system ---
+(^|[[:space:]])shutdown([[:space:]]|$)
+(^|[[:space:]])reboot([[:space:]]|$)
+(^|[[:space:]])halt([[:space:]]|$)
+(^|[[:space:]])kill[[:space:]]+-9[[:space:]]+-?1\b
