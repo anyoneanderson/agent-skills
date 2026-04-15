@@ -33,6 +33,18 @@ Coordinate worker skills (spec-code, spec-review, spec-test) to implement from s
 | `--spec {path}` | Specify .specs/ directory path (default: auto-detect) |
 | `--dry-run` | Show execution plan without making any changes |
 
+## Role: Orchestrator Only
+
+> **🚨 BLOCKING — This rule overrides everything below.**
+
+This skill is an **orchestrator**. It coordinates worker skills but does NOT perform work itself.
+
+- **Do NOT write implementation code yourself.** Always delegate to `spec-code`.
+- **Do NOT perform code reviews yourself.** Always delegate to `spec-review`.
+- **Do NOT write tests yourself.** Always delegate to `spec-test`.
+
+If a worker skill is not installed, stop and suggest installation. Never fall back to doing it yourself.
+
 ## Critical First Steps
 
 **BEFORE any implementation, execute these checks in order:**
@@ -41,12 +53,32 @@ Coordinate worker skills (spec-code, spec-review, spec-test) to implement from s
 
 2. **Parse user input**: Extract `--resume`, `--issue`, `--spec`, `--dry-run` options
 
-3. **Locate spec directory**:
-   - If `--spec` provided → use that path
-   - If issue body contains `.specs/` path → use that
-   - Otherwise → scan `.specs/` and ask user to select
+3. **Check cmux availability**:
+   ```bash
+   echo $CMUX_SOCKET_PATH
+   ```
+   If set → record that cmux dispatch is available. Propose parallel execution mode to the user before proceeding to Phase 6.
 
-4. **Locate and read project files**:
+4. **Locate spec directory** 🚨 BLOCKING:
+   - If `--spec` provided → verify the path exists, then use it
+   - **Always scan `.specs/` regardless of whether Issue body contains a path:**
+     ```bash
+     find .specs -maxdepth 2 -name "tasks.md" 2>/dev/null
+     ```
+   - If a matching spec directory is found → use it and proceed
+   - If no `.specs/` found → ask user via AskUserQuestion:
+     ```
+     question: "No spec directory found. Where are your specifications?" /
+               "仕様書ディレクトリが見つかりません。仕様書の場所を教えてください。"
+     options:
+       - "Specify path manually" / "パスを手動で指定する"
+       - "Generate specs with spec-generator" / "spec-generator で仕様書を生成する"
+     ```
+     - If user specifies a path → verify it exists and use it
+     - If user chooses spec-generator → stop and instruct: `Run /spec-generator first, then re-run /spec-implement`
+   - **Do NOT proceed to Phase 5 (branch creation) until a valid spec directory is confirmed.**
+
+5. **Locate and read project files**:
    - **Workflow**: `docs/development/issue-to-pr-workflow.md` → `docs/` → find → fallback
    - **Coding rules**: `docs/development/coding-rules.md` → `docs/` → find → fallback
    - **Review rules**: `docs/development/review_rules.md` → `docs/` → find → optional
@@ -128,8 +160,6 @@ For cmux dispatch:
 2. Map roles to agents (implementer/tester → cmux-delegate, reviewer → cmux-second-opinion)
 3. Pass skill commands — worker skills handle their own context loading via §4.0
 
-**Key rule: Do NOT write implementation code yourself. Do NOT perform reviews yourself. Always delegate to worker skills.**
-
 ### Phase 7: Final Quality Gate
 
 After all tasks complete:
@@ -159,7 +189,7 @@ gh pr create \
 |---|---|
 | Not a git repository | Error: must be in a git repository |
 | `gh` CLI not available | Error: guide user to install/auth |
-| `.specs/` not found | Warning: switch to Issue-only minimal mode |
+| `.specs/` not found | 🚨 BLOCKING: ask user for path or suggest spec-generator |
 | `requirement.md` missing | Warning: use Issue body as requirements |
 | `tasks.md` missing | Warning: generate simple checklist from Issue |
 | On protected branch | 🚨 BLOCKING: stop, require feature branch |
