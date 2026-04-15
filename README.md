@@ -26,6 +26,25 @@ Reusable AI agent skills for specification-driven development.
 | [harness-plan](skills/harness-plan/) | Plan an epic for /harness: draft product-spec.md interactively, derive roadmap.md with bundling judgement, emit one tracker Issue per sprint |
 | [harness-loop](skills/harness-loop/) | Run the GAN control loop: per sprint, negotiate the contract, iterate Generator ⇄ Evaluator to rubric convergence, open the PR. Supports interactive / continuous / autonomous-ralph / scheduled modes with Principal Skinner stop guards |
 
+### /spec vs /harness — how they fit together
+
+The two skill series are **complementary, not alternatives**. A typical
+project uses them sequentially across its lifecycle:
+
+| Phase | Activity | Skills |
+|---|---|---|
+| Phase 0 | Project scaffolding, schema, UI tone, architecture | `/spec-generator` (human-in-the-loop dialogue) |
+| Phase 1 | Rule & workflow codification | `/spec-rules-init`, `/spec-workflow-init` → writes `docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` |
+| Phase 2 | Feature factory (autonomous sprint delivery) | `/harness-init` → `/harness-plan` → `/harness-loop` |
+
+`docs/coding-rules.md`, `docs/review_rules.md`, and
+`docs/issue-to-pr-workflow.md` are the **shared substrate** — both
+series read them (ASM-008). `/harness` skills do not regenerate these;
+they assume `/spec-rules-init` / `/spec-workflow-init` ran earlier in
+the project's lifecycle. `harness-init` detects missing files and
+prompts the user to run `/spec-rules-init` first, but can proceed
+without them at reduced rubric coverage.
+
 ## Installation
 
 ```bash

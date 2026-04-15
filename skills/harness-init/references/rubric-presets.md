@@ -20,7 +20,7 @@ For projects with a user-facing UI (HTML/CSS/JS, mobile web, SPAs).
 | Axis | Weight | Threshold | Description |
 |---|---|---|---|
 | Functionality | high | 1.0 | All acceptance scenarios pass end-to-end (Playwright a11y snapshot preferred over screenshot diff) |
-| Craft | std | 0.7 | Tests exist, coding-rules.md adhered to, no lint/type errors |
+| Craft | std | 0.7 | Tests exist, coding-rules.md adhered to if present (shared with /spec series via `/spec-rules-init`); unscored when absent, no lint/type errors |
 | Design | std | 0.7 | Visual hierarchy, spacing, and UX flow match product-spec intent; no accidental scope creep |
 | Originality | low | 0.5 | Avoids AI-template boilerplate (stock Bootstrap look, generic hero sections); feels intentional |
 
@@ -37,7 +37,7 @@ For backend services exposing HTTP / gRPC / GraphQL endpoints without a UI.
 | Axis | Weight | Threshold | Description |
 |---|---|---|---|
 | Functionality | high | 1.0 | All endpoint scenarios pass (contract tests, status codes, payload shapes) |
-| Craft | std | 0.7 | Error handling, input validation, logging; coding-rules.md adhered to |
+| Craft | std | 0.7 | Error handling, input validation, logging; coding-rules.md adhered to if present (shared with /spec series via `/spec-rules-init`); unscored when absent |
 | Consistency | std | 0.7 | Naming, response envelope, error format, pagination — uniform across endpoints |
 | Documentation | low | 0.6 | OpenAPI / schema / inline examples present for every public endpoint |
 
@@ -54,7 +54,7 @@ For command-line tools invoked by humans or CI pipelines.
 | Axis | Weight | Threshold | Description |
 |---|---|---|---|
 | Functionality | high | 1.0 | Every documented command/flag produces the specified exit code and output |
-| Craft | std | 0.7 | Tests cover happy path + error paths; coding-rules.md adhered to |
+| Craft | std | 0.7 | Tests cover happy path + error paths; coding-rules.md adhered to if present (shared with /spec series via `/spec-rules-init`); unscored when absent |
 | Ergonomics | std | 0.7 | Help text clear; errors actionable; sensible defaults; no surprising interactive prompts in non-TTY mode |
 | Documentation | low | 0.6 | README shows canonical examples; `--help` covers every flag |
 

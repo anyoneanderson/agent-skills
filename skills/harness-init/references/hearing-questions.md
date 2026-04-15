@@ -8,6 +8,28 @@ AskUserQuestion round presents 1–4 questions with 2–4 options each; the
 The `(Recommended)` marker is appended to the option name — not the
 description — so it surfaces in the UI.
 
+## Prerequisites prompt (pre-Round 1)
+
+If `docs/coding-rules.md`, `docs/review_rules.md`, or
+`docs/issue-to-pr-workflow.md` is missing, ask this **before** Round 1
+(per SKILL.md §Prerequisites / ASM-008):
+
+```
+question: "Shared rules files are missing under docs/. Proceed anyway?" /
+          "docs/ の共有ルールファイルが不在です。続行しますか？"
+
+options:
+  - name: "Run /spec-rules-init first (Recommended) / 先に /spec-rules-init を実行（推奨）"
+    description: "Stops harness-init so you can generate the shared substrate; resume harness-init afterwards."
+  - name: "Proceed without them (reduced rubric coverage) / 無しで続行（rubric カバレッジ低下）"
+    description: "harness still functions; Evaluator skips the Craft 'coding-rules adherence' criterion."
+```
+
+If the user picks "Run /spec-rules-init first", surface the guidance and
+halt without generating. If "Proceed without them", continue to Round 1
+and annotate `_config.yml` with `shared_foundation: missing` so Craft
+axis scoring adapts at runtime.
+
 ---
 
 ## Round 1 — Project type
