@@ -187,17 +187,19 @@ Each Round 7 answer flows to a specific runtime consumer:
 
 | Answer | `_config.yml` key | Consumer | Enforcement |
 |---|---|---|---|
-| max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — allow stop when `_state.json.iterations >= max` |
-| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | Allow stop when `_state.json.wall_time_sec >= max` |
-| max_cost_usd | `max_cost_usd` | `stop-guard.sh` | Allow stop when `_state.json.cost_usd >= max` |
+| max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — allow stop when `_state.json.iteration >= max` |
+| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | Allow stop when `now − _state.json.start_time >= max` |
+| max_cost_usd | `max_cost_usd` | `stop-guard.sh` | Allow stop when `_state.json.cumulative_cost_usd >= max` |
 | allowed_mcp_servers | `allowed_mcp_servers` | `.harness/scripts/mcp-allowlist.sh` | strict hook_level only — deny `mcp__<server>__*` if `<server>` not in list |
 | (constant) | `rubric_stagnation_n: 3` | `stop-guard.sh` | Allow stop when `_state.json.rubric_stagnation_count >= n` |
+
+State-key names follow `references/resilience-schema.md` §\_state.json.
 
 Update paths:
 
 - `harness-init` Step 2 writes these to `.harness/_config.yml` atomically.
-- `harness-loop` maintains the corresponding `_state.json` counters
-  (`iterations`, `wall_time_sec`, `cost_usd`, `rubric_stagnation_count`)
+- `harness-loop` maintains the corresponding `_state.json` fields
+  (`iteration`, `start_time`, `cumulative_cost_usd`, `rubric_stagnation_count`)
   during each sprint.
 - `harness-rules-update` may raise caps only after a completed sprint (never
   mid-sprint) to avoid Principal Skinner evasion.

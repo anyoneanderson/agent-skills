@@ -173,17 +173,19 @@ Round 7 の各回答は特定のランタイム消費者へ流れる：
 
 | 回答項目 | `_config.yml` キー | 消費者 | 強制 |
 |---|---|---|---|
-| max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — `_state.json.iterations >= max` で stop 許可 |
-| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | `_state.json.wall_time_sec >= max` で stop 許可 |
-| max_cost_usd | `max_cost_usd` | `stop-guard.sh` | `_state.json.cost_usd >= max` で stop 許可 |
+| max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — `_state.json.iteration >= max` で stop 許可 |
+| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | `now − _state.json.start_time >= max` で stop 許可 |
+| max_cost_usd | `max_cost_usd` | `stop-guard.sh` | `_state.json.cumulative_cost_usd >= max` で stop 許可 |
 | allowed_mcp_servers | `allowed_mcp_servers` | `.harness/scripts/mcp-allowlist.sh` | strict hook_level のみ — `mcp__<server>__*` のうち `<server>` が不在なら deny |
 | （定数） | `rubric_stagnation_n: 3` | `stop-guard.sh` | `_state.json.rubric_stagnation_count >= n` で stop 許可 |
+
+state キー名は `references/resilience-schema.ja.md` §\_state.json に準拠。
 
 更新パス：
 
 - `harness-init` Step 2 が `.harness/_config.yml` に atomic に書き込む
-- `harness-loop` がスプリント中に対応する `_state.json` カウンタ
-  （`iterations`, `wall_time_sec`, `cost_usd`, `rubric_stagnation_count`）を維持
+- `harness-loop` がスプリント中に対応する `_state.json` フィールド
+  （`iteration`, `start_time`, `cumulative_cost_usd`, `rubric_stagnation_count`）を維持
 - `harness-rules-update` は完了済みスプリント後にのみ上限を引き上げ可能
   （スプリント途中の変更は Principal Skinner 迂回に繋がるため禁止）
 
