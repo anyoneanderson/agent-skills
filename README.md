@@ -24,6 +24,7 @@ Reusable AI agent skills for specification-driven development.
 | [skill-suggest](skills/skill-suggest/) | Auto-detect project tech stack and suggest optimal skills from skills.sh registry |
 | [harness-init](skills/harness-init/) | Install the Harness control loop (Planner/Generator/Evaluator sub-agents, hooks, guard scripts, resilience files) into a project |
 | [harness-plan](skills/harness-plan/) | Plan an epic for /harness: draft product-spec.md interactively, derive roadmap.md with bundling judgement, emit one tracker Issue per sprint |
+| [harness-loop](skills/harness-loop/) | Run the GAN control loop: per sprint, negotiate the contract, iterate Generator ⇄ Evaluator to rubric convergence, open the PR. Supports interactive / continuous / autonomous-ralph / scheduled modes with Principal Skinner stop guards |
 
 ## Installation
 
@@ -48,6 +49,7 @@ npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
 npx skills add anyoneanderson/agent-skills --skill harness-plan -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 ```
 
 > **Note**: cmux skills require [cmux](https://cmux.dev/) (macOS 14.0+) and must be run inside a cmux session.
