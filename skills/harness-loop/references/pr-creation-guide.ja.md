@@ -20,23 +20,23 @@ PR 作成前に確認:
 ## ブランチモデル
 
 ```
-main（または _config.yml.default_branch）
+<default-branch>
  └── harness/<epic>                 ← epic ブランチ（任意、後述）
       ├── harness/<epic>/sprint-1-<feature>    ← split sprint PR ブランチ
       └── harness/<epic>/sprint-2-<bundle>     ← bundled sprint PR ブランチ
 ```
 
-有効な 2 形態:
+`<default-branch>` は実行時解決:
+`git symbolic-ref refs/remotes/origin/HEAD`（例: `origin/main`）→
+`git config --get init.defaultBranch` → 文字列 `main` の順で探索する。
+invocation 単位で上書きしたい場合は `--base <branch>` を渡す。
 
-- **Flat**: 各 sprint を `main` から直接分岐。PR 宛先は `main`。
-  シンプル。4 sprint 未満の epic 推奨。
-- **Epic stacking**: `main` から epic ブランチを 1 本、sprint ブランチは
-  epic ブランチから分岐、PR 宛先も epic ブランチ。epic は最後にまとめて
-  merge。大きな epic でレビュー文脈を確保したい場合に適する。
-  `_config.yml.pr_stack == true` が必要。
-
-epic 開始時にどちらかを選び `_state.json.pr_model` に記録する。epic 内で
-混ぜない。
+v1 は **flat** 形態のみ: 各 sprint を解決済みのデフォルトブランチから
+直接分岐し、PR 宛先も同ブランチとする。Epic stacking（epic ブランチを
+デフォルトから 1 本、sprint ブランチは epic ブランチから分岐、epic を
+最後にまとめて merge）は opt-in。epic 初回 sprint に `--pr-stack` を
+渡せば採用され、以降は `_state.json.pr_model`（`flat` または `stack`）
+に保持される。epic 内で混ぜない。
 
 ## Split PR（1 sprint = 1 feature = 1 PR）
 
@@ -51,7 +51,7 @@ gh pr create \
   --assignee @me
 ```
 
-`<base-branch>` は `_config.yml.default_branch`（flat）または
+`<base-branch>` は解決済みデフォルトブランチ（flat）または
 `harness/<epic>`（stacking）。`--draft` は**使わない** — Evaluator の
 承認済みなので。
 
@@ -189,8 +189,10 @@ bundle が `roadmap.md` で定義されているが sprint Issue が作られて
 v1 はシンプルに:
 
 - **Reviewers**: デフォルト無し。レビュー経路を望むユーザは
-  `_config.yml.pr_reviewers: [user1, user2]` を設定、harness-loop が
-  `--reviewer user1 --reviewer user2` を追加
+  `/harness-loop` 呼び出し時に `--reviewer <login>` を渡すか、
+  リポジトリレベルのデフォルトレビュアーを `gh` CLI 側で設定する
+  （例: shell alias 経由で `gh pr create ... --reviewer` に伝える）。
+  harness-loop は v1 ではこの用途で `_config.yml` を参照しない
 - **Labels**: 常に `harness-loop` を付与。sprint の `roadmap.md` に
   `labels:` があれば pass-through
 - **Milestone**: `_state.json.epic_issue` があり、その milestone が
@@ -201,7 +203,9 @@ v1 はシンプルに:
 成功時 `gh` は PR URL を stdout に出す。Orchestrator は:
 
 1. stdout から URL を抽出
-2. `_state.json.sprint_issues[<n>].pr` に保存
+2. `_state.json.sprint_prs[<n>]` に保存（harness-loop が追加する
+   additive キー。harness-plan が書いた Issue URL の
+   `sprint_issues[<n>]` は不変）
 3. `shared_state.md/Decisions` に 1 行追記:
    ```
    [<ts>] PR opened: sprint-<n> <pr-url> (bundling=<split|bundled>)
@@ -229,7 +233,7 @@ v1 は `glab` を呼び出さない。代わりに sprint pass 後:
    - sprint-<n>: branch=<branch> body=sprints/sprint-<n>-*/pr-body.md
    ```
 4. ユーザ向け表示: "pending-prs.md 台帳から手動で MR を開いてください"
-5. `_state.json.sprint_issues[<n>].pr = "gitlab:pending"` に設定
+5. `_state.json.sprint_prs[<n>] = "gitlab:pending"` に設定
 
 ### `tracker: none`
 

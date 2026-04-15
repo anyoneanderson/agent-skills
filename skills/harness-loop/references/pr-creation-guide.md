@@ -24,23 +24,23 @@ If any pre-condition fails, do not open a PR. Log the reason to
 ## Branch model
 
 ```
-main (or _config.yml.default_branch)
+<default-branch>
  └── harness/<epic>                 ← epic branch (optional; see below)
       ├── harness/<epic>/sprint-1-<feature>    ← split sprint PR branch
       └── harness/<epic>/sprint-2-<bundle>     ← bundled sprint PR branch
 ```
 
-Two valid shapes:
+`<default-branch>` is resolved at runtime — first by
+`git symbolic-ref refs/remotes/origin/HEAD` (e.g., `origin/main`), then
+by `git config --get init.defaultBranch`, then by the literal `main`.
+The user can override for a single invocation with `--base <branch>`.
 
-- **Flat**: each sprint branches directly off `main`. PR target is
-  `main`. Simplest; recommended for < 4 sprint epics.
-- **Epic stacking**: one epic branch off `main`, sprint branches off
-  epic branch, PRs target the epic branch, and the epic is merged
-  last. Better for reviewer context in large epics. Requires
-  `_config.yml.pr_stack == true`.
-
-Pick one at epic start and record in `_state.json.pr_model`. Do not
-mix within an epic.
+v1 uses the **flat** shape only: each sprint branches directly off the
+resolved default branch; PR target is that same branch. Epic stacking
+(one epic branch off default, sprint branches off the epic branch,
+epic merged last) is opt-in with `--pr-stack` on the first sprint of
+an epic; the choice persists in `_state.json.pr_model` (`flat` or
+`stack`). Do not mix within an epic.
 
 ## Split PR (one sprint = one feature = one PR)
 
@@ -55,7 +55,7 @@ gh pr create \
   --assignee @me
 ```
 
-`<base-branch>` is `_config.yml.default_branch` (flat) or
+`<base-branch>` is the resolved default branch (flat) or
 `harness/<epic>` (stacking). Do **not** use `--draft` — the Evaluator
 has already signed off.
 
@@ -195,9 +195,11 @@ discrepancy in `shared_state.md/Decisions`.
 
 v1 keeps these simple:
 
-- **Reviewers**: none by default. Users who want a review path set
-  `_config.yml.pr_reviewers: [user1, user2]` and `harness-loop` adds
-  `--reviewer user1 --reviewer user2`.
+- **Reviewers**: none by default. Users who want a review path pass
+  `--reviewer <login>` when invoking `/harness-loop`, or set the
+  repository-level default reviewer via `gh` (e.g.,
+  `gh pr create ... --reviewer` via a shell alias). harness-loop does
+  not read `_config.yml` for this in v1.
 - **Labels**: add `harness-loop` always. If the feature's sprint in
   `roadmap.md` carries `labels:`, pass them through.
 - **Milestone**: if `_state.json.epic_issue` exists and its milestone
@@ -208,7 +210,9 @@ v1 keeps these simple:
 On success, `gh` prints the PR URL. The Orchestrator:
 
 1. Parses the URL from stdout
-2. Stores it at `_state.json.sprint_issues[<n>].pr`
+2. Stores it at `_state.json.sprint_prs[<n>]` (an additive key owned
+   by harness-loop; `sprint_issues[<n>]` remains the
+   harness-plan-written Issue URL string and is untouched)
 3. Appends a line to `shared_state.md/Decisions`:
    ```
    [<ts>] PR opened: sprint-<n> <pr-url> (bundling=<split|bundled>)
@@ -237,7 +241,7 @@ v1 does not shell out to `glab`. Instead, after the sprint passes:
    - sprint-<n>: branch=<branch> body=sprints/sprint-<n>-*/pr-body.md
    ```
 4. Print to user: "Open MR manually using the pending-prs.md ledger"
-5. Set `_state.json.sprint_issues[<n>].pr = "gitlab:pending"`
+5. Set `_state.json.sprint_prs[<n>] = "gitlab:pending"`
 
 ### `tracker: none`
 

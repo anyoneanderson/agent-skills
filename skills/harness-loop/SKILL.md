@@ -90,7 +90,7 @@ In `interactive` mode the skill confirms resume vs restart via
 
 ## Execution Flow (10 steps)
 
-### Step 1: Detect State and Mode Context
+### Step 1: Detect State, Pin Generator Backend, Compute Context
 
 Parse `_state.json`. If `.mode` is already set (resume path), honour it.
 Otherwise Step 2 elicits the mode. Compute:
@@ -98,6 +98,25 @@ Otherwise Step 2 elicits the mode. Compute:
 - `current_epic`, `current_sprint`, `phase`, `iteration`
 - Remaining Principal Skinner budget (see Step 7)
 - Active sprint directory: `.harness/<epic>/sprints/sprint-<n>-<feature>/`
+
+**Pin the Generator backend once per loop run (REQ-060)**:
+
+```
+backend = _config.yml.generator_backend    # claude | codex_cmux | codex_plugin | other
+
+if backend == "codex_cmux" and command -v cmux fails:
+  backend = "claude"
+  append progress.md:
+    [<ts>] decision: generator_backend codex_cmux unavailable (cmux missing)
+           — fell back to claude for this run
+```
+
+Persist the effective backend to
+`_state.json.effective_generator_backend` for the rest of the run.
+Every `dispatch Generator` call in Step 6 uses this pinned value; it
+does not re-evaluate mid-loop. On resume in a later session the pin is
+re-derived from current `_config.yml` + env, not inherited, so a
+newly-installed cmux is picked up automatically.
 
 ### Step 2: Execution Mode Selection (T-037)
 
@@ -108,7 +127,9 @@ modes read any branching value from `_config.yml`.
 
 ```
 if _state.json.mode is null:
-  if interactive session (TTY + not -p):
+  if mode passed via --mode <value> flag:
+    mode = <value>    # user-explicit; no prompt
+  else if interactive session (TTY + not -p):
     AskUserQuestion:
       question: "Execution mode?" / "実行モード?"
       options:
@@ -117,9 +138,14 @@ if _state.json.mode is null:
         - "autonomous-ralph — fresh context per iter / 毎 iter 独立 context"
         - "scheduled — Ralph every N iters / N iter 毎に Ralph"
   else:
-    mode = _config.yml.default_mode | "continuous"
+    mode = "continuous"    # safe default for non-interactive with no flag
   persist to _state.json.mode
 ```
+
+Mode override precedence: `--mode` CLI flag > existing `_state.json.mode`
+> interactive prompt > `"continuous"` default. harness-loop does not
+read a `default_mode` from `_config.yml` in v1 (harness-init does not
+hear that value).
 
 | Mode | Loop control | AskUserQuestion | Reference |
 |---|---|---|---|
@@ -200,6 +226,7 @@ while iteration < contract.max_iterations:
   start_ts = now()
 
   # Generator turn
+  _state.json.phase = "impl"
   dispatch Generator with:
     - contract.md (frozen)
     - shared_state.md (read-only)
@@ -207,6 +234,7 @@ while iteration < contract.max_iterations:
   Generator edits source files; appends to feedback/generator-<iter>.md
 
   # Evaluator turn
+  _state.json.phase = "evaluation"
   dispatch Evaluator with:
     - contract.md
     - shared_state.md
@@ -214,55 +242,65 @@ while iteration < contract.max_iterations:
   Evaluator runs rubric checks; appends to feedback/evaluator-<iter>.md
   Orchestrator copies verdict to shared_state.md/WorkLog and /Evaluation
 
-  # Per-iteration checkpoint (Step 7)
-  checkpoint(iteration, start_ts)
-
-  if all axes >= threshold:
+  # Decide verdict and terminal state BEFORE the checkpoint (Step 7)
+  # so every durable artefact lands in the same atomic write.
+  verdict = "pass" if all axes >= threshold else "fail"
+  if verdict == "pass":
     contract.status = "done"
-    break
-
-  # Principal Skinner check (Step 7)
-  if any stop-condition fires:
+    _state.json.phase = "pr"       # transitions to "done" in Step 9
+    terminate_loop = true
+  else if any Principal Skinner stop-condition fires:
     contract.status = "aborted"
-    set _state.json.aborted_reason
-    break
+    _state.json.aborted_reason = "<condition>"
+    _state.json.phase = "impl"     # kept so resume sees the abort context
+    terminate_loop = true
+  else:
+    terminate_loop = false
+
+  # Per-iteration checkpoint (Step 7) — atomic persistence of verdict + state
+  checkpoint(iteration, start_ts, verdict, contract.status)
+
+  if terminate_loop: break
 ```
 
-Evaluator failure format (input to the next Generator call):
-
-```yaml
-iter: <n>
-verdict: fail
-failing_axes:
-  - axis: Functionality
-    score: 0.6
-    threshold: 1.0
-    notes: "AS-2 fails: login redirect 500s"
-    evidence: sprints/sprint-<n>-*/evidence/AS-2-run-<iter>.trace
-retry_hint: "Tighten session lookup; see evidence trace line 42"
-```
-
-Each iteration ends with a commit (see Step 7) so every attempt is
-reviewable in git history.
+Evaluator failure feedback (input to the next Generator call) lists
+`iter`, `verdict: fail`, a `failing_axes` array of
+`{axis, score, threshold, notes, evidence}`, and a `retry_hint` line.
+Evaluator writes this to `feedback/evaluator-<iter>.md`; Orchestrator
+passes it into the next Generator dispatch. Each iteration ends with
+a commit (Step 7) so every attempt is reviewable in git history.
 
 ### Step 7: Iteration Checkpoint and Principal Skinner (T-036, T-038)
 
-At the end of every iteration (pass OR fail OR abort), atomically:
+At the end of every iteration (pass OR fail OR abort), persist verdict
+and state in a single atomic pass so a crash between any two writes
+leaves resume deterministic:
 
-1. **Update `_state.json`** via `jq` into a tmp file, then rename:
+1. **Update `contract.md`** when `verdict == "pass"` or Principal
+   Skinner fired: set frontmatter `status: done | aborted`, fill the
+   `Sprint Outcome` section (final iteration, last commit hint,
+   aborted reason if any).
+
+2. **Update `_state.json`** via `jq` into a tmp file, then rename:
    - `iteration`, `last_agent`, `next_action`, `last_commit`
+   - `phase` (impl → evaluation → pr on pass, or kept with
+     `aborted_reason` set on Principal Skinner hit)
    - `features_pass_fail` (per-axis for this sprint's features)
    - `cumulative_cost_usd += cost_this_iter`
-   - `rubric_stagnation_count` — increment if no axis improved this iter; reset to 0 on any improvement
+   - `rubric_stagnation_count` — increment if no axis improved this
+     iter; reset to 0 on any improvement
+   - `aborted_reason` if Principal Skinner fired
 
-2. **Append one line to `.harness/metrics.jsonl`**:
+3. **Append one line to `.harness/metrics.jsonl`**:
    ```json
    {"ts":"<ISO>","iter":<n>,"sprint":<s>,"agent":"<role>","duration_ms":<d>,"input_tokens":<i>,"output_tokens":<o>,"cost_usd":<c>,"rubric_scores":{...},"tool_calls":<t>,"tool_failures":<f>}
    ```
 
-3. **Commit**: `git add -A && git commit -m "harness-loop: sprint-<n> iter-<iter>"` (non-fatal on `git commit` failure; log to progress.md and continue).
+4. **Commit**: `git add -A && git commit -m "harness-loop: sprint-<n> iter-<iter>"` captures the contract.md status change, feedback files for this iteration, evidence artefacts, and the state/metrics updates in one commit (non-fatal on `git commit` failure; log to progress.md and continue).
 
-4. **Principal Skinner stop-check** — evaluate all five conditions; on any hit set `_state.json.aborted_reason` and stop:
+5. **Principal Skinner stop-check** was performed in Step 6 (before
+   this checkpoint) so `aborted_reason` was already staged for atomic
+   write above. The five conditions:
 
    | Condition | Computed from | Default |
    |---|---|---|
@@ -272,7 +310,7 @@ At the end of every iteration (pass OR fail OR abort), atomically:
    | `cumulative_cost_usd >= max_cost_usd` | state + `_config.yml.max_cost_usd` | 20.0 |
    | `pending_human == true` | set by `.harness/scripts/tier-a-guard.sh` PreToolUse hook | — |
 
-5. Append a `progress.md` line:
+6. Append a `progress.md` line:
    ```
    [<ts>] evaluation: iter=<n> verdict=<pass|fail> axes="f=.. c=.. d=.. o=.."
    ```
@@ -284,6 +322,35 @@ At the end of every iteration (pass OR fail OR abort), atomically:
 Principal Skinner never deletes state. The loop stops and leaves
 everything on disk for a later resume (pending_human), a replan
 (rubric_stagnation), or a manual budget bump (cost_cap, wall_time).
+
+#### Interactive per-iteration gate (REQ-076)
+
+In `interactive` mode only, after the Step 7 checkpoint but before
+entering the next iteration (or Step 8 on pass), ask:
+
+```
+AskUserQuestion:
+  question: "iter=<n> verdict=<pass|fail>. Next?" /
+            "iter=<n> verdict=<pass|fail>。次は?"
+  options:
+    - "continue — run the next iteration / 次の iteration へ"
+    - "restart — /clear then resume via Boot Sequence / /clear 後に Boot Sequence で再開"
+    - "pause — exit cleanly; state preserved / 中断（state は保持）"
+    - "abort — set aborted_reason=user and stop / aborted_reason=user で停止"
+```
+
+- **continue** → loop body iterates
+- **restart** → emit user instruction ("Run `/clear` now, then re-invoke
+  `/harness-loop`; the Boot Sequence will resume from this checkpoint
+  using progress.md + _state.json + git only") and exit the skill.
+  T-054 validates that this path is fully recoverable
+- **pause** → exit 0; leave `phase` as-is
+- **abort** → set `_state.json.aborted_reason = "user"`; commit; exit
+
+`continuous`, `autonomous-ralph`, and `scheduled` modes skip this gate
+entirely (ASM-007). `continuous` proceeds immediately to the next
+iteration; Ralph/scheduled let the external wrapper decide via its own
+Principal Skinner loop.
 
 ### Step 8: PR Creation on Sprint Pass (T-034)
 
@@ -300,8 +367,12 @@ When `contract.status == "done"`:
    entry already references `bundled_with`).
 4. PR body is built from the template in `pr-creation-guide.md`, quoting
    the `shared_state.md/Evaluation` block and linking the sprint Issue
-   (`_state.json.sprint_issues[<n>]`).
-5. Record PR URL to `_state.json.sprint_issues[<n>].pr` and append
+   (`_state.json.sprint_issues[<n>]`, a URL string written by
+   `harness-plan` — see
+   `../harness-init/references/resilience-schema.md`).
+5. Record the PR URL to a new additive key `_state.json.sprint_prs[<n>]`
+   (a `sprint → PR URL` map; absent until the first PR is opened, so
+   harness-plan's `sprint_issues` contract is unchanged) and append
    `progress.md`:
    ```
    [<ts>] decision: sprint-<n> PR opened <url>
@@ -336,11 +407,9 @@ else:
   go to Step 10
 ```
 
-`cumulative_cost_usd` and `start_time`'s wall-time budget reset is a
-policy choice. v1 keeps `cumulative_cost_usd` accumulating across the
-whole epic (so the cost cap is epic-wide). `start_time` resets per
-sprint so the 8h wall-time cap applies per sprint. Document both in
-`progress.md` on reset.
+Reset policy: `cumulative_cost_usd` accumulates across the whole epic
+(cost cap is epic-wide); `start_time` resets per sprint (wall-time cap
+applies per sprint). Record both in `progress.md` on sprint transition.
 
 ### Step 10: Final Summary
 
@@ -357,9 +426,8 @@ On `completed == true`:
   ```
 - Do not touch `_state.json.completed` again. Leave for audit.
 
-Suggest `/harness-rules-update` if any sprint aborted or if
-`rubric_stagnation` fired — those are exactly the failure shapes that
-skill refines.
+Suggest `/harness-rules-update` on any abort or `rubric_stagnation`
+trigger — those failures are exactly what that skill refines.
 
 ## Error Handling
 
@@ -379,26 +447,16 @@ skill refines.
 ## Usage
 
 ```
-# Start from a planned epic
-/harness-loop
-
-# Resume after compact / restart / abort (auto-detected from _state.json)
-/harness-loop
-
-# Force a specific mode (overrides stored mode; recorded to _state.json)
-/harness-loop --mode continuous
-/harness-loop --mode autonomous-ralph
-/harness-loop --mode scheduled --ralph-every 5
-
-# Force a specific sprint (skip remaining earlier sprints; requires confirmation)
-/harness-loop --from-sprint 3
-
-# Replan aborted sprint (re-enter Negotiation, reset iteration to 0)
-/harness-loop --replan-current-sprint
+/harness-loop                                  # start or resume (auto-detect from _state.json)
+/harness-loop --mode continuous                # force mode (persists to _state.json)
+/harness-loop --mode autonomous-ralph          # exits after one iter; pair with shell wrapper
+/harness-loop --mode scheduled --ralph-every 5 # hybrid: 5 continuous iters, 1 Ralph
+/harness-loop --from-sprint 3                  # skip to sprint 3 (requires confirmation)
+/harness-loop --replan-current-sprint          # re-enter Negotiation, reset iteration to 0
 ```
 
-`--mode autonomous-ralph` exits after one iteration; pair it with the
-shell wrapper in [autonomous-ralph.md](references/autonomous-ralph.md).
+Pair `autonomous-ralph` with the wrapper in
+[autonomous-ralph.md](references/autonomous-ralph.md).
 
 ## What harness-loop does NOT do
 
