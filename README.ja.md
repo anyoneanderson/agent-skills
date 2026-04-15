@@ -23,6 +23,7 @@
 | [cmux-second-opinion](skills/cmux-second-opinion/) | cmux経由で別AIエージェントにコードや仕様書の独立レビューを依頼 |
 | [skill-suggest](skills/skill-suggest/) | プロジェクトの技術スタックを自動解析し、skills.shレジストリから最適なスキルを提案・インストール |
 | [harness-init](skills/harness-init/) | Harness 制御ループ（Planner/Generator/Evaluator サブエージェント・hooks・ガードスクリプト・耐性ファイル）をプロジェクトに導入 |
+| [harness-plan](skills/harness-plan/) | /harness の epic を計画: 対話で product-spec.md を起草、bundling 判定付き roadmap.md を導出、sprint 毎に tracker Issue を起票 |
 
 ## インストール
 
@@ -46,6 +47,7 @@ npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-plan -g -y
 ```
 
 > **Note**: cmux スキルは [cmux](https://cmux.dev/)（macOS 14.0+）が必要で、cmux セッション内で実行する必要があります。
@@ -168,6 +170,14 @@ npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
 > harness-init を実行
 ```
 
+### harness epic を計画する
+
+```
+> epic を計画
+> harness-plan を実行
+> product-spec を作成
+```
+
 ## 仕組み
 
 1. **spec-generator** が `.specs/{project}/` に構造化された仕様書を生成:
@@ -224,6 +234,8 @@ npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
 10. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
 
 11. **harness-init** が Harness 制御ループをプロジェクトへ導入。環境設定（プロジェクト種別・Generator バックエンド・Evaluator ツール・hook 強制レベル・Principal Skinner 閾値・MCP allow-list）を 1 度ヒアリングし、Planner/Generator/Evaluator サブエージェント、`.claude/settings.json` hooks、ガードスクリプト（`progress-append` / `restore-after-compact` / `stop-guard` / `tier-a-guard` / `mcp-allowlist` / `wrap-untrusted`）、耐性ファイル（`.harness/progress.md` / `_state.json` / `metrics.jsonl`）を生成する。`/harness-plan` → `/harness-loop` → `/harness-rules-update` 系列の事前準備。
+
+12. **harness-plan** が epic 単位で 1 度だけ実行され、`harness-init` と `harness-loop` の間を埋める。`product-spec.md` を対話で起草（Why / What / Out of Scope / Constraints — "How" の混入を拒否）、Planner サブエージェントに `roadmap.md` を導出させ sprint 毎に 4 結合軸（スキーマ・認証・UI・契約面）で `bundling: split|bundled` を判定、人間承認ゲートを通し、sprint 毎 contract.md 雛形を事前記入、sprint 毎に tracker Issue を起票（GitHub / GitLab / なし）する。完了後、プロジェクトは `/harness-loop` で sprint ループを開始できる状態になる。
 
 ## 互換性
 
