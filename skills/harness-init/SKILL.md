@@ -237,6 +237,7 @@ Emit to the user:
 - [hooks-templates.md](references/hooks-templates.md) — settings.json by level
 - [settings-merge.md](references/settings-merge.md) — non-clobbering merge algorithm
 - [scripts.md](references/scripts.md) — guard scripts in `.harness/scripts/`
+- [untrusted-content.md](references/untrusted-content.md) — external-content wrapping (REQ-100)
 - [claudemd-patch.md](references/claudemd-patch.md) — idempotent CLAUDE.md pointer patch
 - [resilience-schema.md](references/resilience-schema.md) — progress/state/metrics schemas
 - [templates/](references/templates/) — product-spec, sprint-contract, shared_state
