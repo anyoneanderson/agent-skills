@@ -38,9 +38,10 @@ sprint ループ前に検証:
      `AskUserQuestion`。`--auto-approve-roadmap` 指定時はデフォルトで
      新規作成し番号を `_state.json.epic_issue` に記録）
 
-`gh` が PATH にない場合は REQ-023 に従って skill を **中断** する。
-`gitlab` や `none` にサイレントフォールバックしてはならない — tracker 種別が
-利用者合意なく変わると audit trail が破綻する。
+**`tracker == github` のうえで `gh` が PATH にない場合** は REQ-023 に従って
+skill を **中断** する。`gitlab` や `none` にサイレントフォールバックしては
+ならない — tracker 種別が利用者合意なく変わると audit trail が破綻する。
+（`tracker ∈ {gitlab, none}` のときは `gh` は不要でこのチェックはスキップ。）
 
 ### sprint 毎の作成
 

@@ -339,12 +339,35 @@ Also append one progress line:
 `--replan` re-enters at Step 5 (roadmap generation) using the existing
 `product-spec.md` as input.
 
-`--auto-approve-roadmap` is the sole mechanism for bypassing the
-interactive approval gate in Step 6. The skill does not infer autonomy
-from `_config.yml` or from any harness-loop mode — those are decided
-after this skill finishes. If this flag is passed, the user takes
-responsibility for reviewing `roadmap.md` before invoking; the flag is
-logged to `progress.md` as an audit trail.
+### `--auto-approve-roadmap` — single-source semantics
+
+This flag is the **only** mechanism for converting any interactive
+checkpoint in `harness-plan` into an automatic one. The skill never
+infers autonomy from `_config.yml` or from a `harness-loop` mode — mode
+is decided after this skill finishes.
+
+When the flag is passed, the following checkpoints change behaviour as
+one coherent set:
+
+| Checkpoint | Default (no flag) | With `--auto-approve-roadmap` |
+|---|---|---|
+| Boot Sequence — resume prompt (§Boot Sequence) | Ask via AskUserQuestion | Auto-resume from `_state.json.phase` |
+| Step 1 — existing-epic dispatch | Ask continue/new/cancel | Continue if state is populated, else start new with derived name |
+| Step 2 — epic name collision | Re-ask | Append `-N` suffix and continue |
+| Step 4 — product-spec cross-check `no` | Re-open section | Emit `TODO(product-spec):` to `progress.md`, continue |
+| Step 5 — sprint count > 6 | Pause | Truncate and emit `TODO(epic-split)` |
+| Step 5 — duplicate Issue ambiguity | AskUserQuestion | Emit `TODO(issue-dup):` and skip that sprint |
+| Step 6 — roadmap approval gate | AskUserQuestion (Approve / Request / Cancel) | Auto-approve; append audit line to `progress.md` |
+
+Semantics:
+
+- The user takes responsibility for pre-reviewing the generated
+  `roadmap.md` before the skill completes; any `TODO(...)` lines left in
+  `progress.md` must be resolved before `harness-loop` starts.
+- A single invocation receives the flag or does not — the flag is not
+  toggled mid-run.
+- The flag is recorded to `progress.md` exactly once at skill start as
+  `[<ts>] harness-plan: --auto-approve-roadmap enabled` for audit.
 
 ## What harness-plan does NOT do
 

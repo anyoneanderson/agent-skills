@@ -38,10 +38,11 @@ Before iterating sprints, verify:
      creates a new epic issue by default and records its number in
      `_state.json.epic_issue`)
 
-If `gh` is not on PATH, **abort** the skill with install guidance per
-REQ-023. Do not fall back to `gitlab` or `none` — silent fallback
-corrupts the audit trail by changing tracker identity without the user's
-consent.
+**When `tracker == github` and `gh` is not on PATH**, **abort** the skill
+with install guidance per REQ-023. Do not fall back to `gitlab` or
+`none` — silent fallback corrupts the audit trail by changing tracker
+identity without the user's consent. (When `tracker ∈ {gitlab, none}`,
+`gh` is not required and this check is skipped.)
 
 ### Per-sprint create
 
