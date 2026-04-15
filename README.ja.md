@@ -22,6 +22,7 @@
 | [cmux-delegate](skills/cmux-delegate/) | 別のcmuxペインまたはワークスペースでAIエージェントにタスクを委任 |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | cmux経由で別AIエージェントにコードや仕様書の独立レビューを依頼 |
 | [skill-suggest](skills/skill-suggest/) | プロジェクトの技術スタックを自動解析し、skills.shレジストリから最適なスキルを提案・インストール |
+| [harness-init](skills/harness-init/) | Harness 制御ループ（Planner/Generator/Evaluator サブエージェント・hooks・ガードスクリプト・耐性ファイル）をプロジェクトに導入 |
 
 ## インストール
 
@@ -44,6 +45,7 @@ npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
 ```
 
 > **Note**: cmux スキルは [cmux](https://cmux.dev/)（macOS 14.0+）が必要で、cmux セッション内で実行する必要があります。
@@ -158,6 +160,14 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > ベストプラクティススキルを検索
 ```
 
+### Harness 制御ループを導入する
+
+```
+> harness を導入
+> ハーネスを初期化
+> harness-init を実行
+```
+
 ## 仕組み
 
 1. **spec-generator** が `.specs/{project}/` に構造化された仕様書を生成:
@@ -212,6 +222,8 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 ### プロジェクトセットアップ
 
 10. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
+
+11. **harness-init** が Harness 制御ループをプロジェクトへ導入。環境設定（プロジェクト種別・Generator バックエンド・Evaluator ツール・hook 強制レベル・Principal Skinner 閾値・MCP allow-list）を 1 度ヒアリングし、Planner/Generator/Evaluator サブエージェント、`.claude/settings.json` hooks、ガードスクリプト（`progress-append` / `restore-after-compact` / `stop-guard` / `tier-a-guard` / `mcp-allowlist` / `wrap-untrusted`）、耐性ファイル（`.harness/progress.md` / `_state.json` / `metrics.jsonl`）を生成する。`/harness-plan` → `/harness-loop` → `/harness-rules-update` 系列の事前準備。
 
 ## 互換性
 
