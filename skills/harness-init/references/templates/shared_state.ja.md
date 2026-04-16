@@ -7,7 +7,6 @@
   各エージェントの個別思考・交渉内容は
     sprints/sprint-<N>-<feature>/feedback/{planner,generator,evaluator}-<iter>.md
   に書く。書き込み競合を避け、このファイルを唯一の正式記録とするための設計。
-  詳細: .specs/harness-suite/design.md §9.5
 
   **APPEND-ONLY**。既存エントリの編集禁止。新しい日付エントリを追加する。
 -->

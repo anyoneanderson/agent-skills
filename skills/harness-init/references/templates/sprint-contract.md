@@ -8,7 +8,6 @@
     4. Once `status: active`, the Implementation Loop begins
 
   RULES:
-    - Schema must match .specs/harness-suite/design.md §4
     - All axes listed in Rubric must be scored by Evaluator every iteration
     - Do NOT edit after `status: active` without re-entering negotiation
 -->
