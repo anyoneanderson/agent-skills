@@ -10,6 +10,8 @@ description: |
   Harness Generator. Implements code against a frozen sprint contract.
   Negotiates contract feasibility with Evaluator up to 3 rounds before
   implementation begins. Never evaluates its own output.
+tools: Read, Write, Edit, Bash, Glob, Grep
+model: sonnet
 license: MIT
 ---
 

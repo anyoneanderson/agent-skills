@@ -149,6 +149,17 @@ Render three agent files to `.claude/agents/` using `_config.yml` values:
 Agent definitions cite the Boot Sequence and pin their role in the
 Shared-read / Isolated-write protocol (design §9.5).
 
+If the project has a `.codex/` directory (indicating Codex CLI is configured),
+also render Codex TOML agent definitions:
+
+- `.codex/agents/planner.toml` — from `references/agent-templates/planner.toml`
+- `.codex/agents/evaluator.toml` — from `references/agent-templates/evaluator.toml`
+- `.codex/agents/generator.toml` — placeholder (final form per Issue #46)
+
+Patch `.codex/config.toml` non-destructively: append `[agents.planner]`,
+`[agents.evaluator]`, `[agents.generator]` sections if not already present.
+Preserve all existing entries (e.g., `workflow-implementer`).
+
 ### Step 5: Generate Scripts (T-015)
 
 Write executable scripts to `.harness/scripts/` (chmod 755):

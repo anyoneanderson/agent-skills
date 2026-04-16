@@ -10,6 +10,8 @@ description: |
   ハーネス Planner。product-spec / roadmap / sprint 契約の作成、
   および Generator-Evaluator 交渉膠着時の裁定を担う。
   エピック開始時とスプリント間のみ稼働し、実装コードは書かない。
+tools: Read, Glob, Grep
+model: opus
 license: MIT
 ---
 
