@@ -3,12 +3,12 @@
 Three enforcement levels for `.claude/settings.json`. `harness-init` selects
 one based on the user's answer to "hook level" during hearing.
 
-**Important (ASM-005)**: Claude Code hooks receive their input as **JSON on
+**Important**: Claude Code hooks receive their input as **JSON on
 stdin**. Environment variables like `$TOOL_NAME` or `$FILE_PATH` are NOT
 injected. All scripts extract fields via `jq`.
 
 Scripts referenced below live in `.harness/scripts/` after `harness-init`
-runs. See T-015 for script contents.
+runs.
 
 ---
 
@@ -104,7 +104,7 @@ Use for learning what your project actually does before committing to strict.
 ## Level: strict
 
 Full enforcement. Blocks Tier-A operations and unlisted MCP calls. Use for
-autonomous / autonomous-ralph modes (REQ-078) where no human is watching.
+autonomous / autonomous-ralph modes where no human is watching.
 
 ```json
 {
@@ -153,9 +153,9 @@ autonomous / autonomous-ralph modes (REQ-078) where no human is watching.
 **What it covers**:
 - Everything from `warn`
 - Tier-A patterns (from `.harness/tier-a-patterns.txt`) are **denied** and
-  set `_state.json.pending_human = true` (REQ-081 / REQ-082)
+  set `_state.json.pending_human = true`
 - MCP calls are checked against `_config.yml.allowed_mcp_servers` and
-  denied if not listed (REQ-101)
+  denied if not listed
 
 **Required for autonomous modes**: `continuous`, `autonomous-ralph`,
 `scheduled`. Can be relaxed to `warn` for `interactive` mode where the
@@ -163,7 +163,113 @@ human catches misbehaviour.
 
 ---
 
-## Speed Tiers (NFR-005)
+## Codex-side hooks (generator_backend ∈ {codex_plugin, codex_cmux})
+
+When the Generator runs under Codex, Claude Code's `PostToolUse(Edit|Write)`
+hook cannot observe Codex's internal tool calls — they happen inside a
+child process. To close that gap, `harness-init` also installs a set of
+hooks on the **Codex side**, in `<project>/.codex/hooks.json`. These
+hooks run inside Codex's hook runner when Codex makes a Bash tool call
+(or starts a session).
+
+**Scope**: Codex hooks currently support only `Bash` tool interception
+(as of 2026-04 — see https://developers.openai.com/codex/hooks). Write /
+MCP / WebSearch interception is not yet implemented. The file-write gap
+is covered separately by `.harness/scripts/codex-progress-bridge.sh`,
+which reads Codex's `feedback/generator-<iter>-report.json` after the
+invocation and appends equivalent rows to `progress.md`.
+
+### Generated files (when backend ∈ codex_plugin, codex_cmux)
+
+```
+<project>/.codex/
+├── config.toml                              # [features] codex_hooks=true appended
+├── hooks.json                               # Codex hook registration
+└── hooks/
+    ├── inject-harness-context.sh            # SessionStart(startup|resume)
+    ├── tier-a-guard-codex.sh                # PreToolUse(Bash) — Tier-A double guard
+    └── codex-bash-log.sh                    # PostToolUse(Bash) — log bash results to progress.md
+```
+
+### `hooks.json` shape
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/inject-harness-context.sh",
+          "timeout": 5,
+          "statusMessage": "Injecting harness state"
+        }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/tier-a-guard-codex.sh",
+          "timeout": 5,
+          "statusMessage": "Tier-A guard (codex)"
+        }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/codex-bash-log.sh",
+          "timeout": 5,
+          "statusMessage": "Logging codex bash"
+        }]
+      }
+    ]
+  }
+}
+```
+
+`harness-init` resolves `<PROJECT_ROOT>` to an absolute path at install
+time (so the hooks still work when Codex is started from a subdirectory).
+
+### What each Codex hook does
+
+| Hook | Event | Purpose |
+|---|---|---|
+| `inject-harness-context.sh` | `SessionStart(startup\|resume)` | Emits `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` containing the tail of `.harness/progress.md` plus a `_state.json` summary. Codex picks this up as developer context for its fresh thread. |
+| `tier-a-guard-codex.sh` | `PreToolUse(Bash)` | Mirror of the Claude-side guard. Matches Codex's about-to-run Bash command against `.harness/tier-a-patterns.txt`; on match, emits a Codex `permissionDecision: "deny"` to block. Keeps Tier-A enforcement even when Codex's Bash bypasses Claude's hook. |
+| `codex-bash-log.sh` | `PostToolUse(Bash)` | Appends a `codex-bash` line to `.harness/progress.md` for every Bash command Codex runs (test / build / lint / etc.), including exit code if present. Never blocks; fails open. |
+
+### `config.toml` patch
+
+`harness-init` appends (non-destructively) to `<project>/.codex/config.toml`:
+
+```toml
+[features]
+codex_hooks = true
+```
+
+If the file does not exist, it is created with just this block. If
+`[features]` already exists, `codex_hooks` is added without disturbing
+other entries.
+
+### Claude-side hooks coexist
+
+The Codex-side hooks do NOT replace the Claude-side ones. `harness-init`
+still installs the full Claude `.claude/settings.json` hook set (strict
+/ warn / minimal as chosen). Both sides fire independently:
+
+- Claude session's Bash / Edit / Write → Claude hooks fire
+- Codex subprocess's Bash → Codex hooks fire (Claude hooks stay silent)
+- Codex subprocess's Write → neither side fires; covered by bridge script
+
+---
+
+## Speed Tiers
 
 Hooks are the millisecond tier of a four-layer defence:
 
@@ -226,4 +332,4 @@ echo '{"tool_name":"mcp__not-in-list__x"}' \
 # Expected: {"decision":"deny", ...}
 ```
 
-Full installation verification is covered by T-054 (E2E).
+Full installation verification is covered by the harness-suite E2E test plan.

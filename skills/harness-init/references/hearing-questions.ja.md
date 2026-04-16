@@ -1,12 +1,12 @@
 # ヒアリング質問集
 
-`harness-init` が使う AskUserQuestion テキストの正本。全オプション文字列はバイリンガル（`"English / 日本語"`）形式（NFR-003）。AGENTS.md に従い、各 AskUserQuestion ラウンドは 1〜4 問・各問 2〜4 オプションを提示。"Other" オプションは暗黙に利用可能、入力はそのまま受理する。
+`harness-init` が使う AskUserQuestion テキストの正本。全オプション文字列はバイリンガル（`"English / 日本語"`）形式。AGENTS.md に従い、各 AskUserQuestion ラウンドは 1〜4 問・各問 2〜4 オプションを提示。"Other" オプションは暗黙に利用可能、入力はそのまま受理する。
 
 `(Recommended)` マーカーは説明ではなくオプション名に付与（UI 上に表示されるため）。
 
 ## Prerequisites 質問（Round 1 の前）
 
-`docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` のいずれかが不在の場合、Round 1 に入る**前**に以下を尋ねる（SKILL.md §Prerequisites / ASM-008）:
+`docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` のいずれかが不在の場合、Round 1 に入る**前**に以下を尋ねる（SKILL.md §Prerequisites）:
 
 ```
 question: "Shared rules files are missing under docs/. Proceed anyway?" /
@@ -52,17 +52,22 @@ question: "Which backend should the Generator agent use?" /
           "Generator エージェントはどのバックエンドを使いますか？"
 
 options:
-  - name: "Claude (同一プロセス) (Recommended) / Claude（同一プロセス）（推奨）"
-    description: "最もシンプル。外部依存なし。GAN ループのモデル多様性は低い"
-  - name: "Codex plugin / Codex プラグイン"
-    description: "Claude Code プラグイン経由で Codex を inline 利用（プラグインインストール要）"
+Options を出す前に `harness-init` が Codex CLI とプラグインの存在を検出する（SKILL.md Step 8 参照）:
+
+- `codex --version` が失敗 → `codex_plugin` と `codex_cmux` の両方を option から除外し、`npm install -g @openai/codex` を案内
+- `openai/codex-plugin-cc` が `~/.claude/plugins/cache/openai-codex/` にない → `codex_plugin` を除外（`codex_cmux` は残せる）
+
+  - name: "Claude (同一プロセス) / Claude（同一プロセス）"
+    description: "最もシンプル。外部依存なし。G も E も Claude のためモデル多様性が低く、GAN の敵対圧が最も弱い。baseline / fallback 用途"
+  - name: "Codex plugin (Recommended) / Codex プラグイン（推奨）"
+    description: "Codex（gpt-5.4）を openai/codex-plugin-cc 経由で Generator として使う。非対話・決定論的・JSON 応答。Orchestrator が prompt-file を書き、Codex が読んで実装し、narrative + report.json を書く。Orchestrator は bridge script で progress.md を更新。Codex CLI + プラグインの事前インストール必須（harness-init が検証）"
+  - name: "Codex via cmux (visibility mode) / Codex（cmux 経由、可視モード）"
+    description: "Codex plugin と同じファイル経由プロトコル。ただし Codex は cmux 委譲 pane で動き、人間が挙動を watch できる。長時間 sprint で動きを見たい時、Codex debug 時に有用。plugin 経由より決定論性は若干劣る。Codex CLI + cmux-delegate skill 必要"
   - name: "Other MCP / 他の MCP"
-    description: "MCP ツール経由の独自バックエンド。後で generator.md を手動編集"
+    description: "MCP ツール経由の独自バックエンド。後で generator.md / .codex/agents/generator.toml を手動編集、2 ファイル出力プロトコル（narrative + report.json）は共通"
 ```
 
-**Config key**: `generator_backend` ∈ `claude|codex_plugin|other`
-
-> 注記: 当初案にあった `codex_cmux`（別 cmux ペインの Codex へ委譲）はコンテキスト受け渡しと hook 強制が安定しないため削除済み（Issue #46）。`codex_plugin` を使用すること。
+**Config key**: `generator_backend` ∈ `claude|codex_plugin|codex_cmux|other`
 
 ---
 
