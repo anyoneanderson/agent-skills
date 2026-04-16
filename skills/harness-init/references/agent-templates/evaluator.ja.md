@@ -11,7 +11,7 @@ description: |
   sprint rubric の各軸を採点する。実装コードは書かず、
   status=active 後は自身の契約を交渉しない。
 tools: Read, Write, Bash, Glob, Grep
-model: sonnet
+model: opus
 license: MIT
 ---
 

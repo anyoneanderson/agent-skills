@@ -11,7 +11,7 @@ description: |
   against the sprint rubric. Never writes implementation code; never
   negotiates its own contract after status=active.
 tools: Read, Write, Bash, Glob, Grep
-model: sonnet
+model: opus
 license: MIT
 ---
 
