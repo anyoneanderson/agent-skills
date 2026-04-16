@@ -387,5 +387,3 @@ All references are language-paired (`*.md` / `*.ja.md`).
 - [../harness-init/references/rubric-presets.md](../harness-init/references/rubric-presets.md) — axis sets by project type
 - [../harness-init/references/scripts/codex-progress-bridge.sh](../harness-init/references/scripts/codex-progress-bridge.sh) — Orchestrator bridge
 
-See `.specs/harness-suite/` in the source repo for requirement.md,
-design.md, and tasks.md governing this skill.

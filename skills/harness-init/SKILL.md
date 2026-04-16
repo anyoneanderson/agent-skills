@@ -395,5 +395,3 @@ Emit to the user:
 - [resilience-schema.md](references/resilience-schema.md) — progress/state/metrics schemas
 - [templates/](references/templates/) — product-spec, sprint-contract, shared_state
 
-See `.specs/harness-suite/` in the source repo for requirement.md,
-design.md, and tasks.md governing this skill.

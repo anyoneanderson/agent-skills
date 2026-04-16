@@ -453,5 +453,3 @@ Semantics:
 - [../harness-init/references/agent-templates/planner.md](../harness-init/references/agent-templates/planner.md)
   — Planner role contract (Boot Sequence, phase types, write permissions)
 
-See `.specs/harness-suite/` in the source repo for requirement.md,
-design.md, and tasks.md governing this skill.
