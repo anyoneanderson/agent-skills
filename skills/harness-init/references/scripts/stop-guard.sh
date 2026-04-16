@@ -29,6 +29,11 @@ fi
 # No state → nothing to guard; allow stop.
 [ -f "$STATE_FILE" ] || { printf '{}\n'; exit 0; }
 
+# No active epic → harness-loop has not started yet; allow stop.
+# (harness-init leaves current_epic=null; /harness-plan sets it on first run.)
+current_epic="$(jq -r '.current_epic // ""' "$STATE_FILE")"
+[ -z "$current_epic" ] || [ "$current_epic" = "null" ] && { printf '{}\n'; exit 0; }
+
 # Keys are the canonical ones from references/resilience-schema.md.
 completed="$(jq -r '.completed // false' "$STATE_FILE")"
 pending_human="$(jq -r '.pending_human // false' "$STATE_FILE")"

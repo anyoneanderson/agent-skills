@@ -197,6 +197,20 @@ done
 echo '{"tool_name":"Write","tool_input":{"file_path":"dummy.txt"}}' \
   | .harness/scripts/progress-append.sh
 tail -1 .harness/progress.md
+
+# 4. tier-a-guard を dry-run（state を汚染しないよう HARNESS_TEST_MODE=1 必須）
+#    フラグ無しで実行すると _state.json.pending_human=true が立ち
+#    progress.md に TIER-A MATCH 行が追記されるので、インストール検証時は
+#    必ずこのフラグを使うこと。
+echo '{"tool_input":{"command":"rm -rf /tmp/dummy"}}' \
+  | HARNESS_TEST_MODE=1 .harness/scripts/tier-a-guard.sh
+# 期待値: {"decision":"deny", ..., "test_mode":true}
+# _state.json と progress.md は変化しない。
+
+# 5. mcp-allowlist を dry-run（読み取りのみ、追加フラグ不要）
+echo '{"tool_name":"mcp__not-in-list__x"}' \
+  | .harness/scripts/mcp-allowlist.sh
+# 期待値: {"decision":"deny", ...}
 ```
 
 完全なインストール検証は T-054（E2E）で実施する。

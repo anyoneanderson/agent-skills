@@ -1,6 +1,6 @@
-# Rubric プリセット集
+# 採点基準 (rubric) プリセット集
 
-Evaluator は毎 iteration で **rubric** に従ってコードを採点する。rubric は軸の集合で、各軸は `weight ∈ {high, std, low}` と `threshold ∈ [0.0, 1.0]` を持つ。
+Evaluator は毎 iteration で **採点基準 (rubric)** に従ってコードを採点する。rubric は軸の集合で、各軸は `weight ∈ {high, std, low}` と `threshold ∈ [0.0, 1.0]` を持つ。
 
 **全軸が threshold 以上**のときのみ sprint は pass する。weight は合否判定には影響せず、**失敗報告の優先順位**にのみ影響する（高 weight の失敗が先に報告される）。
 

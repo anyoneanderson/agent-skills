@@ -211,6 +211,19 @@ done
 echo '{"tool_name":"Write","tool_input":{"file_path":"dummy.txt"}}' \
   | .harness/scripts/progress-append.sh
 tail -1 .harness/progress.md
+
+# 4. Dry-run tier-a-guard WITHOUT polluting state (HARNESS_TEST_MODE=1).
+#    Running without this flag flips _state.json.pending_human=true and
+#    appends a TIER-A MATCH line to progress.md — avoid that during install.
+echo '{"tool_input":{"command":"rm -rf /tmp/dummy"}}' \
+  | HARNESS_TEST_MODE=1 .harness/scripts/tier-a-guard.sh
+# Expected: {"decision":"deny", ..., "test_mode":true}
+# _state.json and progress.md remain unchanged.
+
+# 5. Dry-run mcp-allowlist (read-only; no flag needed)
+echo '{"tool_name":"mcp__not-in-list__x"}' \
+  | .harness/scripts/mcp-allowlist.sh
+# Expected: {"decision":"deny", ...}
 ```
 
 Full installation verification is covered by T-054 (E2E).

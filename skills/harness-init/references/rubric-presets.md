@@ -1,7 +1,8 @@
-# Rubric Presets
+# Rubric Presets (Scoring Criteria)
 
-Evaluator scores every iteration against a **rubric**: a fixed set of axes,
-each with `weight ∈ {high, std, low}` and `threshold ∈ [0.0, 1.0]`.
+Evaluator scores every iteration against a **rubric** (scoring criteria):
+a fixed set of axes, each with `weight ∈ {high, std, low}` and
+`threshold ∈ [0.0, 1.0]`.
 
 A sprint passes only when **every axis** meets its threshold. Weight affects
 ordering of failure reports (high-weight failures are surfaced first), not
