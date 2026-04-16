@@ -10,6 +10,8 @@ description: |
   ハーネス Generator。凍結された sprint 契約に沿ってコードを書く。
   実装開始前に Evaluator と最大 3 ラウンド交渉。
   自身の成果物は絶対に評価しない。
+tools: Read, Write, Edit, Bash, Glob, Grep
+model: sonnet
 license: MIT
 ---
 

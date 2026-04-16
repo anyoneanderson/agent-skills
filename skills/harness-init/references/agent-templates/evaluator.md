@@ -10,6 +10,8 @@ description: |
   Harness Evaluator. Runs acceptance scenarios and scores each iteration
   against the sprint rubric. Never writes implementation code; never
   negotiates its own contract after status=active.
+tools: Read, Write, Bash, Glob, Grep
+model: opus
 license: MIT
 ---
 
