@@ -29,6 +29,22 @@ The skill orchestrates the Planner sub-agent through three artifacts:
 
 After this skill finishes, the project is ready for `/harness-loop`.
 
+## Required Reading — Open BEFORE doing the step
+
+Claude Code tends to skim SKILL.md. For each Planner dispatch below you
+**MUST open and read** the listed prompt template + reference file(s)
+before invoking the sub-agent. Planner is dispatched as fresh
+invocations per phase — never a single long session.
+
+| Step | Planner phase | Required file(s) to open |
+|---|---|---|
+| Step 4 | `interview` | [references/prompt-templates/planner-interview.md](references/prompt-templates/planner-interview.md), [references/product-spec-guide.md](references/product-spec-guide.md) |
+| Step 5 | `roadmap` | [references/prompt-templates/planner-roadmap.md](references/prompt-templates/planner-roadmap.md), [references/roadmap-guide.md](references/roadmap-guide.md) |
+| Step 7 | `contract-draft` × N sprint (parallel-safe) | [references/prompt-templates/planner-contract.md](references/prompt-templates/planner-contract.md), [../harness-init/references/rubric-presets.md](../harness-init/references/rubric-presets.md) |
+| Step 8 | Tracker Issue creation | [references/issue-create.md](references/issue-create.md) |
+
+`.ja.md` variants exist for Japanese projects; pick language-matched pair.
+
 ## Language Rules
 
 1. Auto-detect input language → output in the same language

@@ -20,6 +20,23 @@ Sets up a user project so the `/harness` series (`harness-plan`, `harness-loop`,
 `harness-rules-update`) can drive autonomous sprint development. This skill
 runs **once per project**; re-running reconciles existing configuration.
 
+## Required Reading — Open BEFORE doing the step
+
+Claude Code tends to skim SKILL.md. For each step below you **MUST
+open and read** the listed reference file(s) before acting.
+
+| Step | Required file(s) to open |
+|---|---|
+| Step 1 | [references/hearing-questions.md](references/hearing-questions.md) (bilingual question text) |
+| Step 3 | [references/templates/](references/templates/) (product-spec, sprint-contract, shared_state) |
+| Step 4 | [references/agent-templates/](references/agent-templates/) (EN `.md`, JA `.ja.md`, Codex `.toml` / `.ja.toml`) + [references/rubric-presets.md](references/rubric-presets.md) |
+| Step 5 | [references/scripts.md](references/scripts.md) + `references/scripts/*.sh` |
+| Step 6 | [references/codex-hooks/](references/codex-hooks/) (scripts + hooks.json.template) |
+| Step 7 | [references/untrusted-content.md](references/untrusted-content.md) |
+| Step 8 | [references/hooks-templates.md](references/hooks-templates.md) + [references/settings-merge.md](references/settings-merge.md) |
+| Step 9 | [references/claudemd-patch.md](references/claudemd-patch.md) |
+| Step 10 | [references/resilience-schema.md](references/resilience-schema.md) |
+
 ## Language Rules
 
 1. Auto-detect input language → output in the same language
