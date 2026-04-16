@@ -5,8 +5,6 @@ Any external content entering an agent prompt must be wrapped in an
 instructions. This blocks prompt-injection via scraped pages, uploaded
 files, MCP responses, and a11y snapshots.
 
-Requirement ref: REQ-100.
-
 ## When to wrap
 
 Wrap before concatenating into an agent prompt:
@@ -94,4 +92,5 @@ Wrapping is **defence in depth**, not a replacement for:
 - `tier-a-guard.sh` (blocks destructive Bash even if the agent were fooled)
 - `mcp-allowlist.sh` (blocks unauthorised MCP calls)
 
-These three layers together cover REQ-100 / REQ-101 / REQ-081/082.
+These three layers together provide untrusted-content isolation, destructive-
+command containment, and MCP tool scoping.

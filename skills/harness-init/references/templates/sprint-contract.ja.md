@@ -8,7 +8,6 @@
     4. `status: active` になったら実装ループ開始
 
   ルール:
-    - スキーマは .specs/harness-suite/design.md §4 と完全一致
     - Rubric に記載した軸はすべて Evaluator が毎 iteration で採点する
     - `status: active` になった後は再交渉なしに編集しない
 -->

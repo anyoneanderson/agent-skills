@@ -7,7 +7,7 @@
   Individual agents write their deliberations to
     sprints/sprint-<N>-<feature>/feedback/{planner,generator,evaluator}-<iter>.md
   to avoid write races and keep this ledger as the canonical single source
-  of truth. See .specs/harness-suite/design.md §9.5.
+  of truth.
 
   APPEND-ONLY. Never edit prior entries — add a new dated entry instead.
 -->

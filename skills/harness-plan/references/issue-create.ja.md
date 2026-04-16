@@ -1,8 +1,7 @@
 # Sprint Issue 起票
 
-REQ-023 および ASM-002 のカバー範囲 — `roadmap.md` 承認後に `harness-plan` が
-sprint 単位で tracker に Issue を作成する方法。roadmap ドラフト中は起票しない。
-起票は承認後に 1 度だけ行う。
+`roadmap.md` 承認後に `harness-plan` が sprint 単位で tracker に Issue を
+作成する方法。roadmap ドラフト中は起票しない。起票は承認後に 1 度だけ行う。
 
 ## Tracker 分岐
 
@@ -38,8 +37,8 @@ sprint ループ前に検証:
      `AskUserQuestion`。`--auto-approve-roadmap` 指定時はデフォルトで
      新規作成し番号を `_state.json.epic_issue` に記録）
 
-**`tracker == github` のうえで `gh` が PATH にない場合** は REQ-023 に従って
-skill を **中断** する。`gitlab` や `none` にサイレントフォールバックしては
+**`tracker == github` のうえで `gh` が PATH にない場合** は skill を
+**中断** する。`gitlab` や `none` にサイレントフォールバックしては
 ならない — tracker 種別が利用者合意なく変わると audit trail が破綻する。
 （`tracker ∈ {gitlab, none}` のときは `gh` は不要でこのチェックはスキップ。）
 
@@ -165,7 +164,7 @@ sprint 毎ディレクトリ名が担う。
 
 ## `_state.json` 更新
 
-Issue 起票ステップの phase 遷移（design §9.2）:
+Issue 起票ステップの phase 遷移:
 
 1. **ループ開始時** に `phase = "issues-pending"` を設定。ループ途中で失敗した
    場合に resume でこのステップに復帰できるようにする。

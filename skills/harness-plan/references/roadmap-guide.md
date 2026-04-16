@@ -5,8 +5,6 @@ After `product-spec.md` is complete, the Planner derives
 `bundling` flags. This file, not the product-spec, drives Issue creation and
 the sprint loop.
 
-Governs REQ-021 (sprint decomposition) and REQ-022 (bundling judgement).
-
 ## Pipeline
 
 ```
@@ -36,7 +34,7 @@ If a capability requires groundwork (e.g., auth middleware before any
 authenticated feature), the groundwork belongs **inside** sprint 1 of that
 capability — not a preceding "sprint 0".
 
-## Bundling Judgement (REQ-022)
+## Bundling Judgement
 
 Two sprints are **bundling candidates** when they share structural coupling
 such that shipping them in separate PRs would cause rework. The Planner
@@ -156,12 +154,12 @@ After bundling, Planner orders sprints:
    PR at the end of the last peer captures all bundle work in one commit
    range.
 
-## Approval Gate (T-024)
+## Approval Gate
 
 `harness-plan` surfaces the Sprint Summary table and bundle groups via
-`AskUserQuestion`. Per REQ-021, this gate is **always interactive** —
-the `harness-loop` `mode` (continuous / autonomous-ralph / scheduled) is
-decided later and cannot be used to short-circuit roadmap approval.
+`AskUserQuestion`. This gate is **always interactive** — the `harness-loop`
+`mode` (continuous / autonomous-ralph / scheduled) is decided later and
+cannot be used to short-circuit roadmap approval.
 
 Options:
 

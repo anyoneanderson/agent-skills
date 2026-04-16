@@ -3,10 +3,9 @@
 Canonical schemas for the three files that survive context compaction,
 session restart, and process crashes. Together they form the "Anthropic
 three-point set" (progress.md + _state.json + git) plus the observability
-layer (metrics.jsonl) per `.specs/harness-suite/design.md` §9.
+layer (metrics.jsonl).
 
-Boot Sequence (REQ-072) — every skill and sub-agent MUST read these before
-acting:
+Boot Sequence — every skill and sub-agent MUST read these before acting:
 
 1. `git log --oneline -20`
 2. `tail -100 .harness/progress.md`
@@ -43,7 +42,7 @@ evaluation: iter=<N> verdict=<pass|fail> axes="f=0.9 c=0.7 d=0.6 o=0.5"
    # Evaluator verdict per iteration
 
 stop: reason=<max_iter|wall_time|rubric_stagnation|cost_cap|tier_a> detail=<text>
-   # Principal Skinner trigger (REQ-080)
+   # Principal Skinner trigger (loop termination condition)
 
 restore: from=<source> preserved=<tokens>
    # Emitted by SessionStart(compact) hook after reinjection
@@ -164,7 +163,7 @@ Old files are backed up to `_state.json.v<N>.bak` first.
 
 ---
 
-## `.harness/metrics.jsonl` (observability, REQ-090)
+## `.harness/metrics.jsonl` (observability)
 
 **Purpose**: Per-iteration metrics for cost control and trend analysis.
 JSON Lines so a tail reader / OTLP exporter can stream it.
@@ -209,7 +208,7 @@ JSON Lines so a tail reader / OTLP exporter can stream it.
 running sum. Never re-derive it by summing metrics.jsonl on read — trust
 the cursor.
 
-**OTLP export (REQ-092, optional)**: `.harness/scripts/metrics-exporter.sh`
+**OTLP export (optional)**: `.harness/scripts/metrics-exporter.sh`
 tails this file and POSTs to `_config.yml.otlp_endpoint`. No-op when
 endpoint is unset or `hook_level != strict`.
 
@@ -235,5 +234,4 @@ crash recovery):
 ```
 
 **Guarantee**: steps 1–5 use only these three files plus git. No process
-memory, no prior session context is required. This is the contract tested
-by T-054.
+memory, no prior session context is required.

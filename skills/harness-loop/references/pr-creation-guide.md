@@ -1,9 +1,9 @@
 # PR Creation Guide
 
-Covers REQ-033. On sprint pass, `harness-loop` opens a pull request
-whose body is a standardised summary of what shipped and why the
-Evaluator accepted it. Split and bundled sprints use the same
-template with minor header differences.
+On sprint pass, `harness-loop` opens a pull request whose body is a
+standardised summary of what shipped and why the Evaluator accepted it.
+Split and bundled sprints use the same template with minor header
+differences.
 
 ## Pre-conditions
 

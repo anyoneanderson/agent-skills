@@ -4,8 +4,6 @@ Idempotent append of a ≤50-line pointer block that directs any future Claude
 Code session (or other AI agent reading `CLAUDE.md`) to the Boot Sequence
 for the harness control loop.
 
-Requirement refs: REQ-011, NFR-006, REQ-075.
-
 ## The block
 
 Exactly this block is appended to the project's `CLAUDE.md`:
@@ -54,7 +52,7 @@ return "appended"
 ```
 
 The block is self-contained — no forward references to other documents that
-may not exist yet. Length is always under 50 lines (NFR-006).
+may not exist yet. Length is always under 50 lines.
 
 ## Section boundaries
 
