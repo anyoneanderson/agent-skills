@@ -2,7 +2,8 @@
 # progress-append.sh — PostToolUse hook (matcher: Edit|Write)
 #
 # Appends one line to .harness/progress.md describing the tool invocation.
-# Input: Claude Code hook JSON on stdin (ASM-005 — no env vars).
+# Input: Claude Code hook JSON on stdin (no env vars — all context read
+# from the payload).
 # Output: nothing on success. Never blocks; exits 0 unless catastrophic.
 
 set -euo pipefail

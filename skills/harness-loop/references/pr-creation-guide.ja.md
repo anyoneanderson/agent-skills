@@ -1,8 +1,8 @@
 # PR 作成ガイド
 
-REQ-033 を扱う。sprint が pass すると `harness-loop` は pull request を
-開く。PR 本文は実装内容と Evaluator の承認理由を定型化した要約。split と
-bundled は同一テンプレートをヘッダ差分のみで使い分ける。
+sprint が pass すると `harness-loop` は pull request を開く。PR 本文は
+実装内容と Evaluator の承認理由を定型化した要約。split と bundled は
+同一テンプレートをヘッダ差分のみで使い分ける。
 
 ## 事前条件
 

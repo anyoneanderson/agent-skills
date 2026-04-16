@@ -3,8 +3,6 @@
 `.claude/settings.json` にユーザや他スキルが書いたエントリを壊さずに
 harness hooks を注入するためのアルゴリズム。
 
-対応要件: REQ-011, NFR-005。
-
 ## 入力
 
 - `existing`: 現在の `.claude/settings.json`（存在しない or 空 `{}` もあり得る）

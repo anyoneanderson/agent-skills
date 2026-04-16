@@ -1,10 +1,9 @@
 # Shared-read / Isolated-write プロトコル
 
-REQ-030 と REQ-074 を扱う。sprint 中、Planner / Generator / Evaluator と
-Orchestrator は同一の `shared_state.md` 台帳を全員が読むが、**書き込みは
-Orchestrator のみ**。他のエージェントは各自の `feedback/{role}-{iter}.md`
-に append する。これにより台帳は race なく、iteration 毎の監査可能性を
-保つ。
+sprint 中、Planner / Generator / Evaluator と Orchestrator は同一の
+`shared_state.md` 台帳を全員が読むが、**書き込みは Orchestrator のみ**。
+他のエージェントは各自の `feedback/{role}-{iter}.md` に append する。
+これにより台帳は race なく、iteration 毎の監査可能性を保つ。
 
 ## ファイル配置（sprint 単位）
 
@@ -159,5 +158,3 @@ evidence ポインタは feedback ファイル側に残す。
   tokens で済み、O(全エージェント出力) を支払わない。
 - **Replay**: 監査者は contract.md + shared_state.md + feedback/*-<iter>.md
   を順に読めばどの iteration も再構成できる。
-
-設計参照: `.specs/harness-suite/design.md` §9.5

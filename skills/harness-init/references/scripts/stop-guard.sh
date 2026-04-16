@@ -2,8 +2,9 @@
 # stop-guard.sh — Stop hook
 #
 # Decides whether the agent should stop or continue the loop. Enforces
-# Principal Skinner's 5 conditions (REQ-080) and the stop_hook_active
-# anti-recursion flag.
+# Principal Skinner's 5 termination conditions (loop done, human needed,
+# iteration cap, wall-time cap, cost cap, rubric stagnation) plus the
+# stop_hook_active anti-recursion flag.
 #
 # Input: Claude Code Stop hook JSON on stdin. Example fields:
 #   .stop_hook_active (bool) — true means this hook fired from its own block

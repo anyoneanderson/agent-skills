@@ -7,7 +7,6 @@
 #   - warn mode (--warn-only): log to progress.md, emit {} (allow)
 #
 # Input: Claude Code PreToolUse hook JSON on stdin.
-# Requirement refs: REQ-081, REQ-082.
 
 set -euo pipefail
 

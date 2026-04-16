@@ -4,8 +4,6 @@
 これは epic の sprint 分解と sprint 毎の `bundling` フラグを含む。
 Issue 起票と sprint ループを駆動するのは product-spec ではなくこのファイル。
 
-REQ-021（sprint 分解）と REQ-022（bundling 判定）を満たす。
-
 ## パイプライン
 
 ```
@@ -33,7 +31,7 @@ Planner は 3 パスで処理:
 capability が下準備（例: 認証機能に先立つ auth middleware）を要求する場合、
 下準備はその capability の sprint 1 **内部** に含める — 先行する「sprint 0」を作らない。
 
-## Bundling 判定（REQ-022）
+## Bundling 判定
 
 2 つの sprint が **bundling 候補** になるのは、構造的に結合しており、別 PR で
 出すと手戻りが発生する場合。Planner は以下 4 軸を確認し、**いずれか 1 つ** でも
@@ -149,10 +147,10 @@ bundling 後、Planner は以下順序で:
 3. **bundle 近接**: 同 bundle peer は連続実行。group 内最終 peer の末尾で
    1 コミット範囲として PR 化。
 
-## 承認ゲート（T-024）
+## 承認ゲート
 
 `harness-plan` は Sprint Summary 表と bundle groups を `AskUserQuestion` で
-提示する。REQ-021 により、このゲートは **常時 interactive 固定**。
+提示する。このゲートは **常時 interactive 固定**。
 `harness-loop` の `mode`（continuous / autonomous-ralph / scheduled）は
 後続で決まるため、mode を根拠に承認スキップしてはならない。
 

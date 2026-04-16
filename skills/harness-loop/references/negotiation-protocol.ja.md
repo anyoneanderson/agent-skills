@@ -1,8 +1,8 @@
 # Negotiation Protocol（交渉プロトコル）
 
-REQ-031 を扱う。各 sprint は Generator と Evaluator の有限交渉から始まり、
-contract の rubric・閾値・`max_iterations` を合意する。3 往復で合意に
-至らない場合は Planner が強制裁定する。
+各 sprint は Generator と Evaluator の有限交渉から始まり、contract の
+rubric・閾値・`max_iterations` を合意する。3 往復で合意に至らない場合は
+Planner が強制裁定する。
 
 ## 参加者と書き込み権限
 

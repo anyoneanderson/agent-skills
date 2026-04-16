@@ -129,8 +129,8 @@ The final `product-spec.md`:
 - Is placed at `.harness/<epic-name>/product-spec.md`
 - Matches the template structure from `.harness/templates/product-spec.md`
 - Has **no HTML comment blocks** (they were scaffolding for authoring)
-- Is committed to git as part of the `harness-plan` flow (REQ-077 style
-  checkpoint, even though we're pre-sprint)
+- Is committed to git as part of the `harness-plan` flow (checkpoint
+  commit, even though we're pre-sprint)
 - Is the single source of truth the Planner reads when generating
   `roadmap.md` in the next step
 

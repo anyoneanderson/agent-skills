@@ -8,8 +8,6 @@
 # Usage:
 #   wrap-untrusted.sh <source> [url]
 #   cat foo.html | wrap-untrusted.sh playwright-snapshot https://example.com
-#
-# Requirement ref: REQ-100.
 
 set -euo pipefail
 

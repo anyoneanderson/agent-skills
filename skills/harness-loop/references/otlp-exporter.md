@@ -1,9 +1,9 @@
 # OTLP Exporter (optional)
 
-Covers REQ-092. An optional side-process reads `.harness/metrics.jsonl`
-and forwards per-iteration metrics to an OpenTelemetry Protocol (OTLP)
-endpoint so cost, rubric trends, and tool-failure rates can be viewed
-alongside other project telemetry.
+An optional side-process reads `.harness/metrics.jsonl` and forwards
+per-iteration metrics to an OpenTelemetry Protocol (OTLP) endpoint so
+cost, rubric trends, and tool-failure rates can be viewed alongside
+other project telemetry.
 
 Active only when **both** conditions hold:
 

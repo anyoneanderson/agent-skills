@@ -2,7 +2,7 @@
 # mcp-allowlist.sh — PreToolUse hook (matcher: mcp__.*)
 #
 # Denies MCP tool invocations whose server prefix is not listed in
-# _config.yml.allowed_mcp_servers. Requirement ref: REQ-101.
+# _config.yml.allowed_mcp_servers.
 #
 # Tool names follow the convention "mcp__<server>__<tool>". We extract
 # <server> and compare against the allow-list.

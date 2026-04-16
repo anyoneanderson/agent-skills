@@ -1,7 +1,7 @@
 # OTLP Exporter（任意）
 
-REQ-092 を扱う。`.harness/metrics.jsonl` を読んで OpenTelemetry Protocol
-（OTLP）エンドポイントへ iter 毎メトリクスを転送する任意のサイドプロセス。
+`.harness/metrics.jsonl` を読んで OpenTelemetry Protocol（OTLP）
+エンドポイントへ iter 毎メトリクスを転送する任意のサイドプロセス。
 コスト・rubric 推移・ツール失敗率を他プロジェクト telemetry と並べて見る
 ために用いる。
 

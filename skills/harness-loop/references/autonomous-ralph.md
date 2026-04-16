@@ -1,10 +1,10 @@
 # Autonomous Ralph
 
-Covers REQ-078 and REQ-079. The `autonomous-ralph` execution mode
-runs `harness-loop` headlessly, one iteration per Claude process,
-with no cross-iteration memory except `progress.md` + `_state.json` +
-git + `metrics.jsonl`. "Ralph" is the canonical name for this pattern
-(repeatedly re-invoking a fresh agent on the same checkpointed state).
+The `autonomous-ralph` execution mode runs `harness-loop` headlessly,
+one iteration per Claude process, with no cross-iteration memory except
+`progress.md` + `_state.json` + git + `metrics.jsonl`. "Ralph" is the
+canonical name for this pattern (repeatedly re-invoking a fresh agent
+on the same checkpointed state).
 
 ## Why fresh context per iteration
 
@@ -187,7 +187,7 @@ process. The user:
 3. Manually resets `pending_human=false` in `_state.json`
 4. Restarts the wrapper
 
-No bypass path. Tier-A approval is always human-in-the-loop (REQ-081).
+No bypass path. Tier-A approval is always human-in-the-loop.
 
 ## Don't do
 

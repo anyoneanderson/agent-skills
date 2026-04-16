@@ -1,9 +1,8 @@
 # Negotiation Protocol
 
-Covers REQ-031. Every sprint begins with a bounded negotiation between
-Generator and Evaluator over the contract rubric, thresholds, and
-`max_iterations`. After three rounds without agreement the Planner
-forces a ruling.
+Every sprint begins with a bounded negotiation between Generator and
+Evaluator over the contract rubric, thresholds, and `max_iterations`.
+After three rounds without agreement the Planner forces a ruling.
 
 ## Participants and write permissions
 

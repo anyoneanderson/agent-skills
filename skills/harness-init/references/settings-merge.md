@@ -3,8 +3,6 @@
 Algorithm for injecting harness hooks into `.claude/settings.json` without
 destroying user-authored or other-skill-authored entries.
 
-Requirement refs: REQ-011, NFR-005.
-
 ## Input
 
 - `existing`: current `.claude/settings.json` (may be absent or empty `{}`)

@@ -1,10 +1,10 @@
 # Shared-read / Isolated-write Protocol
 
-Covers REQ-030 and REQ-074. During a sprint, multiple agents
-(Planner, Generator, Evaluator) plus the Orchestrator all read the
-same `shared_state.md` ledger, but only the Orchestrator writes to it.
-Every other agent writes to a private `feedback/{role}-{iter}.md`
-file. This keeps the ledger race-free and auditable per-iteration.
+During a sprint, multiple agents (Planner, Generator, Evaluator) plus
+the Orchestrator all read the same `shared_state.md` ledger, but only
+the Orchestrator writes to it. Every other agent writes to a private
+`feedback/{role}-{iter}.md` file. This keeps the ledger race-free and
+auditable per-iteration.
 
 ## File layout (per sprint)
 
@@ -167,5 +167,3 @@ Details and evidence pointers stay in the feedback file for audit.
   O(all agent output).
 - **Replay**: an auditor can reconstruct any iteration by reading
   contract.md + shared_state.md + feedback/*-<iter>.md in order.
-
-Design reference: `.specs/harness-suite/design.md` §9.5.

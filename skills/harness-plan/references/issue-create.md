@@ -1,8 +1,8 @@
 # Sprint Issue Creation
 
-Covers REQ-023 and ASM-002 — how `harness-plan` emits one tracker issue per
-sprint after `roadmap.md` is approved. The Planner does not create issues
-during roadmap drafting; issuance happens only once, after approval.
+How `harness-plan` emits one tracker issue per sprint after `roadmap.md` is
+approved. The Planner does not create issues during roadmap drafting;
+issuance happens only once, after approval.
 
 ## Tracker Dispatch
 
@@ -39,10 +39,10 @@ Before iterating sprints, verify:
      `_state.json.epic_issue`)
 
 **When `tracker == github` and `gh` is not on PATH**, **abort** the skill
-with install guidance per REQ-023. Do not fall back to `gitlab` or
-`none` — silent fallback corrupts the audit trail by changing tracker
-identity without the user's consent. (When `tracker ∈ {gitlab, none}`,
-`gh` is not required and this check is skipped.)
+with install guidance. Do not fall back to `gitlab` or `none` — silent
+fallback corrupts the audit trail by changing tracker identity without
+the user's consent. (When `tracker ∈ {gitlab, none}`, `gh` is not required
+and this check is skipped.)
 
 ### Per-sprint create
 
@@ -174,7 +174,7 @@ and per-sprint directory names.
 
 ## `_state.json` Updates
 
-Phase transitions for the Issue-creation step (design §9.2):
+Phase transitions for the Issue-creation step:
 
 1. **At loop start**, set `phase = "issues-pending"` so a mid-loop
    failure can be detected on resume and routed back into this step.
