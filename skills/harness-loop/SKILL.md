@@ -66,7 +66,7 @@ Verify before any sprint work:
 
 Do not partially execute on failure. Surface the missing piece and exit.
 
-## Boot Sequence (REQ-072)
+## Boot Sequence
 
 Execute first on every invocation — fresh session or resume:
 
@@ -86,7 +86,7 @@ Decision table after Boot:
 
 In `interactive` mode the skill confirms resume vs restart via
 `AskUserQuestion`. In non-interactive modes it auto-resumes per
-`_state.json` (ASM-007).
+`_state.json` (AskUserQuestion would block waiting for a human).
 
 ## Execution Flow (10 steps)
 
@@ -99,7 +99,7 @@ Otherwise Step 2 elicits the mode. Compute:
 - Remaining Principal Skinner budget (see Step 7)
 - Active sprint directory: `.harness/<epic>/sprints/sprint-<n>-<feature>/`
 
-**Pin the Generator backend once per loop run (REQ-060)**:
+**Pin the Generator backend once per loop run**:
 
 ```
 backend = _config.yml.generator_backend    # claude | codex_cmux | codex_plugin | other
@@ -118,12 +118,13 @@ does not re-evaluate mid-loop. On resume in a later session the pin is
 re-derived from current `_config.yml` + env, not inherited, so a
 newly-installed cmux is picked up automatically.
 
-### Step 2: Execution Mode Selection (T-037)
+### Step 2: Execution Mode Selection
 
 Mode is chosen once at loop start and persisted to `_state.json.mode`.
 **Interactive mode is the only mode permitted to call
-`AskUserQuestion`** during the loop (ASM-007, REQ-078). All other
-modes read any branching value from `_config.yml`.
+`AskUserQuestion`** during the loop (non-interactive modes would block
+waiting for a human response). All other modes read any branching
+value from `_config.yml`.
 
 ```
 if _state.json.mode is null:
@@ -195,7 +196,7 @@ This sub-protocol is invoked 4× by the examples below (3 negotiation
 rounds + each impl iter). Upstream/downstream bookkeeping is in
 [shared-state-protocol.md](references/shared-state-protocol.md).
 
-### Step 4: Negotiation Phase (T-031)
+### Step 4: Negotiation Phase
 
 Governed by [negotiation-protocol.md](references/negotiation-protocol.md).
 
@@ -243,7 +244,7 @@ Write contract final frontmatter: populated `acceptance_scenarios`,
 3. Store the SHA in `_state.json.last_commit`
 4. Append `progress.md`: `decision: sprint-<n> contract frozen @ <SHA>`
 
-### Step 6: Implementation Loop (T-032, T-033)
+### Step 6: Implementation Loop
 
 Governed by [shared-state-protocol.md](references/shared-state-protocol.md).
 
@@ -297,7 +298,7 @@ Evaluator writes this to `feedback/evaluator-<iter>.md`; Orchestrator
 passes it into the next Generator dispatch. Each iteration ends with
 a commit (Step 7) so every attempt is reviewable in git history.
 
-### Step 7: Iteration Checkpoint and Principal Skinner (T-036, T-038)
+### Step 7: Iteration Checkpoint and Principal Skinner
 
 At the end of every iteration (pass OR fail OR abort), persist verdict
 and state in a single atomic pass so a crash between any two writes
@@ -350,17 +351,18 @@ Principal Skinner never deletes state. The loop stops and leaves
 everything on disk for a later resume (pending_human), a replan
 (rubric_stagnation), or a manual budget bump (cost_cap, wall_time).
 
-#### Interactive per-iteration gate (REQ-076)
+#### Interactive per-iteration gate
 
 `interactive` mode only: after each Step 7 checkpoint, offer
 **continue** / **restart (/clear → resume via Boot Sequence)** /
 **pause (exit, state preserved)** / **abort (set aborted_reason=user)**
-via AskUserQuestion. The `restart` option is T-054's recovery path:
-exit the skill after emitting the `/clear` instruction, and the next
-invocation resumes purely from progress.md + _state.json + git.
-Non-interactive modes skip this gate (ASM-007).
+via AskUserQuestion. The `restart` option is the recovery path for
+context bloat: exit the skill after emitting the `/clear` instruction,
+and the next invocation resumes purely from progress.md + _state.json
++ git. Non-interactive modes skip this gate (they cannot prompt a
+human).
 
-### Step 8: PR Creation on Sprint Pass (T-034)
+### Step 8: PR Creation on Sprint Pass
 
 Governed by [pr-creation-guide.md](references/pr-creation-guide.md).
 
@@ -390,7 +392,7 @@ On `contract.status == "aborted"` skip PR creation. Record the abort in
 `shared_state.md/Decisions` and keep the branch intact so the user can
 inspect or resume.
 
-### Step 9: Sprint Transition (T-035)
+### Step 9: Sprint Transition
 
 After Step 8 completes (pass) or on abort:
 

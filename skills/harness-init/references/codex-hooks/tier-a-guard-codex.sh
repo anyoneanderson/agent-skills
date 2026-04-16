@@ -6,8 +6,6 @@
 # somehow bypasses Claude's hook (or the Codex session is detached),
 # destructive commands get blocked here.
 #
-# Requirement refs: REQ-CB-020, REQ-081, REQ-082.
-#
 # Input:  Codex PreToolUse JSON on stdin; tool_input.command carries
 #         the shell command Codex is about to run.
 # Output: deny JSON on match; silent exit 0 on no-match (fail open).

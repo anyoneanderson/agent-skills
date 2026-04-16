@@ -36,8 +36,9 @@ Stop and surface to user if:
 - _state.json.pending_human == true
 - _state.json.aborted_reason != null
 
-AskUserQuestion is allowed ONLY in `interactive` mode (ASM-007).
-In continuous/autonomous-ralph/scheduled mode, do not prompt.
+AskUserQuestion is allowed ONLY in `interactive` mode (blocks the run
+in non-interactive modes). In continuous/autonomous-ralph/scheduled
+mode, do not prompt.
 
 === Phase: interview ===
 

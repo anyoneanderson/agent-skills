@@ -1,12 +1,12 @@
 # ヒアリング質問集
 
-`harness-init` が使う AskUserQuestion テキストの正本。全オプション文字列はバイリンガル（`"English / 日本語"`）形式（NFR-003）。AGENTS.md に従い、各 AskUserQuestion ラウンドは 1〜4 問・各問 2〜4 オプションを提示。"Other" オプションは暗黙に利用可能、入力はそのまま受理する。
+`harness-init` が使う AskUserQuestion テキストの正本。全オプション文字列はバイリンガル（`"English / 日本語"`）形式。AGENTS.md に従い、各 AskUserQuestion ラウンドは 1〜4 問・各問 2〜4 オプションを提示。"Other" オプションは暗黙に利用可能、入力はそのまま受理する。
 
 `(Recommended)` マーカーは説明ではなくオプション名に付与（UI 上に表示されるため）。
 
 ## Prerequisites 質問（Round 1 の前）
 
-`docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` のいずれかが不在の場合、Round 1 に入る**前**に以下を尋ねる（SKILL.md §Prerequisites / ASM-008）:
+`docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` のいずれかが不在の場合、Round 1 に入る**前**に以下を尋ねる（SKILL.md §Prerequisites）:
 
 ```
 question: "Shared rules files are missing under docs/. Proceed anyway?" /

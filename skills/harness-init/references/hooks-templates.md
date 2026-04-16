@@ -3,12 +3,12 @@
 Three enforcement levels for `.claude/settings.json`. `harness-init` selects
 one based on the user's answer to "hook level" during hearing.
 
-**Important (ASM-005)**: Claude Code hooks receive their input as **JSON on
+**Important**: Claude Code hooks receive their input as **JSON on
 stdin**. Environment variables like `$TOOL_NAME` or `$FILE_PATH` are NOT
 injected. All scripts extract fields via `jq`.
 
 Scripts referenced below live in `.harness/scripts/` after `harness-init`
-runs. See T-015 for script contents.
+runs.
 
 ---
 
@@ -104,7 +104,7 @@ Use for learning what your project actually does before committing to strict.
 ## Level: strict
 
 Full enforcement. Blocks Tier-A operations and unlisted MCP calls. Use for
-autonomous / autonomous-ralph modes (REQ-078) where no human is watching.
+autonomous / autonomous-ralph modes where no human is watching.
 
 ```json
 {
@@ -153,9 +153,9 @@ autonomous / autonomous-ralph modes (REQ-078) where no human is watching.
 **What it covers**:
 - Everything from `warn`
 - Tier-A patterns (from `.harness/tier-a-patterns.txt`) are **denied** and
-  set `_state.json.pending_human = true` (REQ-081 / REQ-082)
+  set `_state.json.pending_human = true`
 - MCP calls are checked against `_config.yml.allowed_mcp_servers` and
-  denied if not listed (REQ-101)
+  denied if not listed
 
 **Required for autonomous modes**: `continuous`, `autonomous-ralph`,
 `scheduled`. Can be relaxed to `warn` for `interactive` mode where the
@@ -276,7 +276,7 @@ pattern is authoritative. Tracked in Issue #46 "Future Work" section.
 
 ---
 
-## Speed Tiers (NFR-005)
+## Speed Tiers
 
 Hooks are the millisecond tier of a four-layer defence:
 
@@ -339,4 +339,4 @@ echo '{"tool_name":"mcp__not-in-list__x"}' \
 # Expected: {"decision":"deny", ...}
 ```
 
-Full installation verification is covered by T-054 (E2E).
+Full installation verification is covered by the harness-suite E2E test plan.

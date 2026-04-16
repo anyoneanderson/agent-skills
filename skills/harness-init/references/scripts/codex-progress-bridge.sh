@@ -9,8 +9,6 @@
 # to write. We parse the report and append equivalent lines to
 # progress.md + atomically update _state.json.
 #
-# Requirement refs: REQ-CB-001, REQ-CB-002, REQ-CB-003, REQ-073-M.
-#
 # Input:  Codex report JSON on stdin
 # Args:   --phase <p> --iter <n> --agent <name> [--sprint <n>]
 # Env:    HARNESS_TEST_MODE=1 → no file mutations, echo a dry-run note.
@@ -68,9 +66,9 @@ mkdir -p "$(dirname "$PROGRESS_FILE")"
 [ -f "$PROGRESS_FILE" ] || printf '# Harness progress log (append-only)\n\n' > "$PROGRESS_FILE"
 
 # Per-file lines. Paths are emitted as-is from the report. The Generator
-# contract (REQ-CB-001) calls for workspace-relative paths; if an
-# absolute path slips through (e.g., /private/tmp/... on macOS), we log
-# it verbatim rather than guessing workspace relativity.
+# is expected to write workspace-relative paths; if an absolute path
+# slips through (e.g., /private/tmp/... on macOS), we log it verbatim
+# rather than guessing workspace relativity.
 printf '%s' "$payload" | jq -r '.touchedFiles[]?' | while IFS= read -r f; do
   [ -z "$f" ] && continue
   line="- ${ts} | agent=${AGENT} | phase=${PHASE} | Codex | ${f}"

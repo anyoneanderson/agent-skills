@@ -1,9 +1,9 @@
 # Hearing Questions
 
 Canonical AskUserQuestion text used by `harness-init`. All option strings
-are bilingual (`"English / 日本語"`) per NFR-003. Per AGENTS.md, each
-AskUserQuestion round presents 1–4 questions with 2–4 options each; the
-"Other" option is implicitly available and should be honoured as-is.
+are bilingual (`"English / 日本語"`). Per AGENTS.md, each AskUserQuestion
+round presents 1–4 questions with 2–4 options each; the "Other" option
+is implicitly available and should be honoured as-is.
 
 The `(Recommended)` marker is appended to the option name — not the
 description — so it surfaces in the UI.
@@ -12,7 +12,7 @@ description — so it surfaces in the UI.
 
 If `docs/coding-rules.md`, `docs/review_rules.md`, or
 `docs/issue-to-pr-workflow.md` is missing, ask this **before** Round 1
-(per SKILL.md §Prerequisites / ASM-008):
+(per SKILL.md §Prerequisites):
 
 ```
 question: "Shared rules files are missing under docs/. Proceed anyway?" /

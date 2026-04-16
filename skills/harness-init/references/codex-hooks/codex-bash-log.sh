@@ -8,8 +8,6 @@
 # hook — those are handled by the Orchestrator-side bridge via
 # report.json.
 #
-# Requirement refs: REQ-CB-020.
-#
 # Input:  Codex PostToolUse JSON on stdin. Fields of interest:
 #   - tool_input.command
 #   - tool_response (shape varies by Codex version; often a JSON string

@@ -2,9 +2,9 @@
 
 `.claude/settings.json` 用の 3 段階の強制レベル。`harness-init` がヒアリング時の「hook level」回答に基づいて選択する。
 
-**重要（ASM-005）**: Claude Code の hooks は入力を **stdin の JSON** で受け取る。`$TOOL_NAME` や `$FILE_PATH` のような環境変数は注入されない。すべてのスクリプトは `jq` でフィールドを抽出する。
+**重要**: Claude Code の hooks は入力を **stdin の JSON** で受け取る。`$TOOL_NAME` や `$FILE_PATH` のような環境変数は注入されない。すべてのスクリプトは `jq` でフィールドを抽出する。
 
-以下で参照するスクリプトは `harness-init` 実行後に `.harness/scripts/` 配下に配置される。スクリプト本体は T-015 を参照。
+以下で参照するスクリプトは `harness-init` 実行後に `.harness/scripts/` 配下に配置される。
 
 ---
 
@@ -96,7 +96,7 @@
 
 ## Level: strict
 
-完全強制。Tier-A 操作と未許可 MCP 呼び出しをブロックする。autonomous / autonomous-ralph モード（REQ-078）で人間の監視がない環境用。
+完全強制。Tier-A 操作と未許可 MCP 呼び出しをブロックする。autonomous / autonomous-ralph モードで人間の監視がない環境用。
 
 ```json
 {
@@ -144,8 +144,8 @@
 
 **カバー範囲**:
 - `warn` の全機能
-- Tier-A パターン（`.harness/tier-a-patterns.txt` から）を **deny** し `_state.json.pending_human = true` に設定（REQ-081 / REQ-082）
-- MCP 呼び出しを `_config.yml.allowed_mcp_servers` と照合し未登録なら deny（REQ-101）
+- Tier-A パターン（`.harness/tier-a-patterns.txt` から）を **deny** し `_state.json.pending_human = true` に設定
+- MCP 呼び出しを `_config.yml.allowed_mcp_servers` と照合し未登録なら deny
 
 **autonomous モードでは必須**: `continuous` / `autonomous-ralph` / `scheduled`。`interactive` モードでは人間が異常を拾えるので `warn` まで緩めてもよい。
 
@@ -243,7 +243,7 @@ Codex の `PostToolUse` matcher が `Write` / `Edit` / MCP / WebSearch に拡張
 
 ---
 
-## 速度階層（NFR-005）
+## 速度階層
 
 Hook は 4 層防御のミリ秒層:
 
@@ -305,4 +305,4 @@ echo '{"tool_name":"mcp__not-in-list__x"}' \
 # 期待値: {"decision":"deny", ...}
 ```
 
-完全なインストール検証は T-054（E2E）で実施する。
+完全なインストール検証は harness-suite の E2E テスト計画で実施する。

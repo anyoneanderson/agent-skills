@@ -1,5 +1,5 @@
 {
-  "$comment": "Codex hooks registered by harness-init when generator_backend=codex_*. Generated from hooks.json.template; path placeholders are replaced at install time with absolute paths resolved against the project root. See REQ-CB-020.",
+  "$comment": "Codex hooks registered by harness-init when generator_backend=codex_*. Generated from hooks.json.template; path placeholders are replaced at install time with absolute paths resolved against the project root.",
   "hooks": {
     "SessionStart": [
       {

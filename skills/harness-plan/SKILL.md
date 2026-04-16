@@ -50,14 +50,14 @@ Before any generation step, check:
    user to run `/harness-init` first and stop.
 2. **Git repo** — `git rev-parse --is-inside-work-tree` must succeed.
 3. **`jq` available** — `command -v jq`. Required for `_state.json`
-   reads/writes (ASM-005).
+   reads/writes (all state IO uses jq for JSON parsing).
 4. **Tracker pre-flight** — if `_config.yml.tracker == github`, verify
    `gh auth status` now to fail fast. See
    [issue-create.md](references/issue-create.md) §Pre-flight.
 
 If any check fails, stop with a clear error. Do not partially generate.
 
-## Boot Sequence (REQ-072)
+## Boot Sequence
 
 Always execute before any write:
 
@@ -195,14 +195,14 @@ The Planner must:
 
 Set `_state.json.phase = "roadmap-draft"` at step start.
 
-### Step 6: Roadmap Approval (T-024)
+### Step 6: Roadmap Approval
 
-The roadmap approval gate is **always interactive** per REQ-021. The
-`mode` value (`interactive` / `continuous` / `autonomous-ralph` /
-`scheduled`) is selected at `harness-loop` startup (REQ-078), not at
-`harness-init`, so `harness-plan` has no basis for implicit acceptance.
-The only exception is explicit user override via the
-`--auto-approve-roadmap` flag (see §Usage).
+The roadmap approval gate is **always interactive**. The `mode` value
+(`interactive` / `continuous` / `autonomous-ralph` / `scheduled`) is
+selected at `harness-loop` startup, not at `harness-init`, so
+`harness-plan` has no basis for implicit acceptance. The only
+exception is explicit user override via the `--auto-approve-roadmap`
+flag (see §Usage).
 
 Default path (no flag):
 
@@ -276,7 +276,7 @@ The `?` placeholders are filled by the Negotiation phase inside
 tiebreaker). `harness-plan` must NOT set threshold / max_iterations
 values itself.
 
-### Step 8: Create Tracker Issues (T-023)
+### Step 8: Create Tracker Issues
 
 Set `_state.json.phase = "issues-pending"` at step start so resume after
 a mid-loop failure can locate the correct entry point. Dispatch on
@@ -295,7 +295,7 @@ a mid-loop failure can locate the correct entry point. Dispatch on
 
 **`gh` CLI absence**: if `tracker == github` and `gh` is missing, abort
 the skill. Do not silently fall back to gitlab / none — the user's
-tracker choice is load-bearing for the audit trail (REQ-023).
+tracker choice is load-bearing for the audit trail.
 
 On failure mid-loop, `_state.json.phase` stays at `"issues-pending"` and
 partial `sprint_issues` is preserved. Resume re-enters Step 8 and the
@@ -325,8 +325,8 @@ fields that `harness-loop` reads on its Boot Sequence:
 Preserve all other fields written by `harness-init` (`max_iterations`,
 `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers`, etc.). The
 `mode` field is **not** set here — it is written by `harness-loop` on
-startup (REQ-078). Use a merge, not a replace, via
-`jq '.foo = "bar"'` on the existing file.
+startup. Use a merge, not a replace, via `jq '.foo = "bar"'` on the
+existing file.
 
 ### Step 10: Summary Report
 

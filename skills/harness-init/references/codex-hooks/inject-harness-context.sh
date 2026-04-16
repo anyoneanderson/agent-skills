@@ -5,8 +5,6 @@
 # tail + _state.json summary) as developer context so Codex's fresh
 # thread knows where the loop is and what files to read.
 #
-# Requirement refs: REQ-CB-020, REQ-075.
-#
 # Output contract:
 #   stdout JSON with hookSpecificOutput.additionalContext (preferred), or
 #   plain text stdout (also valid; Codex docs treat it as developer

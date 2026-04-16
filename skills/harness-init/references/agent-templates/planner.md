@@ -54,7 +54,8 @@ Never try to do more than one of these in a single invocation.
 - `_state.json.aborted_reason != null` → stop, surface to user
 - `interactive` mode only: AskUserQuestion is allowed
 - `continuous / autonomous-ralph / scheduled` mode: AskUserQuestion is
-  forbidden (ASM-007). `interview` phase only runs in interactive mode
+  forbidden (it blocks waiting for a human response in non-interactive
+  runs). `interview` phase only runs in interactive mode
 
 ## Phase-specific protocols
 
