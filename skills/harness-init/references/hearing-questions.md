@@ -88,8 +88,8 @@ question: "Which tools will the Evaluator use to run acceptance scenarios?" /
 options:
   - name: "Playwright (a11y snapshot) (Recommended for web) / Playwright（a11y スナップショット）（Web 推奨）"
     description: "Deterministic browser automation. Prefer accessibility tree (structural DOM snapshot) over visual screenshot comparison."
-  - name: "pytest (Python projects) / pytest（Python プロジェクト向け）"
-    description: "Python test runner. Good for API/lib."
+  - name: "pytest / pytest"
+    description: "Python-based test runner. Works for any HTTP/API surface regardless of the target service's language."
   - name: "curl / curl"
     description: "Raw HTTP checks. Simple API smoke tests."
   - name: "Custom script / 独自スクリプト"
@@ -137,7 +137,7 @@ options:
 ```
 
 **Config key**: `hook_level` ∈ `strict|warn|minimal`
-**Constraint**: autonomous modes — auto-patrol (autonomous-ralph: fresh session per iteration, for unattended overnight runs), autonomous, and scheduled — in `harness-loop` require `strict`. If the
+**Constraint**: autonomous modes (auto-patrol) in `harness-loop` require `strict`. If the
 user picks `minimal` here, `harness-loop` will force interactive mode.
 
 ---
@@ -203,7 +203,7 @@ sub-questions:
 `max_cost_usd`, `allowed_mcp_servers` (list). Also writes the constant
 `rubric_stagnation_n: 3` — not asked, baked in (`design §9.7`).
 
-### Wiring (T-016)
+### Wiring
 
 Each Round 7 answer flows to a specific runtime consumer:
 

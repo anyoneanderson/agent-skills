@@ -77,8 +77,8 @@ question: "Which tools will the Evaluator use to run acceptance scenarios?" /
 options:
   - name: "Playwright (a11y snapshot) (Recommended for web) / Playwright（a11y スナップショット）（Web 推奨）"
     description: "決定論的ブラウザ自動化。画面キャプチャ比較よりアクセシビリティツリー（DOM の構造的スナップショット）を優先"
-  - name: "pytest (Python projects) / pytest（Python プロジェクト向け）"
-    description: "Python テストランナー。API / ライブラリ向け"
+  - name: "pytest / pytest"
+    description: "Python ベースのテストランナー。テスト対象サービスの言語に関わらず、任意の HTTP/API に適用可能"
   - name: "curl / curl"
     description: "生の HTTP チェック。API スモーク用途"
   - name: "Custom script / 独自スクリプト"
@@ -116,7 +116,7 @@ question: "How strictly should hooks enforce safety?" /
 
 options:
   - name: "Strict — 破壊的コマンドを自動ブロック (Recommended for autonomous modes) / Strict — 破壊的コマンドを自動ブロック（autonomous モード推奨）"
-    description: "Tier-A 破壊操作 deny、未許可 MCP deny、全 Edit をログ。自動巡回モード（autonomous-ralph: 反復ごとにセッションリセット、夜間放置向け）/ scheduled には必須"
+    description: "破壊操作を拒否、未許可の MCP は拒否、全編集をログに記録。autonomous-ralph: 反復ごとにセッションリセット（夜間放置向け）。自動巡回モード・scheduled には必須"
   - name: "warn / warn"
     description: "リスキー操作をログするがブロックしない。strict 移行前にプロジェクトの実挙動を学ぶフェーズ向け"
   - name: "minimal / minimal"
@@ -124,7 +124,7 @@ options:
 ```
 
 **Config key**: `hook_level` ∈ `strict|warn|minimal`
-**制約**: `harness-loop` の autonomous モード — 自動巡回（autonomous-ralph: 反復ごとにセッションリセット、夜間放置向け）、autonomous、scheduled — は `strict` 必須。`minimal` を選ぶと `harness-loop` は interactive モードに強制遷移
+**制約**: `harness-loop` の autonomous モード（自動巡回モード）は `strict` 必須。`minimal` を選ぶと `harness-loop` は interactive モードに強制遷移
 
 ---
 
@@ -179,12 +179,12 @@ sub-questions:
     prompt: "Which MCP servers may the agents call? (comma-separated)" /
             "エージェントが呼び出して良い MCP サーバー（カンマ区切り）?"
     default: "playwright, github"
-    hint: "strict モードではここに無いものは deny される"
+    hint: "strict モードではここに無いものは拒否される"
 ```
 
 **書き込まれる config keys**: `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers`（リスト）。加えて定数 `rubric_stagnation_n: 3` も書く（質問はせず固定、design §9.7）
 
-### 配線（T-016）
+### 配線
 
 Round 7 の各回答は特定のランタイム消費者へ流れる：
 

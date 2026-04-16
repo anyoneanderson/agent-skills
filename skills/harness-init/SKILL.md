@@ -99,7 +99,7 @@ text is in [references/hearing-questions.md](references/hearing-questions.md)
 | 4 | cmux available? | `cmux_available` (bool) |
 | 5 | Hook level | `hook_level` (strict / warn / minimal) |
 | 6 | Tracker | `tracker` (github / gitlab / none) |
-| 7 | Auto-stop limits (Principal Skinner) + cost + MCP allow-list | `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers` (see T-016) |
+| 7 | Auto-stop limits (Principal Skinner) + cost + MCP allow-list | `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers` |
 
 Defaults are chosen to be safe: `strict` hook level is recommended for any
 `generator_backend` other than `claude`, but the user decides.
