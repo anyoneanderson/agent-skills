@@ -108,14 +108,6 @@ and `codex_cmux` options and advise the user to install it first. If
 the Codex plugin is missing but the CLI is present, remove only
 `codex_plugin` (keep `codex_cmux` which works off the CLI directly).
 
-> Historical note (Issue #46): `codex_cmux` was dropped in dogfood
-> round 2 but **restored** after further investigation. Both
-> `codex_plugin` and `codex_cmux` have the same Claude-side hook
-> limitation for Write observation; both are resolved by the
-> file-mediated `report.json` protocol (Orchestrator bridge script).
-> `codex_cmux` now positions as "human-watchable visibility mode",
-> while `codex_plugin` is the primary non-interactive path.
-
 ### Step 2: Write `_config.yml`
 
 Atomic write to `.harness/_config.yml`:
@@ -155,24 +147,28 @@ the skill package for reference.
 
 Render three agent files to `.claude/agents/` using `_config.yml` values:
 
-- `planner.md` — Orchestrates, writes product-spec/roadmap/contract, rules on
+- `planner.md` — orchestrates, writes product-spec/roadmap/contract, rules on
   negotiation stalemates
-- `generator.md` — Receives contract, implements, negotiates. Backend is
-  switched per `generator_backend` (inline Claude or Codex plugin)
-- `evaluator.md` — Runs acceptance scenarios (Playwright a11y snapshot for
+- `generator.md` — receives contract, implements, negotiates. Backend is
+  switched per `generator_backend` (inline Claude, Codex plugin, or Codex via cmux)
+- `evaluator.md` — runs acceptance scenarios (Playwright a11y snapshot for
   web, pytest/curl for api/cli), scores rubric axes, produces evidence
 
-Agent definitions cite the Boot Sequence and pin their role in the
-Shared-read / Isolated-write protocol (design §9.5).
+Pick the language variant matching detected input: `<role>.md` (EN) or
+`<role>.ja.md` (JA) from `references/agent-templates/`.
 
 If `generator_backend ∈ {codex_plugin, codex_cmux}` OR the project
 already has a `.codex/` directory (indicating Codex CLI is configured),
 also render Codex TOML role configs (plain `ConfigToml` layers with
 top-level `model` + `developer_instructions`):
 
-- `.codex/agents/planner.toml` — from `references/agent-templates/planner.toml`
-- `.codex/agents/evaluator.toml` — from `references/agent-templates/evaluator.toml`
-- `.codex/agents/generator.toml` — from `references/agent-templates/generator.toml`
+- `.codex/agents/planner.toml` — from `references/agent-templates/planner{.ja}.toml`
+- `.codex/agents/evaluator.toml` — from `references/agent-templates/evaluator{.ja}.toml`
+- `.codex/agents/generator.toml` — from `references/agent-templates/generator{.ja}.toml`
+
+`.ja.toml` carries Japanese `developer_instructions` and is used when
+the detected input language is Japanese, keeping Codex's role overlay
+in the same language as Claude's sub-agent definition.
 
 Each TOML's `developer_instructions` field carries the full role
 contract (Boot Sequence, Pre-flight Gates, output protocol incl. the
@@ -181,11 +177,11 @@ matching the Claude sub-agent definition in `.claude/agents/<role>.md`).
 Activation happens via the Orchestrator's prompt-file opening line
 ("You are the 'generator' agent defined in .codex/agents/generator.toml...").
 
-**Model caveat (Issue #46)**: codex-plugin-cc's `task` command does
-NOT honor the `model` field from agent TOML. The Orchestrator passes
-`--model <name>` on every invocation, reading `codex_generator_model`
-from `_config.yml`. The TOML's `model` is kept for forward compat
-(a future plugin version may respect it).
+**Model caveat**: codex-plugin-cc's `task` command does NOT honor the
+`model` field from agent TOML. The Orchestrator passes `--model <name>`
+on every invocation, reading `codex_generator_model` from `_config.yml`.
+The TOML's `model` is kept for forward compat (a future plugin version
+may respect it).
 
 Patch `.codex/config.toml` non-destructively: append `[agents.planner]`,
 `[agents.evaluator]`, `[agents.generator]` role declarations (with
@@ -382,6 +378,5 @@ Emit to the user:
 - [resilience-schema.md](references/resilience-schema.md) — progress/state/metrics schemas
 - [templates/](references/templates/) — product-spec, sprint-contract, shared_state
 
-See `.specs/harness-suite/` in the source repo for the parent requirement.md,
-design.md, and tasks.md. See `.specs/harness-codex-backend/` for the
-Codex-backend overlay (Issue #46).
+See `.specs/harness-suite/` in the source repo for requirement.md,
+design.md, and tasks.md governing this skill.

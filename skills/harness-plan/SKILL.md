@@ -244,8 +244,8 @@ prompt template. Substitute `{{EPIC_NAME}}`, `{{SPRINT_NUMBER}}`,
 
 Each invocation is **independent** — no shared context between sprints,
 each Planner reads only product-spec + roadmap + its own sprint
-metadata. This matches the γ (file-mediated peer processes) architecture
-of Issue #46.
+metadata. This is the file-mediated peer-processes discipline the
+harness series follows throughout.
 
 **Parallel execution**: Sprints are independent, so dispatch them in
 parallel if the Task tool supports it. For N sprints the total wall
@@ -438,6 +438,4 @@ Semantics:
   — Planner role contract (Boot Sequence, phase types, write permissions)
 
 See `.specs/harness-suite/` in the source repo for requirement.md,
-design.md, and tasks.md governing this skill. See
-`.specs/harness-codex-backend/` for the Planner fresh-split overlay
-(Issue #46).
+design.md, and tasks.md governing this skill.

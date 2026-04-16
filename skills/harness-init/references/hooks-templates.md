@@ -166,8 +166,8 @@ human catches misbehaviour.
 ## Codex-side hooks (generator_backend ∈ {codex_plugin, codex_cmux})
 
 When the Generator runs under Codex, Claude Code's `PostToolUse(Edit|Write)`
-hook cannot observe Codex's internal tool calls (confirmed experimentally
-in Issue #46). To close that gap, `harness-init` also installs a set of
+hook cannot observe Codex's internal tool calls — they happen inside a
+child process. To close that gap, `harness-init` also installs a set of
 hooks on the **Codex side**, in `<project>/.codex/hooks.json`. These
 hooks run inside Codex's hook runner when Codex makes a Bash tool call
 (or starts a session).
@@ -266,13 +266,6 @@ still installs the full Claude `.claude/settings.json` hook set (strict
 - Claude session's Bash / Edit / Write → Claude hooks fire
 - Codex subprocess's Bash → Codex hooks fire (Claude hooks stay silent)
 - Codex subprocess's Write → neither side fires; covered by bridge script
-
-### Future work
-
-When Codex's `PostToolUse` matcher extends to `Write` / `Edit` / MCP /
-WebSearch, the Orchestrator bridge can be simplified (Codex hooks will
-record touched files themselves). Until then, the bridge + report.json
-pattern is authoritative. Tracked in Issue #46 "Future Work" section.
 
 ---
 

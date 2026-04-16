@@ -69,8 +69,6 @@ Options を出す前に `harness-init` が Codex CLI とプラグインの存在
 
 **Config key**: `generator_backend` ∈ `claude|codex_plugin|codex_cmux|other`
 
-**経緯**: dogfood round 2 で `codex_cmux` を削除した（hook が効かないため）。Issue #46 で再検討した結果、同じ hook 制約は `codex_plugin` 側にも存在すると判明。両方とも file-mediated report.json 方式で解決されるため、`codex_cmux` は「可視モード」という別の位置付けで**復活**。
-
 ---
 
 ## Round 3 — Evaluator ツール

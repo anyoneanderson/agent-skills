@@ -83,13 +83,6 @@ options:
 
 **Config key**: `generator_backend` ∈ `claude|codex_plugin|codex_cmux|other`
 
-**History**: an earlier hearing (dogfood round 2) dropped `codex_cmux`
-because Claude Code hooks could not observe Codex's tool calls in a
-cmux pane. Issue #46 re-examined this and found the same hook
-limitation exists in `codex_plugin` too — both are resolved by the
-file-mediated report.json protocol. `codex_cmux` is therefore
-restored with a different positioning (visibility mode), not dropped.
-
 ---
 
 ## Round 3 — Evaluator tools

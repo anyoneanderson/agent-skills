@@ -4,8 +4,9 @@ Every Negotiation round and every Implementation iteration that involves
 the Generator runs the unified dispatch described here. The backend
 differs only in the invocation mechanism; the file protocol is identical.
 
-Cross-references: [shared-state-protocol.md](shared-state-protocol.md),
-parent spec `.specs/harness-codex-backend/design.md` §5.
+See also: [shared-state-protocol.md](shared-state-protocol.md) for the
+write-permission table and file layout that dispatch inputs/outputs
+against.
 
 ## Invocation per backend
 

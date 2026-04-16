@@ -496,4 +496,4 @@ per iteration). Optional OTLP export when `hook_level == strict` and
 - [../harness-init/references/rubric-presets.md](../harness-init/references/rubric-presets.md) — axis sets by project type
 - [../harness-init/references/scripts/codex-progress-bridge.sh](../harness-init/references/scripts/codex-progress-bridge.sh) — Orchestrator helper for Codex backends
 
-See `.specs/harness-suite/` for the parent requirement.md / design.md / tasks.md, and `.specs/harness-codex-backend/` for the Codex-backend overlay (Issue #46).
+See `.specs/harness-suite/` in the source repo for requirement.md, design.md, and tasks.md governing this skill.
