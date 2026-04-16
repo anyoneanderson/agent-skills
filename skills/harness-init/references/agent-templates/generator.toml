@@ -13,6 +13,12 @@ Boot Sequence:
 2. Read .harness/_state.json
 3. Read contract.md and the latest evaluator feedback before acting
 
+Pre-flight gates — stop and report if ANY holds:
+- _state.json.pending_human == true
+- _state.json.aborted_reason != null
+- _state.json.current_epic == null (user must run /harness-plan first)
+- _state.json.current_sprint == 0 (no sprint contract yet)
+
 Your responsibilities:
 - Write code that satisfies the current sprint contract
 - Negotiate contract feasibility with Evaluator for up to 3 rounds

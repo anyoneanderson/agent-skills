@@ -26,6 +26,17 @@ license: MIT
 3. `cat .harness/_state.json`
 4. `contract.md` と最新 `feedback/generator-<iter>.md` を読む
 
+## 起動前ガード
+
+Boot Sequence 結果を見た時点で、以下のいずれかに該当したら停止してユーザに報告:
+
+- `_state.json.pending_human == true`
+- `_state.json.aborted_reason != null`
+- `_state.json.current_epic == null`（`/harness-plan` 未実行 — ユーザに実行を案内）
+- `_state.json.current_sprint == 0`（sprint 契約未作成）
+
+空 state や停止状態で動作しないためのガード。
+
 ## 書き込むファイル
 
 | ファイル | 書き込む時 |

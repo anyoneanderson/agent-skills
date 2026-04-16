@@ -40,13 +40,13 @@ question: "What kind of project is this harness being installed into?" /
 
 options:
   - name: "Web (UI present) (Recommended) / Web（UIあり）（推奨）"
-    description: "HTML/CSS/JS, mobile web, SPAs. Uses Web rubric preset (Functionality/Craft/Design/Originality)."
+    description: "HTML/CSS/JS, mobile web, SPAs. Uses the Web rubric (scoring criteria) preset: Functionality / Craft / Design / Originality."
   - name: "API / バックエンド API"
-    description: "HTTP/gRPC/GraphQL backend without UI. Uses API rubric (Functionality/Craft/Consistency/Documentation)."
+    description: "HTTP/gRPC/GraphQL backend without UI. Uses the API rubric (scoring criteria): Functionality / Craft / Consistency / Documentation."
   - name: "CLI / コマンドラインツール"
-    description: "Command-line tool invoked by humans or CI. Uses CLI rubric (Functionality/Craft/Ergonomics/Documentation)."
+    description: "Command-line tool invoked by humans or CI. Uses the CLI rubric (scoring criteria): Functionality / Craft / Ergonomics / Documentation."
   - name: "Other / その他"
-    description: "Free-form. Rubric will default to Web preset; adjust per sprint."
+    description: "Free-form. The rubric (scoring criteria) defaults to the Web preset and is adjusted per sprint."
 ```
 
 **Config key**: `project_type` ∈ `web|api|cli|other`
@@ -62,19 +62,19 @@ question: "Which backend should the Generator agent use?" /
 
 options:
   - name: "Claude (same process) (Recommended) / Claude（同一プロセス）（推奨）"
-    description: "Simplest. No external dependencies. Lower model diversity for GAN loop."
-  - name: "Codex via cmux / Codex（cmux 経由）"
-    description: "Delegate to Codex CLI in a separate cmux pane (requires cmux). Best GAN adversariality."
+    description: "Simplest. No external dependencies. Lower model diversity for the GAN loop."
   - name: "Codex plugin / Codex プラグイン"
     description: "Use a Claude Code plugin that exposes Codex inline. Requires the plugin to be installed."
   - name: "Other MCP / 他の MCP"
-    description: "Custom backend via MCP tool. You'll edit generator.md by hand afterwards."
+    description: "Custom backend via an MCP tool. You will edit generator.md by hand afterwards."
 ```
 
-**Config key**: `generator_backend` ∈ `claude|codex_cmux|codex_plugin|other`
-**Fallback** (REQ-060): If `codex_cmux` is chosen but `cmux` command is
-not found at runtime, `harness-loop` falls back to `claude` and logs a
-warning to `progress.md`.
+**Config key**: `generator_backend` ∈ `claude|codex_plugin|other`
+
+> Note: an earlier `codex_cmux` option (delegate to Codex in a separate
+> cmux pane) was dropped because context hand-off and hook enforcement
+> across panes proved unreliable (see Issue #46). Use `codex_plugin`
+> instead.
 
 ---
 
@@ -87,9 +87,9 @@ question: "Which tools will the Evaluator use to run acceptance scenarios?" /
 
 options:
   - name: "Playwright (a11y snapshot) (Recommended for web) / Playwright（a11y スナップショット）（Web 推奨）"
-    description: "Deterministic browser automation. Prefer accessibility tree (structural DOM snapshot) over visual screenshot comparison."
+    description: "Automate a browser and verify the UI via its accessibility tree (a structural DOM snapshot). Avoids flaky pixel-level screenshot comparison."
   - name: "pytest / pytest"
-    description: "Python-based test runner. Works for any HTTP/API surface regardless of the target service's language."
+    description: "Python-based test runner. Great fit for any HTTP/API-style backend service regardless of its implementation language."
   - name: "curl / curl"
     description: "Raw HTTP checks. Simple API smoke tests."
   - name: "Custom script / 独自スクリプト"
@@ -102,26 +102,7 @@ options:
 
 ---
 
-## Round 4 — cmux availability
-
-```
-question: "Is cmux available in your environment?" /
-          "この環境で cmux は利用できますか？"
-
-options:
-  - name: "Yes — use when helpful / はい。必要時に利用"
-    description: "Enables parallel sub-agents and Codex delegation. Skill will detect and degrade gracefully if cmux is missing at runtime."
-  - name: "No / いいえ"
-    description: "All agents run sequentially in the same process. Still functional; slightly slower for multi-feature sprints."
-```
-
-**Config key**: `cmux_available` (bool)
-**Note**: If Round 2 chose `codex_cmux` but this answer is "No", surface a
-validation error and return to Round 2.
-
----
-
-## Round 5 — Hook enforcement level
+## Round 4 — Hook enforcement level
 
 ```
 question: "How strictly should hooks enforce safety?" /
@@ -142,7 +123,7 @@ user picks `minimal` here, `harness-loop` will force interactive mode.
 
 ---
 
-## Round 6 — Issue/PR tracker
+## Round 5 — Issue/PR tracker
 
 ```
 question: "Which issue/PR tracker should harness-plan and harness-loop use?" /
@@ -164,39 +145,75 @@ instead of calling `gh`.
 
 ---
 
-## Round 7 — Auto-stop safety limits (Principal Skinner), cost cap, and MCP allow-list
+## Round 6 — Auto-stop safety limits, cost cap, and MCP allow-list
 
 This round asks four quick questions in one AskUserQuestion batch (the
 schema allows up to 4). Defaults are safe for overnight runs.
 
 ```
-question: "Set auto-stop safety limits, cost cap, and MCP allow-list (Principal Skinner)" /
-          "自動停止リミッター・コスト上限・MCP allow-list を設定します（Principal Skinner）"
+question: "Set auto-stop safety limits, cost cap, and MCP allow-list" /
+          "自動停止リミッター・コスト上限・MCP allow-list を設定します"
 
 sub-questions:
   - key: max_iterations
     prompt: "Max iterations per sprint before forced stop?" /
-            "スプリント毎の iteration 上限（強制停止）?"
+            "スプリント毎の iteration 上限（強制停止）は？"
     default: 8
     range: [2, 32]
+    options:
+      - name: "8 (Recommended) / 8（推奨）"
+        description: "Safe default for overnight runs. Baseline for the auto-stop limiter."
+      - name: "4"
+        description: "For short sprints. Minimises per-sprint cost."
+      - name: "16"
+        description: "For sprints that need longer exploration."
+      - name: "32"
+        description: "Maximum. Recommended only under human supervision."
 
   - key: max_wall_time_sec
     prompt: "Max elapsed time (wall-clock) per sprint (seconds)?" /
-            "スプリント毎の経過時間の上限（秒）?"
+            "スプリント毎の経過時間の上限（秒）は？"
     default: 28800   # 8 hours
     range: [600, 86400]
+    options:
+      - name: "8h (28800s) (Recommended) / 8時間（推奨）"
+        description: "Default suited to overnight runs."
+      - name: "2h (7200s)"
+        description: "For short sprints."
+      - name: "4h (14400s)"
+        description: "Half-day size."
+      - name: "24h (86400s)"
+        description: "Maximum. Recommended only under human supervision."
 
   - key: max_cost_usd
     prompt: "Max cumulative cost per sprint (USD)?" /
-            "スプリント毎の累計コスト上限（USD）?"
+            "スプリント毎の累計コスト上限（USD）は？"
     default: 20.0
     range: [1.0, 500.0]
+    options:
+      - name: "$20 (Recommended) / $20（推奨）"
+        description: "Default for a typical sprint."
+      - name: "$5"
+        description: "Safety-first."
+      - name: "$50"
+        description: "For larger sprints."
+      - name: "$100"
+        description: "Top bucket. Recommended only under human supervision."
 
   - key: allowed_mcp_servers
-    prompt: "Which MCP servers may the agents call? (comma-separated)" /
-            "エージェントが呼び出して良い MCP サーバー（カンマ区切り）?"
+    prompt: "Which MCP servers may the agents call?" /
+            "エージェントが呼び出して良い MCP サーバーは？"
     default: "playwright, github"
-    hint: "Anything not listed here will be denied in strict mode."
+    hint: "Anything not listed here will be denied in strict mode. Pick the wildcard option to accept everything (trusted single-dev projects only)."
+    options:
+      - name: "playwright (Recommended for web) / playwright（Web 推奨）"
+        description: "Evaluator uses this for a11y snapshots."
+      - name: "github / github"
+        description: "For Issue/PR operations via `gh` or MCP."
+      - name: "All installed MCP servers (*) / 登録されている全てのMCP (*)"
+        description: "Wildcard. Accepts every MCP server. `.harness/scripts/mcp-allowlist.sh` treats `[\"*\"]` as allow-all and logs a one-time risk note to progress.md. Use only for trusted single-developer projects."
+      - name: "Custom list / 独自リスト"
+        description: "Specify comma-separated server names (e.g. `playwright, github-zenchaine, context7`)."
 ```
 
 **Config keys written**: `max_iterations`, `max_wall_time_sec`,
@@ -205,14 +222,14 @@ sub-questions:
 
 ### Wiring
 
-Each Round 7 answer flows to a specific runtime consumer:
+Each answer flows to a specific runtime consumer:
 
 | Answer | `_config.yml` key | Consumer | Enforcement |
 |---|---|---|---|
-| max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — allow stop when `_state.json.iteration >= max` |
+| max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Auto-stop limiter — allow stop when `_state.json.iteration >= max` |
 | max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | Allow stop when elapsed time `now − _state.json.start_time >= max` |
 | max_cost_usd | `max_cost_usd` | `stop-guard.sh` | Allow stop when `_state.json.cumulative_cost_usd >= max` |
-| allowed_mcp_servers | `allowed_mcp_servers` | `.harness/scripts/mcp-allowlist.sh` | strict hook_level only — deny `mcp__<server>__*` if `<server>` not in list |
+| allowed_mcp_servers | `allowed_mcp_servers` | `.harness/scripts/mcp-allowlist.sh` | strict hook_level only — deny `mcp__<server>__*` if `<server>` not in list. Sentinel `["*"]` = allow all (logs a one-time risk note to progress.md). |
 | (constant) | `rubric_stagnation_n: 3` | `stop-guard.sh` | Allow stop when `_state.json.rubric_stagnation_count >= n` |
 
 State-key names follow `references/resilience-schema.md` §\_state.json.
@@ -224,7 +241,7 @@ Update paths:
   (`iteration`, `start_time`, `cumulative_cost_usd`, `rubric_stagnation_count`)
   during each sprint.
 - `harness-rules-update` may raise caps only after a completed sprint (never
-  mid-sprint) to avoid Principal Skinner evasion.
+  mid-sprint) to avoid auto-stop evasion.
 
 **Input validation**: if the user types a value outside the stated `range`,
 re-ask once with the range in the error message. If they insist on an
@@ -235,7 +252,7 @@ that line in `_config.yml` as a comment.
 
 ## Summary
 
-After all 7 rounds, `harness-init` Step 2 writes the full `_config.yml`.
+After all 6 rounds, `harness-init` Step 2 writes the full `_config.yml`.
 The order above matches the order defined in `SKILL.md` §Step 1.
 
 If the user selects "Other" at any round, accept the free-form text as
@@ -244,6 +261,6 @@ not ask follow-ups unless the input is genuinely ambiguous.
 
 ## Skip-to-defaults Mode (future)
 
-A `--defaults` flag (v2) will skip all 7 rounds and apply:
-`web / claude / [playwright] / cmux=false / strict / github / 8 / 28800 / 20 / [playwright, github]`.
+A `--defaults` flag (v2) will skip all 6 rounds and apply:
+`web / claude / [playwright] / strict / github / 8 / 28800 / 20 / [playwright, github]`.
 Not implemented in v1 by design — the hearing is the point.

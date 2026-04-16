@@ -87,22 +87,25 @@ On "Re-init from scratch", rename existing `.harness/` to
 
 ### Step 1: Environment Hearing
 
-Seven AskUserQuestion rounds collect the full `_config.yml`. Exact question
+Six AskUserQuestion rounds collect the full `_config.yml`. Exact question
 text is in [references/hearing-questions.md](references/hearing-questions.md)
 (or `.ja.md`). The axis being collected on each round:
 
 | # | Setting | Config key |
 |---|---|---|
 | 1 | Project type | `project_type` (web / api / cli / other) |
-| 2 | Generator backend | `generator_backend` (claude / codex_cmux / codex_plugin / other) |
+| 2 | Generator backend | `generator_backend` (claude / codex_plugin / other) |
 | 3 | Evaluator tools | `evaluator_tools` (list: playwright / pytest / curl / custom) |
-| 4 | cmux available? | `cmux_available` (bool) |
-| 5 | Hook level | `hook_level` (strict / warn / minimal) |
-| 6 | Tracker | `tracker` (github / gitlab / none) |
-| 7 | Auto-stop limits (Principal Skinner) + cost + MCP allow-list | `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers` |
+| 4 | Hook level | `hook_level` (strict / warn / minimal) |
+| 5 | Tracker | `tracker` (github / gitlab / none) |
+| 6 | Auto-stop limits + cost cap + MCP allow-list | `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers` |
 
 Defaults are chosen to be safe: `strict` hook level is recommended for any
 `generator_backend` other than `claude`, but the user decides.
+
+> Note: an earlier Round for cmux availability (and the `codex_cmux`
+> generator backend option) was removed — context hand-off and hook
+> enforcement across cmux panes proved unreliable (Issue #46).
 
 ### Step 2: Write `_config.yml`
 
@@ -113,7 +116,6 @@ schema_version: 1
 project_type: <from hearing>
 generator_backend: <from hearing>
 evaluator_tools: [<from hearing>]
-cmux_available: <bool>
 hook_level: <strict|warn|minimal>
 tracker: <github|gitlab|none>
 max_iterations: 8
@@ -142,7 +144,7 @@ Render three agent files to `.claude/agents/` using `_config.yml` values:
 - `planner.md` — Orchestrates, writes product-spec/roadmap/contract, rules on
   negotiation stalemates
 - `generator.md` — Receives contract, implements, negotiates. Backend is
-  switched per `generator_backend` (cmux-delegate to Codex, or inline Claude)
+  switched per `generator_backend` (inline Claude or Codex plugin)
 - `evaluator.md` — Runs acceptance scenarios (Playwright a11y snapshot for
   web, pytest/curl for api/cli), scores rubric axes, produces evidence
 
@@ -155,7 +157,11 @@ top-level `model` + `developer_instructions`):
 
 - `.codex/agents/planner.toml` — from `references/agent-templates/planner.toml`
 - `.codex/agents/evaluator.toml` — from `references/agent-templates/evaluator.toml`
-- `.codex/agents/generator.toml` — placeholder (final form per Issue #46)
+- `.codex/agents/generator.toml` — from `references/agent-templates/generator.toml`.
+  The current template is a placeholder stub (its final form depends on
+  Issue #46, Codex plugin integration). `harness-init` copies this stub
+  verbatim regardless of `generator_backend` so that `.codex/config.toml`
+  always has a valid role definition.
 
 Patch `.codex/config.toml` non-destructively: append `[agents.planner]`,
 `[agents.evaluator]`, `[agents.generator]` role declarations (with
@@ -219,13 +225,37 @@ If not, create it with only this pointer block.
 Create empty but valid:
 
 - `.harness/progress.md` — with header comment explaining append-only
-- `.harness/_state.json` — schema v1; all required keys from
-  [resilience-schema.md](references/resilience-schema.md) §\_state.json, including
-  `completed: false`, `pending_human: false`, `current_epic: null`,
-  `current_sprint: 0`, `phase: "negotiation"`, `iteration: 0`,
-  `cumulative_cost_usd: 0`, `rubric_stagnation_count: 0`, and
-  `start_time: <ISO-8601 now>`. These names are canonical — `stop-guard.sh`
-  and other scripts read them verbatim
+- `.harness/_state.json` — schema v1. Write ALL required keys from
+  [resilience-schema.md](references/resilience-schema.md) §\_state.json
+  (these names are canonical — `stop-guard.sh` and other scripts read
+  them verbatim). Initial values:
+
+  ```json
+  {
+    "schema_version": 1,
+    "current_epic": null,
+    "current_sprint": 0,
+    "phase": "negotiation",
+    "iteration": 0,
+    "max_iterations": "<_config.yml.max_iterations>",
+    "max_wall_time_sec": "<_config.yml.max_wall_time_sec>",
+    "max_cost_usd": "<_config.yml.max_cost_usd>",
+    "cumulative_cost_usd": 0,
+    "start_time": "<ISO-8601 UTC now>",
+    "last_agent": "orchestrator",
+    "next_action": "run /harness-plan to draft the first epic",
+    "last_commit": null,
+    "features_pass_fail": [],
+    "completed": false,
+    "pending_human": false,
+    "aborted_reason": null,
+    "mode": "interactive",
+    "rubric_stagnation_count": 0
+  }
+  ```
+
+  (The three `max_*` placeholders come from `_config.yml`; the rest are
+  literal initial values.)
 - `.harness/metrics.jsonl` — empty file
 
 Add `.harness/*.backup-*` to `.gitignore` if that file exists.

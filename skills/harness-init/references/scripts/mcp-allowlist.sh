@@ -8,6 +8,9 @@
 # <server> and compare against the allow-list.
 
 set -euo pipefail
+# Disable glob expansion: a literal "*" in allowed_mcp_servers would
+# otherwise be expanded to filesystem entries by `for a in $allowed`.
+set -f
 
 CONFIG_FILE=".harness/_config.yml"
 
@@ -53,6 +56,27 @@ allowed="$(
   ' "$CONFIG_FILE"
 )"
 
+# Sentinel "*" in the allow-list = allow every MCP server. This is the
+# "registered MCP servers: all" choice from hearing Round 6. Risky, but
+# useful for trusted single-developer projects. We log a one-time risk
+# note to progress.md (gated by .harness/.mcp-wildcard-warned) so the
+# user has a durable reminder.
+for a in $allowed; do
+  if [ "$a" = "*" ]; then
+    marker=".harness/.mcp-wildcard-warned"
+    if [ ! -f "$marker" ]; then
+      ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      mkdir -p .harness 2>/dev/null || true
+      printf '%s\n' "- ${ts} | WARN mcp-allowlist: wildcard (*) in allow-list — every MCP server is accepted; tighten once the project is hardened" \
+        >> .harness/progress.md 2>/dev/null || true
+      touch "$marker" 2>/dev/null || true
+    fi
+    printf '{}\n'
+    exit 0
+  fi
+done
+
+# Standard exact-match allow-list check.
 for a in $allowed; do
   if [ "$a" = "$server" ]; then
     printf '{}\n'

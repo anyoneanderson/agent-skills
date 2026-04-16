@@ -12,7 +12,9 @@
 set -euo pipefail
 
 WARN_ONLY=0
+TEST_MODE="${HARNESS_TEST_MODE:-0}"
 [ "${1:-}" = "--warn-only" ] && WARN_ONLY=1
+[ "${1:-}" = "--test-mode" ] && TEST_MODE=1
 
 PATTERNS_FILE=".harness/tier-a-patterns.txt"
 STATE_FILE=".harness/_state.json"
@@ -38,6 +40,17 @@ done < "$PATTERNS_FILE"
 [ -z "$matched" ] && { printf '{}\n'; exit 0; }
 
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Test mode: skip progress.md append and state mutation; emit a
+# deterministic deny with test_mode:true so installers can verify the
+# regex-match path without polluting real state. Enable via either
+# HARNESS_TEST_MODE=1 env var or --test-mode arg.
+if [ "$TEST_MODE" = "1" ]; then
+  jq -n --arg p "$matched" --arg c "$cmd" \
+    '{decision:"deny", reason:("tier-a (test-mode) would deny: pattern=" + $p + " cmd=" + $c), test_mode:true}'
+  exit 0
+fi
+
 mkdir -p "$(dirname "$PROGRESS_FILE")"
 # NB: format string must not start with "-" (some printf impls parse it as
 # an option). Use "%s\n" with a pre-built line.

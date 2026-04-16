@@ -29,6 +29,18 @@ loop converge.
 3. `cat .harness/_state.json`
 4. Read `contract.md` and the latest `feedback/generator-<iter>.md`
 
+## Pre-flight Gates
+
+Before acting on the Boot Sequence output, stop and report to the user if
+ANY of the following holds:
+
+- `_state.json.pending_human == true`
+- `_state.json.aborted_reason != null`
+- `_state.json.current_epic == null` (harness-plan has not been run — advise the user to run `/harness-plan`)
+- `_state.json.current_sprint == 0` (no sprint contract exists yet)
+
+These gates prevent acting on an empty or halted state.
+
 ## What you write
 
 | File | When |
