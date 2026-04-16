@@ -56,25 +56,39 @@ options:
 
 ## Round 2 — Generator backend
 
+Before presenting options, `harness-init` detects Codex CLI and
+plugin availability (see SKILL.md Step 8):
+
+- If `codex --version` fails → remove both `codex_plugin` and
+  `codex_cmux` options; advise the user to run
+  `npm install -g @openai/codex` first.
+- If the `openai/codex-plugin-cc` plugin is not installed under
+  `~/.claude/plugins/cache/openai-codex/` → remove `codex_plugin`;
+  `codex_cmux` may remain as a Codex-aware option.
+
 ```
 question: "Which backend should the Generator agent use?" /
           "Generator エージェントはどのバックエンドを使いますか？"
 
 options:
-  - name: "Claude (same process) (Recommended) / Claude（同一プロセス）（推奨）"
-    description: "Simplest. No external dependencies. Lower model diversity for the GAN loop."
-  - name: "Codex plugin / Codex プラグイン"
-    description: "Use a Claude Code plugin that exposes Codex inline. Requires the plugin to be installed."
+  - name: "Claude (same process) / Claude（同一プロセス）"
+    description: "Simplest. No external dependencies. Lower model diversity (both G and E are Claude) — GAN adversarial pressure is weakest here. Good baseline / fallback."
+  - name: "Codex plugin (Recommended) / Codex プラグイン（推奨）"
+    description: "Run Codex (gpt-5.4) as the Generator via the openai/codex-plugin-cc plugin. Non-interactive, deterministic, JSON-reporting. The Orchestrator writes a prompt-file; Codex reads it, implements, writes a narrative + report.json; Orchestrator updates progress.md via the bridge script. Requires Codex CLI + plugin installed (harness-init verifies)."
+  - name: "Codex via cmux (visibility mode) / Codex（cmux 経由、可視モード）"
+    description: "Same file-mediated protocol as Codex plugin, but Codex runs inside a cmux-delegated pane you can watch. Useful for long-running sprints where you want to see Codex reason in real time, or for debugging Codex behavior. Slightly less deterministic than the plugin path. Requires Codex CLI + cmux-delegate skill."
   - name: "Other MCP / 他の MCP"
-    description: "Custom backend via an MCP tool. You will edit generator.md by hand afterwards."
+    description: "Custom backend via an MCP tool. You will edit generator.md / .codex/agents/generator.toml by hand afterwards, following the same 2-file output protocol (narrative + report.json)."
 ```
 
-**Config key**: `generator_backend` ∈ `claude|codex_plugin|other`
+**Config key**: `generator_backend` ∈ `claude|codex_plugin|codex_cmux|other`
 
-> Note: an earlier `codex_cmux` option (delegate to Codex in a separate
-> cmux pane) was dropped because context hand-off and hook enforcement
-> across panes proved unreliable (see Issue #46). Use `codex_plugin`
-> instead.
+**History**: an earlier hearing (dogfood round 2) dropped `codex_cmux`
+because Claude Code hooks could not observe Codex's tool calls in a
+cmux pane. Issue #46 re-examined this and found the same hook
+limitation exists in `codex_plugin` too — both are resolved by the
+file-mediated report.json protocol. `codex_cmux` is therefore
+restored with a different positioning (visibility mode), not dropped.
 
 ---
 

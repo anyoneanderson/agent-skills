@@ -120,13 +120,29 @@ Copy `.harness/templates/product-spec.md` →
 `.harness/<epic>/product-spec.md` if the target does not exist. If it
 exists from a previous run, keep it — Step 4 resumes in place.
 
-### Step 4: Interactive product-spec Drafting
+### Step 4: Interactive product-spec Drafting (Planner phase=interview)
 
-Follows [product-spec-guide.md](references/product-spec-guide.md). The
-Planner walks the five sections in order — Why, What, Out of Scope,
+This is the **only** conversational Planner phase — a single long session
+dedicated to the interview. All subsequent phases (roadmap generation,
+contract drafting, ruling) are dispatched as separate fresh Planner
+invocations to avoid context bloat.
+
+Invoke the Planner sub-agent with the
+[`planner-interview`](references/prompt-templates/planner-interview.md)
+prompt template (substitute `{{EPIC_NAME}}`, `{{USER_REQUEST}}`,
+`{{PROJECT_TYPE}}`). Also reference
+[product-spec-guide.md](references/product-spec-guide.md) for section
+structure.
+
+The Planner walks the five sections in order — Why, What, Out of Scope,
 Constraints, Success Signals — asking section-specific
 `AskUserQuestion` rounds and writing answers into the matching section
 of `.harness/<epic>/product-spec.md`.
+
+**Compact resilience** (per Planner role contract): the Planner appends
+each user response to `.harness/progress.md` as it collects them, so
+even if context compaction fires mid-interview, a resume can reconstruct
+the conversation from progress.md tail + existing product-spec.md draft.
 
 Key enforcement (from the guide):
 
@@ -150,13 +166,17 @@ user must resolve before harness-loop starts.
 
 Commit: `git add .harness/<epic>/product-spec.md && git commit -m "harness-plan: product-spec for <epic>"`.
 
-### Step 5: Planner Generates roadmap.md
+### Step 5: Planner Generates roadmap.md (fresh Planner, phase=roadmap)
 
-Invoke the Planner sub-agent (defined at `.claude/agents/planner.md` by
-`harness-init`) with:
+Invoke a **new fresh** Planner sub-agent (not a continuation of the
+interview session from Step 4 — that session has already exited). Use
+the [`planner-roadmap`](references/prompt-templates/planner-roadmap.md)
+prompt template (substitute `{{EPIC_NAME}}`).
 
-- `.harness/<epic>/product-spec.md` as input
-- [roadmap-guide.md](references/roadmap-guide.md) as the decomposition and
+Inputs (the fresh Planner reads from disk):
+
+- `.harness/<epic>/product-spec.md` (finalized in Step 4)
+- [roadmap-guide.md](references/roadmap-guide.md) — decomposition /
   bundling doctrine
 
 Output: `.harness/<epic>/roadmap.md` with YAML frontmatter listing sprints
@@ -213,26 +233,48 @@ Set `_state.json.phase = "roadmap-approved"` on approval (either path).
 
 Commit: `git add .harness/<epic>/roadmap.md && git commit -m "harness-plan: roadmap for <epic>"`.
 
-### Step 7: Pre-fill Sprint Contracts
+### Step 7: Draft Sprint Contracts (fresh Planner × N, phase=contract-draft)
 
-For each sprint in `roadmap.md.sprints`:
+For each sprint in `roadmap.md.sprints`, dispatch **one fresh Planner
+sub-agent** using the
+[`planner-contract`](references/prompt-templates/planner-contract.md)
+prompt template. Substitute `{{EPIC_NAME}}`, `{{SPRINT_NUMBER}}`,
+`{{SPRINT_FEATURE}}`, `{{SPRINT_BUNDLING}}`, `{{SPRINT_BUNDLED_WITH}}`,
+`{{SPRINT_GOAL}}`, `{{RUBRIC_PRESET}}`.
 
-1. Create directory `.harness/<epic>/sprints/sprint-<n>-<feature>/`
-2. Copy `.harness/templates/sprint-contract.md` →
-   `.harness/<epic>/sprints/sprint-<n>-<feature>/contract.md`
-3. Pre-fill the YAML frontmatter from `_config.yml` + the roadmap entry:
-   - `sprint`, `feature`, `bundling`
-   - `max_iterations` ← `_config.yml.max_iterations`
-   - `max_negotiation_rounds` ← `_config.yml.negotiation_max_rounds`
-   - `status: negotiating`
-4. Leave `acceptance_scenarios` and `rubric` as empty stubs — they are
-   negotiated inside `harness-loop`, not here. The rubric axis set is
-   chosen then from `rubric-presets.md` based on `_config.yml.rubric_preset`
-   and the sprint risk
+Each invocation is **independent** — no shared context between sprints,
+each Planner reads only product-spec + roadmap + its own sprint
+metadata. This matches the γ (file-mediated peer processes) architecture
+of Issue #46.
 
-Also copy `.harness/templates/shared_state.md` →
-`.harness/<epic>/sprints/sprint-<n>-<feature>/shared_state.md` and
-create an empty `evidence/` subdirectory.
+**Parallel execution**: Sprints are independent, so dispatch them in
+parallel if the Task tool supports it. For N sprints the total wall
+time approaches the slowest single contract-draft time rather than N×.
+If parallel dispatch fails, fall back to sequential — correctness is
+identical either way.
+
+Preparation (before dispatching):
+
+1. Create directory `.harness/<epic>/sprints/sprint-<n>-<feature>/` for
+   each sprint
+2. Copy `.harness/templates/shared_state.md` into each sprint directory
+3. Create empty `feedback/` and `evidence/` subdirectories in each
+   sprint directory
+
+Each fresh Planner then writes `contract.md` into its own sprint
+directory, following its role contract. Draft fields:
+
+- `sprint`, `feature`, `bundling`, `bundled_with` (from roadmap)
+- `goal`, `acceptance_scenarios` (elaborated per sprint)
+- `rubric` with axes selected from `rubric-presets.md` based on
+  `_config.yml.rubric_preset` — but `threshold` left as `?` placeholder
+- `max_iterations` left as `?` placeholder
+- `status: pending-negotiation`
+
+The `?` placeholders are filled by the Negotiation phase inside
+`harness-loop` (Generator ⇄ Evaluator, with Planner `ruling` as
+tiebreaker). `harness-plan` must NOT set threshold / max_iterations
+values itself.
 
 ### Step 8: Create Tracker Issues (T-023)
 
@@ -387,8 +429,15 @@ Semantics:
   bundling judgement, roadmap.md output schema
 - [issue-create.md](references/issue-create.md) — tracker dispatch,
   duplicate detection, epic link syntax
+- [prompt-templates/](references/prompt-templates/) — fresh-Planner
+  prompt files for `interview` / `roadmap` / `contract-draft` phases
+  (EN + JA)
 - [../harness-init/references/resilience-schema.md](../harness-init/references/resilience-schema.md)
   — `_state.json` schema this skill updates
+- [../harness-init/references/agent-templates/planner.md](../harness-init/references/agent-templates/planner.md)
+  — Planner role contract (Boot Sequence, phase types, write permissions)
 
 See `.specs/harness-suite/` in the source repo for requirement.md,
-design.md, and tasks.md governing this skill.
+design.md, and tasks.md governing this skill. See
+`.specs/harness-codex-backend/` for the Planner fresh-split overlay
+(Issue #46).

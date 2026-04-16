@@ -27,12 +27,12 @@ transition lands in `.harness/progress.md`, `.harness/_state.json`,
 
 Roles coordinating through this orchestrator:
 
-- **Planner** (Claude) — arbiter of negotiation stalemates and replans
-- **Generator** (Claude / Codex via cmux / other) — writes code
+- **Planner** (Claude) — stalemate arbiter and replanner
+- **Generator** (Claude / Codex plugin / Codex via cmux / other MCP) — writes code per `_config.yml.generator_backend`
 - **Evaluator** (Claude + Playwright/pytest/curl) — scores rubric
 
-This skill is the orchestrator, not an agent. It reads and writes the
-shared ledger, dispatches sub-agents, and advances the cursor. It never
+This skill is the orchestrator, not an agent. It dispatches sub-agents,
+reads/writes the shared ledger, and advances the cursor. It never
 writes implementation code or rubric verdicts itself.
 
 ## Language Rules
@@ -172,6 +172,29 @@ If the sprint directory is missing (roadmap drift), emit
 
 Set `_state.json.phase = "negotiation"` if fresh, else keep as read.
 
+### Step 3.5: Generator Dispatch (backend-aware, γ protocol)
+
+Every Negotiation round (Step 4) and every Implementation iteration
+(Step 6) that involves the Generator runs a unified backend-aware
+dispatch — full detail in
+[generator-dispatch.md](references/generator-dispatch.md). Summary:
+
+- Render `prompt-templates/generator-<phase>.md` with per-invocation
+  substitutions to a temp file
+- Invoke the Generator per `_state.json.effective_generator_backend`:
+  `claude` via Task tool, `codex_plugin` via `node codex-companion.mjs
+  task --fresh --prompt-file ... --model ...`, `codex_cmux` via
+  cmux-delegate
+- Expect `feedback/generator-<iter>.md` + `generator-<iter>-report.json`
+- Fallback: synthesise report.json from `git diff --name-only HEAD` if
+  Generator forgot it; append a WARN line to progress.md
+- Pipe report to `.harness/scripts/codex-progress-bridge.sh` which
+  updates progress.md + `_state.json` atomically
+
+This sub-protocol is invoked 4× by the examples below (3 negotiation
+rounds + each impl iter). Upstream/downstream bookkeeping is in
+[shared-state-protocol.md](references/shared-state-protocol.md).
+
 ### Step 4: Negotiation Phase (T-031)
 
 Governed by [negotiation-protocol.md](references/negotiation-protocol.md).
@@ -181,20 +204,21 @@ if contract.status == "active":
   skip Step 4 (already negotiated, resume case)
 
 for round in 1..contract.max_negotiation_rounds (default 3):
-  dispatch Generator sub-agent with contract draft + shared_state.md
-  Generator appends to feedback/generator-<round>.md
-  Orchestrator copies round summary to shared_state.md/Negotiation
+  Dispatch Generator (Step 3.5) with generator-negotiation.md prompt,
+    substituting {{ROUND}} and the latest {{EVALUATOR_FB_PATH}}.
+    Generator writes feedback/generator-neg-<round>.md + -report.json.
+  Orchestrator copies round summary to shared_state.md/Negotiation.
 
-  dispatch Evaluator sub-agent symmetrically
-  Evaluator appends to feedback/evaluator-<round>.md
-  Orchestrator copies round summary to shared_state.md/Negotiation
+  Dispatch Evaluator sub-agent (Claude, Task tool) symmetrically.
+  Evaluator writes feedback/evaluator-neg-<round>.md.
+  Orchestrator copies summary to shared_state.md/Negotiation.
 
-  if both agree:
-    break
+  if both agree: break
 
 if no agreement after max rounds:
-  dispatch Planner; Planner writes feedback/planner-ruling.md
-  Orchestrator copies ruling to contract Negotiation Log
+  Dispatch Planner (phase=ruling); Planner writes feedback/planner-ruling.md
+    and overwrites contract.md rubric thresholds + max_iterations.
+  Orchestrator copies ruling to contract Negotiation Log.
 ```
 
 Append one `progress.md` line per round:
@@ -228,21 +252,21 @@ while iteration < contract.max_iterations:
   iteration += 1
   start_ts = now()
 
-  # Generator turn
+  # Generator turn (uses Step 3.5 dispatch)
   _state.json.phase = "impl"
-  dispatch Generator with:
+  Dispatch Generator with generator-implementation.md prompt,
+    {{ITER}}=iteration, {{EVALUATOR_FB_PATH}}=feedback/evaluator-<iter-1>.md (if iter>1).
+    Generator edits source, writes feedback/generator-<iter>.md + -report.json.
+    Bridge updates progress.md (per-file + summary) and _state.json.
+
+  # Evaluator turn (Claude sub-agent, always)
+  _state.json.phase = "evaluation"
+  Dispatch Evaluator via Task tool with:
     - contract.md (frozen)
     - shared_state.md (read-only)
-    - previous iteration's feedback/evaluator-<iter-1>.md (if fail)
-  Generator edits source files; appends to feedback/generator-<iter>.md
-
-  # Evaluator turn
-  _state.json.phase = "evaluation"
-  dispatch Evaluator with:
-    - contract.md
-    - shared_state.md
-    - the new source state
-  Evaluator runs rubric checks; appends to feedback/evaluator-<iter>.md
+    - the new source state (read files listed in generator-<iter>-report.json.touchedFiles)
+    - feedback/generator-<iter>.md (narrative) and the report.json
+  Evaluator runs rubric checks; writes feedback/evaluator-<iter>.md.
   Orchestrator copies verdict to shared_state.md/WorkLog and /Evaluation
 
   # Decide verdict and terminal state BEFORE the checkpoint (Step 7)
@@ -328,32 +352,13 @@ everything on disk for a later resume (pending_human), a replan
 
 #### Interactive per-iteration gate (REQ-076)
 
-In `interactive` mode only, after the Step 7 checkpoint but before
-entering the next iteration (or Step 8 on pass), ask:
-
-```
-AskUserQuestion:
-  question: "iter=<n> verdict=<pass|fail>. Next?" /
-            "iter=<n> verdict=<pass|fail>。次は?"
-  options:
-    - "continue — run the next iteration / 次の iteration へ"
-    - "restart — /clear then resume via Boot Sequence / /clear 後に Boot Sequence で再開"
-    - "pause — exit cleanly; state preserved / 中断（state は保持）"
-    - "abort — set aborted_reason=user and stop / aborted_reason=user で停止"
-```
-
-- **continue** → loop body iterates
-- **restart** → emit user instruction ("Run `/clear` now, then re-invoke
-  `/harness-loop`; the Boot Sequence will resume from this checkpoint
-  using progress.md + _state.json + git only") and exit the skill.
-  T-054 validates that this path is fully recoverable
-- **pause** → exit 0; leave `phase` as-is
-- **abort** → set `_state.json.aborted_reason = "user"`; commit; exit
-
-`continuous`, `autonomous-ralph`, and `scheduled` modes skip this gate
-entirely (ASM-007). `continuous` proceeds immediately to the next
-iteration; Ralph/scheduled let the external wrapper decide via its own
-Principal Skinner loop.
+`interactive` mode only: after each Step 7 checkpoint, offer
+**continue** / **restart (/clear → resume via Boot Sequence)** /
+**pause (exit, state preserved)** / **abort (set aborted_reason=user)**
+via AskUserQuestion. The `restart` option is T-054's recovery path:
+exit the skill after emitting the `/clear` instruction, and the next
+invocation resumes purely from progress.md + _state.json + git.
+Non-interactive modes skip this gate (ASM-007).
 
 ### Step 8: PR Creation on Sprint Pass (T-034)
 
@@ -450,16 +455,15 @@ trigger — those failures are exactly what that skill refines.
 ## Usage
 
 ```
-/harness-loop                                  # start or resume (auto-detect from _state.json)
-/harness-loop --mode continuous                # force mode (persists to _state.json)
-/harness-loop --mode autonomous-ralph          # exits after one iter; pair with shell wrapper
+/harness-loop                                  # start or resume (auto from _state.json)
+/harness-loop --mode <mode>                    # force mode (interactive | continuous | autonomous-ralph | scheduled)
 /harness-loop --mode scheduled --ralph-every 5 # hybrid: 5 continuous iters, 1 Ralph
-/harness-loop --from-sprint 3                  # skip to sprint 3 (requires confirmation)
-/harness-loop --replan-current-sprint          # re-enter Negotiation, reset iteration to 0
+/harness-loop --from-sprint 3                  # skip to sprint 3 (confirm required)
+/harness-loop --replan-current-sprint          # re-enter Negotiation, iter = 0
 ```
 
-Pair `autonomous-ralph` with the wrapper in
-[autonomous-ralph.md](references/autonomous-ralph.md).
+`autonomous-ralph` exits after one iter; pair with
+[autonomous-ralph.md](references/autonomous-ralph.md) wrapper.
 
 ## What harness-loop does NOT do
 
@@ -471,25 +475,23 @@ Pair `autonomous-ralph` with the wrapper in
 
 ## Observability
 
-Every run lands in four files:
-
-- `.harness/progress.md` — human trace (append-only)
-- `.harness/_state.json` — machine cursor (atomic writes)
-- `.harness/metrics.jsonl` — per-iter metrics (append-only)
-- `git log` — one commit per iteration
-
-Optional OTLP export when `_config.yml.hook_level == strict` and
+Every run lands in four files: `.harness/progress.md` (human trace, append),
+`.harness/_state.json` (machine cursor, atomic writes),
+`.harness/metrics.jsonl` (per-iter metrics), and `git log` (one commit
+per iteration). Optional OTLP export when `hook_level == strict` and
 `otlp_endpoint` is set — see [otlp-exporter.md](references/otlp-exporter.md).
 
 ## References
 
-- [negotiation-protocol.md](references/negotiation-protocol.md) — round-by-round format, stalemate handling, Planner ruling schema
-- [shared-state-protocol.md](references/shared-state-protocol.md) — Shared-read / Isolated-write discipline across agents
-- [pr-creation-guide.md](references/pr-creation-guide.md) — split vs bundled PR body templates and `gh pr create` invocation
-- [autonomous-ralph.md](references/autonomous-ralph.md) — shell wrapper for `claude -p --bare` per-iteration execution
+- [generator-dispatch.md](references/generator-dispatch.md) — backend-aware Generator invocation and report.json handling
+- [negotiation-protocol.md](references/negotiation-protocol.md) — round format, stalemate handling, Planner ruling
+- [shared-state-protocol.md](references/shared-state-protocol.md) — Shared-read / Isolated-write discipline (incl. report.json)
+- [pr-creation-guide.md](references/pr-creation-guide.md) — split / bundled PR templates and `gh pr create`
+- [autonomous-ralph.md](references/autonomous-ralph.md) — `claude -p --bare` per-iter shell wrapper
 - [otlp-exporter.md](references/otlp-exporter.md) — optional metrics pipeline
-- [../harness-init/references/resilience-schema.md](../harness-init/references/resilience-schema.md) — `_state.json` and `metrics.jsonl` canonical schema
+- [prompt-templates/](references/prompt-templates/) — fresh-Generator prompt files (EN + JA)
+- [../harness-init/references/resilience-schema.md](../harness-init/references/resilience-schema.md) — `_state.json` / `metrics.jsonl` canonical schema
 - [../harness-init/references/rubric-presets.md](../harness-init/references/rubric-presets.md) — axis sets by project type
+- [../harness-init/references/scripts/codex-progress-bridge.sh](../harness-init/references/scripts/codex-progress-bridge.sh) — Orchestrator helper for Codex backends
 
-See `.specs/harness-suite/` in the source repo for requirement.md,
-design.md, and tasks.md governing this skill.
+See `.specs/harness-suite/` for the parent requirement.md / design.md / tasks.md, and `.specs/harness-codex-backend/` for the Codex-backend overlay (Issue #46).

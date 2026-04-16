@@ -151,6 +151,98 @@
 
 ---
 
+## Codex 側 hooks（generator_backend ∈ {codex_plugin, codex_cmux}）
+
+Generator が Codex で動く時、Claude Code の `PostToolUse(Edit|Write)` hook は Codex の内部 tool call を観測できない（Issue #46 で実機確認）。この穴を塞ぐため、`harness-init` は **Codex 側にも hook set** を `<project>/.codex/hooks.json` に設置する。これらの hook は Codex が Bash tool を呼ぶとき（または session 開始時）に Codex の hook runner 内で動く。
+
+**スコープ**: Codex hook は 2026-04 時点で `Bash` tool のみ intercept 可能（https://developers.openai.com/codex/hooks 参照）。Write / MCP / WebSearch は未対応。ファイル書き込み観測は `.harness/scripts/codex-progress-bridge.sh` が担当する — Codex の `feedback/generator-<iter>-report.json` を読んで `progress.md` に代行記録。
+
+### 生成ファイル（backend ∈ codex_plugin, codex_cmux）
+
+```
+<project>/.codex/
+├── config.toml                              # [features] codex_hooks=true を追記
+├── hooks.json                               # Codex hook 登録
+└── hooks/
+    ├── inject-harness-context.sh            # SessionStart(startup|resume)
+    ├── tier-a-guard-codex.sh                # PreToolUse(Bash) — Tier-A 二重ガード
+    └── codex-bash-log.sh                    # PostToolUse(Bash) — bash 結果を progress.md に
+```
+
+### `hooks.json` 形式
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/inject-harness-context.sh",
+          "timeout": 5
+        }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/tier-a-guard-codex.sh",
+          "timeout": 5
+        }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/codex-bash-log.sh",
+          "timeout": 5
+        }]
+      }
+    ]
+  }
+}
+```
+
+`harness-init` が install 時に `<PROJECT_ROOT>` を絶対パスに解決する（Codex を子ディレクトリから起動してもパスが効く）。
+
+### 各 Codex hook の役割
+
+| Hook | Event | 役割 |
+|---|---|---|
+| `inject-harness-context.sh` | `SessionStart(startup\|resume)` | `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` を stdout で返し、`.harness/progress.md` の tail と `_state.json` サマリを developer context として Codex の fresh thread に注入 |
+| `tier-a-guard-codex.sh` | `PreToolUse(Bash)` | Claude 側 Tier-A ガードのミラー。Codex が走らせようとしている Bash を `.harness/tier-a-patterns.txt` と照合、match したら Codex の `permissionDecision: "deny"` を返して block |
+| `codex-bash-log.sh` | `PostToolUse(Bash)` | Codex の全 Bash 実行（test / build / lint 等）を exit code 付きで `.harness/progress.md` に追記。block はしない（fail open） |
+
+### `config.toml` への追記
+
+`harness-init` は `<project>/.codex/config.toml` に非破壊 append:
+
+```toml
+[features]
+codex_hooks = true
+```
+
+既存ファイルがなければ新規作成。`[features]` が既存なら `codex_hooks` のみ追加し他エントリは保全。
+
+### Claude 側 hook との共存
+
+Codex 側 hook は Claude 側 hook を**置き換えない**。`harness-init` は Claude `.claude/settings.json` 側も従来通り全部入れる（strict / warn / minimal 選択に応じて）。両側が独立に発火:
+
+- Claude session の Bash / Edit / Write → Claude hook 発火
+- Codex subprocess の Bash → Codex hook 発火（Claude 側は silent）
+- Codex subprocess の Write → どちらも発火しない（bridge script で補完）
+
+### Future Work
+
+Codex の `PostToolUse` matcher が `Write` / `Edit` / MCP / WebSearch に拡張されたら、Orchestrator bridge は簡略化できる（Codex hook 自身が touched file を記録）。それまでは bridge + report.json が真実。Issue #46 "Future Work" で追跡。
+
+---
+
 ## 速度階層（NFR-005）
 
 Hook は 4 層防御のミリ秒層:

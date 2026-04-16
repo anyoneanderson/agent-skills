@@ -163,6 +163,119 @@ human catches misbehaviour.
 
 ---
 
+## Codex-side hooks (generator_backend ∈ {codex_plugin, codex_cmux})
+
+When the Generator runs under Codex, Claude Code's `PostToolUse(Edit|Write)`
+hook cannot observe Codex's internal tool calls (confirmed experimentally
+in Issue #46). To close that gap, `harness-init` also installs a set of
+hooks on the **Codex side**, in `<project>/.codex/hooks.json`. These
+hooks run inside Codex's hook runner when Codex makes a Bash tool call
+(or starts a session).
+
+**Scope**: Codex hooks currently support only `Bash` tool interception
+(as of 2026-04 — see https://developers.openai.com/codex/hooks). Write /
+MCP / WebSearch interception is not yet implemented. The file-write gap
+is covered separately by `.harness/scripts/codex-progress-bridge.sh`,
+which reads Codex's `feedback/generator-<iter>-report.json` after the
+invocation and appends equivalent rows to `progress.md`.
+
+### Generated files (when backend ∈ codex_plugin, codex_cmux)
+
+```
+<project>/.codex/
+├── config.toml                              # [features] codex_hooks=true appended
+├── hooks.json                               # Codex hook registration
+└── hooks/
+    ├── inject-harness-context.sh            # SessionStart(startup|resume)
+    ├── tier-a-guard-codex.sh                # PreToolUse(Bash) — Tier-A double guard
+    └── codex-bash-log.sh                    # PostToolUse(Bash) — log bash results to progress.md
+```
+
+### `hooks.json` shape
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/inject-harness-context.sh",
+          "timeout": 5,
+          "statusMessage": "Injecting harness state"
+        }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/tier-a-guard-codex.sh",
+          "timeout": 5,
+          "statusMessage": "Tier-A guard (codex)"
+        }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "<PROJECT_ROOT>/.codex/hooks/codex-bash-log.sh",
+          "timeout": 5,
+          "statusMessage": "Logging codex bash"
+        }]
+      }
+    ]
+  }
+}
+```
+
+`harness-init` resolves `<PROJECT_ROOT>` to an absolute path at install
+time (so the hooks still work when Codex is started from a subdirectory).
+
+### What each Codex hook does
+
+| Hook | Event | Purpose |
+|---|---|---|
+| `inject-harness-context.sh` | `SessionStart(startup\|resume)` | Emits `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` containing the tail of `.harness/progress.md` plus a `_state.json` summary. Codex picks this up as developer context for its fresh thread. |
+| `tier-a-guard-codex.sh` | `PreToolUse(Bash)` | Mirror of the Claude-side guard. Matches Codex's about-to-run Bash command against `.harness/tier-a-patterns.txt`; on match, emits a Codex `permissionDecision: "deny"` to block. Keeps Tier-A enforcement even when Codex's Bash bypasses Claude's hook. |
+| `codex-bash-log.sh` | `PostToolUse(Bash)` | Appends a `codex-bash` line to `.harness/progress.md` for every Bash command Codex runs (test / build / lint / etc.), including exit code if present. Never blocks; fails open. |
+
+### `config.toml` patch
+
+`harness-init` appends (non-destructively) to `<project>/.codex/config.toml`:
+
+```toml
+[features]
+codex_hooks = true
+```
+
+If the file does not exist, it is created with just this block. If
+`[features]` already exists, `codex_hooks` is added without disturbing
+other entries.
+
+### Claude-side hooks coexist
+
+The Codex-side hooks do NOT replace the Claude-side ones. `harness-init`
+still installs the full Claude `.claude/settings.json` hook set (strict
+/ warn / minimal as chosen). Both sides fire independently:
+
+- Claude session's Bash / Edit / Write → Claude hooks fire
+- Codex subprocess's Bash → Codex hooks fire (Claude hooks stay silent)
+- Codex subprocess's Write → neither side fires; covered by bridge script
+
+### Future work
+
+When Codex's `PostToolUse` matcher extends to `Write` / `Edit` / MCP /
+WebSearch, the Orchestrator bridge can be simplified (Codex hooks will
+record touched files themselves). Until then, the bridge + report.json
+pattern is authoritative. Tracked in Issue #46 "Future Work" section.
+
+---
+
 ## Speed Tiers (NFR-005)
 
 Hooks are the millisecond tier of a four-layer defence:
