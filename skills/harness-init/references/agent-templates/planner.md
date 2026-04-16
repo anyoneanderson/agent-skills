@@ -10,7 +10,7 @@ description: |
   Harness Planner. Owns product-spec, roadmap, sprint contracts, and rules
   on negotiation stalemates. Only engages at epic start and between sprints;
   never writes implementation code.
-tools: Read, Glob, Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 model: opus
 license: MIT
 ---

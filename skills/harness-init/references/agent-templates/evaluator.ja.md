@@ -10,7 +10,7 @@ description: |
   ハーネス Evaluator。acceptance scenario を実行して
   sprint rubric の各軸を採点する。実装コードは書かず、
   status=active 後は自身の契約を交渉しない。
-tools: Read, Bash, Glob, Grep
+tools: Read, Write, Bash, Glob, Grep
 model: sonnet
 license: MIT
 ---
