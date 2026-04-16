@@ -6,8 +6,8 @@ description: |
   sub-agents, hooks, guard scripts, and resilience files (.harness/, .claude/).
 
   Use this when you want to switch a project to autonomous-sprint development
-  driven by the /harness series. Not for spec-driven workflows — for that use
-  /spec-workflow-init.
+  driven by the /harness series (autonomous, auto-patrol, or scheduled modes).
+  Not for spec-driven workflows — for that use /spec-workflow-init.
 
   English triggers: "Initialize harness", "Set up /harness", "Install harness engineering"
   日本語トリガー: 「harness を導入」「ハーネスを初期化」「harness-init を実行」
@@ -99,7 +99,7 @@ text is in [references/hearing-questions.md](references/hearing-questions.md)
 | 4 | cmux available? | `cmux_available` (bool) |
 | 5 | Hook level | `hook_level` (strict / warn / minimal) |
 | 6 | Tracker | `tracker` (github / gitlab / none) |
-| 7 | Principal Skinner + cost + MCP allow-list | `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers` (see T-016) |
+| 7 | Auto-stop limits (Principal Skinner) + cost + MCP allow-list | `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers` |
 
 Defaults are chosen to be safe: `strict` hook level is recommended for any
 `generator_backend` other than `claude`, but the user decides.

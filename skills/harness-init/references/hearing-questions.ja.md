@@ -76,13 +76,13 @@ question: "Which tools will the Evaluator use to run acceptance scenarios?" /
 
 options:
   - name: "Playwright (a11y snapshot) (Recommended for web) / Playwright（a11y スナップショット）（Web 推奨）"
-    description: "決定論的ブラウザ自動化。screenshot diff より a11y tree を優先（NFR-007）"
+    description: "決定論的ブラウザ自動化。画面キャプチャ比較よりアクセシビリティツリー（DOM の構造的スナップショット）を優先"
   - name: "pytest / pytest"
-    description: "Python テストランナー。API / ライブラリ向け"
+    description: "Python ベースのテストランナー。テスト対象サービスの言語に関わらず、任意の HTTP/API に適用可能"
   - name: "curl / curl"
     description: "生の HTTP チェック。API スモーク用途"
   - name: "Custom script / 独自スクリプト"
-    description: "sprint ごとに `.harness/scripts/eval-<feature>.sh` を実行"
+    description: "Evaluator が sprint ごとに `.harness/scripts/eval-<feature>.sh` を生成・実行します"
 ```
 
 **Config key**: `evaluator_tools`（リスト）
@@ -115,8 +115,8 @@ question: "How strictly should hooks enforce safety?" /
           "hooks の強制レベルはどれにしますか？"
 
 options:
-  - name: "strict (Recommended for autonomous modes) / strict（autonomous モード推奨）"
-    description: "Tier-A 破壊操作 deny、未許可 MCP deny、全 Edit をログ。autonomous-ralph / scheduled には必須"
+  - name: "Strict — 破壊的コマンドを自動ブロック (Recommended for autonomous modes) / Strict — 破壊的コマンドを自動ブロック（autonomous モード推奨）"
+    description: "破壊操作を拒否、未許可の MCP は拒否、全編集をログに記録。autonomous-ralph: 反復ごとにセッションリセット（夜間放置向け）。自動巡回モード・scheduled には必須"
   - name: "warn / warn"
     description: "リスキー操作をログするがブロックしない。strict 移行前にプロジェクトの実挙動を学ぶフェーズ向け"
   - name: "minimal / minimal"
@@ -124,7 +124,7 @@ options:
 ```
 
 **Config key**: `hook_level` ∈ `strict|warn|minimal`
-**制約**: `harness-loop` の autonomous モードは `strict` 必須。`minimal` を選ぶと `harness-loop` は interactive モードに強制遷移
+**制約**: `harness-loop` の autonomous モード（自動巡回モード）は `strict` 必須。`minimal` を選ぶと `harness-loop` は interactive モードに強制遷移
 
 ---
 
@@ -148,13 +148,13 @@ options:
 
 ---
 
-## Round 7 — Principal Skinner 閾値・コスト上限・MCP allow-list
+## Round 7 — 自動停止リミッター（Principal Skinner）・コスト上限・MCP allow-list
 
 このラウンドは AskUserQuestion 1 回で 4 サブ質問をまとめて聞く（スキーマ上限 4）。デフォルトは夜間実行にも安全な値。
 
 ```
-question: "Set Principal Skinner limits, cost cap, and MCP allow-list" /
-          "Principal Skinner 閾値・コスト上限・MCP allow-list を設定します"
+question: "Set auto-stop safety limits, cost cap, and MCP allow-list (Principal Skinner)" /
+          "自動停止リミッター・コスト上限・MCP allow-list を設定します（Principal Skinner）"
 
 sub-questions:
   - key: max_iterations
@@ -164,8 +164,8 @@ sub-questions:
     range: [2, 32]
 
   - key: max_wall_time_sec
-    prompt: "Max wall-clock time per sprint (seconds)?" /
-            "スプリント毎の壁時計上限（秒）?"
+    prompt: "Max elapsed time (wall-clock) per sprint (seconds)?" /
+            "スプリント毎の経過時間の上限（秒）?"
     default: 28800   # 8 時間
     range: [600, 86400]
 
@@ -179,19 +179,19 @@ sub-questions:
     prompt: "Which MCP servers may the agents call? (comma-separated)" /
             "エージェントが呼び出して良い MCP サーバー（カンマ区切り）?"
     default: "playwright, github"
-    hint: "strict モードではここに無いものは deny される（REQ-101）"
+    hint: "strict モードではここに無いものは拒否される"
 ```
 
 **書き込まれる config keys**: `max_iterations`, `max_wall_time_sec`, `max_cost_usd`, `allowed_mcp_servers`（リスト）。加えて定数 `rubric_stagnation_n: 3` も書く（質問はせず固定、design §9.7）
 
-### 配線（T-016）
+### 配線
 
 Round 7 の各回答は特定のランタイム消費者へ流れる：
 
 | 回答項目 | `_config.yml` キー | 消費者 | 強制 |
 |---|---|---|---|
 | max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — `_state.json.iteration >= max` で stop 許可 |
-| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | `now − _state.json.start_time >= max` で stop 許可 |
+| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | 経過時間 `now − _state.json.start_time >= max` で stop 許可 |
 | max_cost_usd | `max_cost_usd` | `stop-guard.sh` | `_state.json.cumulative_cost_usd >= max` で stop 許可 |
 | allowed_mcp_servers | `allowed_mcp_servers` | `.harness/scripts/mcp-allowlist.sh` | strict hook_level のみ — `mcp__<server>__*` のうち `<server>` が不在なら deny |
 | （定数） | `rubric_stagnation_n: 3` | `stop-guard.sh` | `_state.json.rubric_stagnation_count >= n` で stop 許可 |

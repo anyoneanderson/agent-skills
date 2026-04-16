@@ -19,7 +19,7 @@ For projects with a user-facing UI (HTML/CSS/JS, mobile web, SPAs).
 
 | Axis | Weight | Threshold | Description |
 |---|---|---|---|
-| Functionality | high | 1.0 | All acceptance scenarios pass end-to-end (Playwright a11y snapshot preferred over screenshot diff) |
+| Functionality | high | 1.0 | All acceptance scenarios pass end-to-end (Playwright accessibility tree (structural DOM snapshot) preferred over visual screenshot comparison) |
 | Craft | std | 0.7 | Tests exist, coding-rules.md adhered to if present (shared with /spec series via `/spec-rules-init`); unscored when absent, no lint/type errors |
 | Design | std | 0.7 | Visual hierarchy, spacing, and UX flow match product-spec intent; no accidental scope creep |
 | Originality | low | 0.5 | Avoids AI-template boilerplate (stock Bootstrap look, generic hero sections); feels intentional |

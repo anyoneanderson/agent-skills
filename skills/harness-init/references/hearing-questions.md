@@ -87,13 +87,13 @@ question: "Which tools will the Evaluator use to run acceptance scenarios?" /
 
 options:
   - name: "Playwright (a11y snapshot) (Recommended for web) / Playwright（a11y スナップショット）（Web 推奨）"
-    description: "Deterministic browser automation. Prefer a11y tree over screenshot diff (NFR-007)."
+    description: "Deterministic browser automation. Prefer accessibility tree (structural DOM snapshot) over visual screenshot comparison."
   - name: "pytest / pytest"
-    description: "Python test runner. Good for API/lib."
+    description: "Python-based test runner. Works for any HTTP/API surface regardless of the target service's language."
   - name: "curl / curl"
     description: "Raw HTTP checks. Simple API smoke tests."
   - name: "Custom script / 独自スクリプト"
-    description: "Run `.harness/scripts/eval-<feature>.sh` per sprint."
+    description: "The Evaluator generates and runs `.harness/scripts/eval-<feature>.sh` for each sprint."
 ```
 
 **Config key**: `evaluator_tools` (list)
@@ -128,8 +128,8 @@ question: "How strictly should hooks enforce safety?" /
           "hooks の強制レベルはどれにしますか？"
 
 options:
-  - name: "strict (Recommended for autonomous modes) / strict（autonomous モード推奨）"
-    description: "Deny Tier-A destructive ops, deny non-allow-listed MCP, log every edit. Required for autonomous-ralph / scheduled."
+  - name: "Strict — auto-block destructive commands (Recommended for autonomous modes) / Strict — 破壊的コマンドを自動ブロック（autonomous モード推奨）"
+    description: "Deny Tier-A destructive ops, deny non-allow-listed MCP, log every edit. Required for auto-patrol mode (autonomous-ralph) and scheduled runs."
   - name: "warn / warn"
     description: "Log risky ops but do not block. Good for learning your project's behaviour before committing to strict."
   - name: "minimal / minimal"
@@ -137,7 +137,7 @@ options:
 ```
 
 **Config key**: `hook_level` ∈ `strict|warn|minimal`
-**Constraint**: autonomous modes in `harness-loop` require `strict`. If the
+**Constraint**: autonomous modes (auto-patrol) in `harness-loop` require `strict`. If the
 user picks `minimal` here, `harness-loop` will force interactive mode.
 
 ---
@@ -164,14 +164,14 @@ instead of calling `gh`.
 
 ---
 
-## Round 7 — Principal Skinner limits, cost cap, and MCP allow-list
+## Round 7 — Auto-stop safety limits (Principal Skinner), cost cap, and MCP allow-list
 
 This round asks four quick questions in one AskUserQuestion batch (the
 schema allows up to 4). Defaults are safe for overnight runs.
 
 ```
-question: "Set Principal Skinner limits, cost cap, and MCP allow-list" /
-          "Principal Skinner 閾値・コスト上限・MCP allow-list を設定します"
+question: "Set auto-stop safety limits, cost cap, and MCP allow-list (Principal Skinner)" /
+          "自動停止リミッター・コスト上限・MCP allow-list を設定します（Principal Skinner）"
 
 sub-questions:
   - key: max_iterations
@@ -181,8 +181,8 @@ sub-questions:
     range: [2, 32]
 
   - key: max_wall_time_sec
-    prompt: "Max wall-clock time per sprint (seconds)?" /
-            "スプリント毎の壁時計上限（秒）?"
+    prompt: "Max elapsed time (wall-clock) per sprint (seconds)?" /
+            "スプリント毎の経過時間の上限（秒）?"
     default: 28800   # 8 hours
     range: [600, 86400]
 
@@ -196,21 +196,21 @@ sub-questions:
     prompt: "Which MCP servers may the agents call? (comma-separated)" /
             "エージェントが呼び出して良い MCP サーバー（カンマ区切り）?"
     default: "playwright, github"
-    hint: "Anything not listed here will be denied in strict mode (REQ-101)."
+    hint: "Anything not listed here will be denied in strict mode."
 ```
 
 **Config keys written**: `max_iterations`, `max_wall_time_sec`,
 `max_cost_usd`, `allowed_mcp_servers` (list). Also writes the constant
 `rubric_stagnation_n: 3` — not asked, baked in (`design §9.7`).
 
-### Wiring (T-016)
+### Wiring
 
 Each Round 7 answer flows to a specific runtime consumer:
 
 | Answer | `_config.yml` key | Consumer | Enforcement |
 |---|---|---|---|
 | max_iterations | `max_iterations` | `.harness/scripts/stop-guard.sh` | Principal Skinner — allow stop when `_state.json.iteration >= max` |
-| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | Allow stop when `now − _state.json.start_time >= max` |
+| max_wall_time_sec | `max_wall_time_sec` | `stop-guard.sh` | Allow stop when elapsed time `now − _state.json.start_time >= max` |
 | max_cost_usd | `max_cost_usd` | `stop-guard.sh` | Allow stop when `_state.json.cumulative_cost_usd >= max` |
 | allowed_mcp_servers | `allowed_mcp_servers` | `.harness/scripts/mcp-allowlist.sh` | strict hook_level only — deny `mcp__<server>__*` if `<server>` not in list |
 | (constant) | `rubric_stagnation_n: 3` | `stop-guard.sh` | Allow stop when `_state.json.rubric_stagnation_count >= n` |
