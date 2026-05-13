@@ -9,6 +9,7 @@ Reusable AI agent skills for specification-driven development.
 | Skill | Description |
 |-------|-------------|
 | [spec-generator](skills/spec-generator/) | Generate project requirements, design documents, and task lists from conversations or prompts |
+| [handover](skills/handover/) | Create local session handovers and boot future AI agent sessions from verified context |
 | [mcp-convert](skills/mcp-convert/) | Convert Claude Code MCP settings into Codex CLI MCP configuration |
 | [spec-inspect](skills/spec-inspect/) | Validate specification quality and detect issues before implementation |
 | [spec-rules-init](skills/spec-rules-init/) | Extract project conventions and generate unified coding-rules.md |
@@ -31,6 +32,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 
 # Install a specific skill
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
+npx skills add anyoneanderson/agent-skills --skill handover -g -y
 npx skills add anyoneanderson/agent-skills --skill mcp-convert -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
@@ -57,6 +59,15 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > Design the architecture for todo-app
 > Create task list for todo-app
 > Create full spec for an e-commerce platform
+```
+
+### Resume across agent sessions
+
+```
+> handover write
+> handover boot
+> handover install
+> handover status
 ```
 
 ### Validate specification quality
@@ -165,34 +176,40 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
    - `design.md` — Technical design document
    - `tasks.md` — Implementation task list
 
-2. **spec-inspect** validates the specification quality:
+2. **handover** preserves session continuity:
+   - Writes local `handover.md` and `.handover/` state files
+   - Keeps handovers private by default with `.gitignore` guards
+   - Installs AGENTS.md / CLAUDE.md startup guidance and optional session-start hooks
+   - Boots later sessions by verifying handover metadata against the current repository state
+
+3. **spec-inspect** validates the specification quality:
    - Verifies requirement ID consistency
    - Detects missing sections and contradictions
    - Identifies ambiguous expressions
    - Generates `inspection-report.md` with findings
 
-3. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue with checklists, links to spec files, and completion criteria.
+4. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue with checklists, links to spec files, and completion criteria.
 
-4. **spec-rules-init** generates quality rules from project conventions:
+5. **spec-rules-init** generates quality rules from project conventions:
    - `docs/coding-rules.md` — Implementation quality gates
    - `docs/review_rules.md` — Review criteria with severity-based output policies (CI / review gate / second opinion)
 
-5. **spec-code** autonomously implements a single task from spec documents:
+6. **spec-code** autonomously implements a single task from spec documents:
    - Reads all specs (requirement.md, design.md, tasks.md) for full context
    - Follows coding-rules.md and project conventions
    - Supports `--feedback` mode to address review or test findings
 
-6. **spec-review** performs structured code review:
+7. **spec-review** performs structured code review:
    - Rule × file matrix approach (every rule checked against every changed file)
    - Outputs findings to `review-{task-id}.md` for spec-code --feedback
    - Works standalone for manual reviews
 
-7. **spec-test** creates and runs tests:
+8. **spec-test** creates and runs tests:
    - Extracts test requirements from task completion criteria
    - Detects existing test patterns and frameworks
    - Outputs results to `test-{task-id}.md`
 
-8. **spec-implement** orchestrates the full pipeline (does NOT write code or review itself):
+9. **spec-implement** orchestrates the full pipeline (does NOT write code or review itself):
    - Delegates: spec-code → spec-review → fix loop → spec-test
    - Processes `[code]` phases via worker skills, `[orchestrator]` phases directly
    - Updates tasks.md ONLY after review AND test PASS
@@ -201,15 +218,15 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 
 ### cmux Skills (optional, requires [cmux](https://cmux.dev/))
 
-6. **cmux-fork** forks the current conversation into a new cmux pane or workspace, preserving full context.
+10. **cmux-fork** forks the current conversation into a new cmux pane or workspace, preserving full context.
 
-7. **cmux-delegate** launches an AI agent in a separate cmux workspace, sends a task, monitors completion, and collects results. Supports Claude Code, Codex, Gemini CLI.
+11. **cmux-delegate** launches an AI agent in a separate cmux workspace, sends a task, monitors completion, and collects results. Supports Claude Code, Codex, Gemini CLI.
 
-8. **cmux-second-opinion** gets an independent review from a different AI agent. Automatically selects an agent different from the parent. Supports code review and spec review with 3 criteria modes.
+12. **cmux-second-opinion** gets an independent review from a different AI agent. Automatically selects an agent different from the parent. Supports code review and spec review with 3 criteria modes.
 
 ### Project Setup
 
-9. **skill-suggest** analyzes the project's manifest files (package.json, Cargo.toml, etc.), searches the skills.sh registry for matching best-practice skills, and installs them with agent-targeted installation to prevent unwanted directory creation.
+13. **skill-suggest** analyzes the project's manifest files (package.json, Cargo.toml, etc.), searches the skills.sh registry for matching best-practice skills, and installs them with agent-targeted installation to prevent unwanted directory creation.
 
 ## Compatibility
 
