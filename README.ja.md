@@ -9,6 +9,7 @@
 | スキル | 説明 |
 |-------|------|
 | [spec-generator](skills/spec-generator/) | 会話やプロンプトからプロジェクトの要件定義書・設計書・タスクリストを生成 |
+| [handover](skills/handover/) | ローカルのセッション引き継ぎを作成し、次のAIエージェントセッションを検証済み文脈から開始 |
 | [mcp-convert](skills/mcp-convert/) | Claude Code の MCP 設定を Codex CLI 向けに変換 |
 | [spec-inspect](skills/spec-inspect/) | 仕様書の品質を検証し、実装前に問題を検出 |
 | [spec-rules-init](skills/spec-rules-init/) | プロジェクト規約を抽出し、統一的なcoding-rules.mdを生成 |
@@ -31,6 +32,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 
 # 個別にインストール
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
+npx skills add anyoneanderson/agent-skills --skill handover -g -y
 npx skills add anyoneanderson/agent-skills --skill mcp-convert -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-rules-init -g -y
@@ -57,6 +59,15 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > todo-appの設計書を作成して
 > todo-appのタスクリストを作って
 > ECサイトの仕様を全部作って
+```
+
+### セッションをまたいで再開する
+
+```
+> handover write
+> handover boot
+> handover install
+> handover status
 ```
 
 ### 仕様書の品質を検証する
@@ -165,36 +176,42 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
    - `design.md` — 技術設計書
    - `tasks.md` — 実装タスクリスト
 
-2. **spec-inspect** が仕様書の品質を検証:
+2. **handover** がセッション継続を支援:
+   - ローカルの `handover.md` と `.handover/` 状態ファイルを作成
+   - `.gitignore` ガードによりデフォルトで handover を private に保持
+   - AGENTS.md / CLAUDE.md の起動ガイダンスと optional な session-start hook をインストール
+   - 次セッションで handover metadata と現在の repository 状態を照合して boot
+
+3. **spec-inspect** が仕様書の品質を検証:
    - 要件ID整合性の検証
    - 必須セクションや矛盾の検出
    - 曖昧な表現の識別
    - 検査結果を `inspection-report.md` に生成
 
-3. **spec-to-issue** が `.specs/{project}/` を読み取り、チェックリスト・仕様書リンク・完了条件を含むGitHub Issueを作成。
+4. **spec-to-issue** が `.specs/{project}/` を読み取り、チェックリスト・仕様書リンク・完了条件を含むGitHub Issueを作成。
 
-4. **spec-workflow-init** が `docs/issue-to-pr-workflow.md` にプロジェクト固有の開発ワークフローを生成。
+5. **spec-workflow-init** が `docs/issue-to-pr-workflow.md` にプロジェクト固有の開発ワークフローを生成。
 
-5. **spec-rules-init** がプロジェクト規約から品質ルールを生成:
+6. **spec-rules-init** がプロジェクト規約から品質ルールを生成:
    - `docs/coding-rules.md` — 実装品質ゲート
    - `docs/review_rules.md` — レビュー基準（重大度別出力方針: CI / レビューゲート / セカンドオピニオン）
 
-6. **spec-code** が仕様書から1タスクを自律的に実装:
+7. **spec-code** が仕様書から1タスクを自律的に実装:
    - 全仕様書（requirement.md, design.md, tasks.md）を読んでコンテキスト把握
    - coding-rules.md とプロジェクト規約に従う
    - `--feedback` モードでレビュー/テスト結果への対応が可能
 
-7. **spec-review** が構造化コードレビューを実行:
+8. **spec-review** が構造化コードレビューを実行:
    - ルール × ファイルのマトリックスで漏れなく照合
    - 結果を `review-{task-id}.md` に出力（spec-code --feedback で使用）
    - スタンドアロンで手動レビューにも使える
 
-8. **spec-test** がテストを作成・実行:
+9. **spec-test** がテストを作成・実行:
    - タスク完了条件からテスト要件を抽出
    - 既存のテストパターンとフレームワークを検出
    - 結果を `test-{task-id}.md` に出力
 
-9. **spec-implement** がパイプライン全体をオーケストレーション（自分ではコードもレビューも書かない）:
+10. **spec-implement** がパイプライン全体をオーケストレーション（自分ではコードもレビューも書かない）:
    - 委任: spec-code → spec-review → fix loop → spec-test
    - `[code]` フェーズはワーカースキルに委任、`[orchestrator]` フェーズは直接実行
    - review + test 両方 PASS 後にのみ tasks.md を更新
@@ -203,15 +220,15 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 
 ### cmux スキル（オプション、[cmux](https://cmux.dev/) が必要）
 
-7. **cmux-fork** が現在の会話を新しい cmux ペインまたはワークスペースにフォーク。会話コンテキストを完全に引き継ぎ。
+11. **cmux-fork** が現在の会話を新しい cmux ペインまたはワークスペースにフォーク。会話コンテキストを完全に引き継ぎ。
 
-8. **cmux-delegate** が別の cmux ワークスペースに AI エージェントを起動し、タスクを送信・監視・結果回収。Claude Code / Codex / Gemini CLI 対応。
+12. **cmux-delegate** が別の cmux ワークスペースに AI エージェントを起動し、タスクを送信・監視・結果回収。Claude Code / Codex / Gemini CLI 対応。
 
-9. **cmux-second-opinion** が別の AI エージェントに独立したレビューを依頼。親と異なるエージェントを自動選択。コードレビュー・仕様書レビュー対応、基準モード3種。
+13. **cmux-second-opinion** が別の AI エージェントに独立したレビューを依頼。親と異なるエージェントを自動選択。コードレビュー・仕様書レビュー対応、基準モード3種。
 
 ### プロジェクトセットアップ
 
-10. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
+14. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
 
 ## 互換性
 
