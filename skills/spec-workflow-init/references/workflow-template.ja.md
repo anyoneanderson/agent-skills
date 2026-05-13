@@ -414,6 +414,12 @@ CIが失敗した場合:
 - エージェント定義ファイルは生成しません。必要に応じて手動設定してください。
 {end_no_agent_files}
 
+### ランタイム組み込みディスパッチ
+
+- **Codex**: `.codex/agents/workflow-*.toml` の custom agent を使用する。`エージェント` 列の名前で agent を起動し、タスク固有のコンテキストだけを渡す。
+- **Claude Code**: `.claude/agents/workflow-*.md` を Claude Code agent team として使用する。Claude Code に、`エージェント` 列の名前に基づく teammate を持つ agent team を作成するよう依頼し、各 teammate にはタスク固有のコンテキストだけを渡す。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` が必要。
+- **フォールバック**: ランタイム組み込み agent が使えない場合は順次実行するか、明示選択された場合のみ cmux dispatch を使う。
+
 {end_multi_agent}
 
 {if_cmux_dispatch}

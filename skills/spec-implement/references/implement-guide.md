@@ -48,8 +48,8 @@ It acts as an execution engine that:
    ├── Determine runtime from current execution environment
    ├── Parse workflow `Agent definition files` section (if present)
    ├── Validate runtime-specific sub-agent setup
-   │   ├── Codex: .codex/config.toml + multi_agent + agents.workflow-*
-   │   └── Claude Code: workflow-declared files (fallback: .claude/agents/workflow-*.md)
+   │   ├── Codex: .codex/agents/workflow-*.toml files with matching name fields
+   │   └── Claude Code agent team: .claude/agents/workflow-*.md files with matching names
    ├── If runtime is ambiguous, ask user to choose
    └── If setup is invalid, fallback to single-agent sequential mode
 
@@ -194,7 +194,7 @@ If this verification fails, the task loop MUST NOT proceed.
 If the workflow file contains an "Agent Roles", "Sub-agents", or equivalent section:
 
 1. Parse role definitions (e.g., implementer, reviewer, tester)
-2. Present options to the user (sub-agent parallel execution vs single agent)
+2. Resolve one of three parallel patterns: Codex custom agents, Claude Code agent team, or cmux dispatch
 3. If sub-agents selected: dispatch runtime-specific sub-agents per role definition
 4. If single agent selected: proceed with sequential execution
 
@@ -206,8 +206,24 @@ Determine runtime from the current execution environment. Do NOT infer runtime s
 - Parse workflow `Agent definition files` section first, if present
 - Use workflow-declared agent definition file paths as first priority
 - If not declared in workflow, fallback to runtime default paths
+- For Codex, runtime defaults are `.codex/agents/workflow-implementer.toml`, `.codex/agents/workflow-reviewer.toml`, and `.codex/agents/workflow-tester.toml`
+- Codex discovers custom agents from `.codex/agents/*.toml`; do not require or create `[agents.<name>] config_file = ...` entries
+- For Claude Code agent team, runtime defaults are `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, and `.claude/agents/workflow-tester.md`
+- Claude Code agent team should be used when running inside Claude Code, the `.claude/agents/workflow-*.md` files exist, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set
+- cmux dispatch is a separate external-pane mode; use it only when the workflow/user explicitly selects cmux or runtime-native agents are unavailable
 - If runtime cannot be determined, ask user to choose runtime before dispatch
 - If runtime setup is invalid, fallback to sequential mode
+
+### Parallel Mode Priority
+
+Use this priority when `/spec-implement --issue {N}` is invoked without an explicit dispatch option:
+
+1. **Codex custom agents**: running in Codex and `.codex/agents/workflow-*.toml` exists
+2. **Claude Code agent team**: running in Claude Code, `.claude/agents/workflow-*.md` exists, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set
+3. **cmux dispatch**: `$CMUX_SOCKET_PATH` is set and the workflow/user selected cmux dispatch
+4. **Single agent**: no valid parallel setup is available
+
+Do not stop to ask when exactly one valid runtime-native setup is available. Ask only when multiple valid modes are available and the workflow does not declare a preference, when the runtime is ambiguous, or when Claude Code agent teams are requested but `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is not enabled.
 
 ### Parsing Workflow Table Format
 
@@ -238,7 +254,7 @@ Workflow files typically define agent roles using two Markdown tables:
 
 When spawning sub-agents:
 
-1. **Sub-agent identifier**: Use the `Agent` column value from the Role Assignment Table as `subagent_type` (e.g., `subagent_type: "workflow-implementer"`)
+1. **Sub-agent identifier**: Use the `Agent` column value from the Role Assignment Table as the runtime agent type (for Codex, `agent_type: workflow-implementer`; for runtimes that name the field differently, pass the same value in that runtime's agent type field)
 2. **Definition file path**: Use role-specific path from workflow `Agent definition files` section if declared; otherwise use runtime defaults
 3. **Agent responsibility**: Use the `Responsibility` column value as context in the task prompt
 4. **Phase execution order**: Follow the Multi-Agent Role Assignment Strategy Table row by row:
@@ -254,23 +270,22 @@ For the "Implementation" phase where Implementer and Tester are both active:
 ```text
 # Codex (parallel dispatch example)
 Task:
-  subagent_type: workflow-implementer
-  prompt: "Write implementation code following coding-rules.md..."
+  agent_type: workflow-implementer
+  prompt: "Run /spec-code --issue {N} --task {task-id} --spec {path}. Follow the workflow and report changed files, commands run, and blockers."
 
 Task:
-  subagent_type: workflow-tester
-  prompt: "Write tests following project test patterns..."
+  agent_type: workflow-tester
+  prompt: "Run /spec-test --task {task-id} --spec {path}. Report tests added, commands run, failures, and coverage gaps."
 ```
 
 ```text
-# Claude Code (pseudocode; use runtime-native call format)
-SubAgent:
-  subagent_type: workflow-implementer
-  prompt: "Write implementation code following coding-rules.md..."
-
-SubAgent:
-  subagent_type: workflow-tester
-  prompt: "Write tests following project test patterns..."
+# Claude Code agent team (runtime-native natural-language example)
+Create an agent team for this implementation phase.
+Use the project subagent definitions named workflow-implementer and workflow-tester.
+Name the teammates implementer and tester.
+Assign implementer: run /spec-code --issue {N} --task {task-id} --spec {path}. Report changed files, commands run, and blockers.
+Assign tester: run /spec-test --task {task-id} --spec {path}. Report tests added, commands run, failures, and coverage gaps.
+Use separate file ownership to avoid conflicts, and wait for both teammates before proceeding.
 ```
 
 ## tasks.md State Management
@@ -374,8 +389,9 @@ The `--resume` option enables continuation from the last incomplete task:
 
 **"parallel mode could not start"**
 - Verify runtime-specific setup:
-  - Codex: `.codex/config.toml` includes `multi_agent = true` and `agents.workflow-*`
-  - Claude Code: workflow-declared paths exist (fallback: `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`)
+  - Codex: `.codex/agents/workflow-implementer.toml`, `.codex/agents/workflow-reviewer.toml`, and `.codex/agents/workflow-tester.toml` exist and their `name` fields match the workflow `Agent` column
+  - Claude Code agent team: workflow-declared paths exist (fallback: `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, `.claude/agents/workflow-tester.md`)
+  - cmux + Claude Code: `$CMUX_SOCKET_PATH` is set, `cmux-delegate` is available, and the role table `AI` column maps implementer/tester/reviewer to `claude` where desired
 - If setup is incomplete, continue in sequential mode or run `spec-workflow-init` again
 
 **"workflow-declared agent definition file does not exist"**
@@ -633,15 +649,21 @@ If the skill is not installed, fallback to manually launching a reviewer agent i
 
 ## Agent Definition File Injection
 
-When spawning sub-agents, the content of agent definition files must be injected into the task prompt. This ensures each agent operates with full awareness of its role-specific rules and constraints.
+When spawning runtime-native Codex custom agents, do not inject TOML contents into the prompt. Codex loads the custom agent's `developer_instructions` from `.codex/agents/*.toml` based on the agent type.
+
+When spawning Claude Code agent-team teammates, do not inject the Markdown agent definition into the prompt if Claude Code can select the project subagent directly. Claude Code loads the selected `.claude/agents/*.md` agent definition. Agent-team teammates do not inherit the leader's conversation history, so include task-specific context in the team creation prompt: issue, spec path, task id, owned files, dependencies, and expected artifacts.
+
+When using cmux or another external runtime that cannot select the custom agent type directly, inject the content of the agent definition file into the task prompt. This ensures each external agent operates with full awareness of its role-specific rules and constraints.
 
 ### Injection Steps
 
-1. Read the definition file for the role:
+1. If using runtime-native Codex sub-agents, use the workflow `Agent` column value as the custom agent type and skip file-content injection.
+2. If using Claude Code agent team, include the workflow `Agent` column value as the project subagent name in the team creation prompt and skip file-content injection.
+3. If using cmux or external dispatch, read the definition file for the role:
    - Use path from workflow `Agent definition files` section if declared
    - Otherwise use runtime defaults (e.g., `.claude/agents/workflow-implementer.md`)
-2. Prepend the definition file content to the task prompt
-3. If no definition file exists, use the `Responsibility` column from the role assignment table as the role description
+4. Prepend the definition file content to the task prompt
+5. If no definition file exists, use the `Responsibility` column from the role assignment table as the role description
 
 ### Prompt Composition Template
 
@@ -659,19 +681,15 @@ Context:
 - Target files: {file list}
 ```
 
-### Example: Built-in Sub-Agent (Claude Code)
+### Example: Runtime-Native Codex Custom Agent
 
 ```text
 Agent:
-  subagent_type: workflow-implementer
+  agent_type: workflow-implementer
   prompt: |
-    You are a workflow-implementer.
-
-    {content of .claude/agents/workflow-implementer.md}
-
-    Task: Implement T001 — create user model following design section 2.3.
-    Target files: src/models/user.ts, src/models/user.test.ts
-    Coding rules: docs/development/coding-rules.md
+    Run /spec-code --issue 123 --task T001 --spec .specs/user-model.
+    Target files: src/models/user.ts
+    Report changed files, commands run, and any blockers.
 ```
 
 ### Example: Via cmux-delegate Skill

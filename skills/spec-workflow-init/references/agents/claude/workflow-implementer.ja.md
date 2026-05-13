@@ -2,7 +2,6 @@
 name: workflow-implementer
 description: プロジェクトのコーディングルールとワークフローに従ってプロダクションコードを書く実装エージェント
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: opus
 ---
 
 # ワークフロー実装エージェント

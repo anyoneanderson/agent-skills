@@ -2,7 +2,6 @@
 name: workflow-implementer
 description: Implementation agent that writes production code following project coding rules and workflow
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: opus
 ---
 
 # Workflow Implementer

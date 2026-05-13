@@ -57,9 +57,17 @@ If a worker skill is not installed, stop and suggest installation. Never fall ba
    ```bash
    echo $CMUX_SOCKET_PATH
    ```
-   If set → record that cmux dispatch is available. Propose parallel execution mode to the user before proceeding to Phase 6.
+   If set → record that cmux dispatch is available as an external-pane option.
 
-4. **Locate spec directory** 🚨 BLOCKING:
+4. **Check runtime-native agent availability**:
+   ```bash
+   ls .codex/agents/workflow-*.toml 2>/dev/null
+   ls .claude/agents/workflow-*.md 2>/dev/null
+   ```
+   If running in Codex and `.codex/agents/workflow-*.toml` exists → prefer runtime-native Codex sub-agents over cmux for workflow roles. Codex discovers custom agents from `.codex/agents/*.toml`; do not require `[agents.<name>] config_file` entries.
+   If running in Claude Code and `.claude/agents/workflow-*.md` exists → prefer Claude Code agent team over cmux for workflow roles only when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set. If it is not set, use normal Claude Code subagents or single-agent sequential mode.
+
+5. **Locate spec directory** 🚨 BLOCKING:
    - If `--spec` provided → verify the path exists, then use it
    - **Always scan `.specs/` regardless of whether Issue body contains a path:**
      ```bash
@@ -78,7 +86,7 @@ If a worker skill is not installed, stop and suggest installation. Never fall ba
      - If user chooses spec-generator → stop and instruct: `Run /spec-generator first, then re-run /spec-implement`
    - **Do NOT proceed to Phase 5 (branch creation) until a valid spec directory is confirmed.**
 
-5. **Locate and read project files**:
+6. **Locate and read project files**:
    - **Workflow**: `docs/development/issue-to-pr-workflow.md` → `docs/` → find → fallback
    - **Coding rules**: `docs/development/coding-rules.md` → `docs/` → find → fallback
    - **Review rules**: `docs/development/review_rules.md` → `docs/` → find → optional
@@ -153,7 +161,28 @@ When invoking worker skills, the method depends on execution mode:
 | Mode | How to invoke |
 |---|---|
 | Single agent | Call the skill directly in the current session |
-| cmux dispatch | `cmux-delegate --agent {ai} --task "/spec-code --issue {N} --task {id} --spec {path}"` |
+| Codex sub-agents | Spawn the workflow custom agent by the `Agent` column value (e.g., `workflow-implementer`) and instruct it to run `/spec-code`, `/spec-review`, or `/spec-test` for the assigned task |
+| Claude Code agent team | Ask Claude Code to create an agent team with teammates based on the `Agent` column values (e.g., `workflow-implementer`) and assign `/spec-code`, `/spec-review`, or `/spec-test` tasks to those teammates |
+| cmux dispatch | Use `cmux-delegate --agent {ai} --task "/spec-code --issue {N} --task {id} --spec {path}"` when external panes are explicitly selected or runtime-native agents are unavailable |
+
+Mode priority:
+1. If running in Codex and `.codex/agents/workflow-*.toml` exists → use Codex sub-agents by default
+2. If running in Claude Code, `.claude/agents/workflow-*.md` exists, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set → use Claude Code agent team by default
+3. If cmux is available and the workflow/user explicitly selects cmux → use cmux dispatch
+4. Otherwise use single-agent sequential execution
+
+For Codex sub-agents:
+1. Validate `.codex/agents/workflow-implementer.toml`, `.codex/agents/workflow-reviewer.toml`, and `.codex/agents/workflow-tester.toml` exist when referenced by the workflow
+2. Use the `Agent` column value as the custom agent type
+3. Do not inline the TOML content into the prompt; Codex loads `developer_instructions` from the custom agent file
+4. Pass only task-specific context: issue, spec path, task id, relevant files, and expected artifact/result
+
+For Claude Code agent team:
+1. Validate `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, and `.claude/agents/workflow-tester.md` exist when referenced by the workflow
+2. Verify `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set
+3. Ask Claude Code to create an agent team with predictable teammate names and to use the workflow agent definitions by `Agent` column value
+4. Do not inline the Markdown agent definition into the prompt when Claude Code can select that agent directly
+5. Pass task-specific context: issue, spec path, task id, relevant files, dependencies, expected artifact/result, and file ownership to avoid conflicts
 
 For cmux dispatch:
 1. Read workflow's dispatch strategy and agent definition file paths

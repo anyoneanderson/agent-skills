@@ -2,7 +2,6 @@
 name: workflow-tester
 description: Test agent that writes and runs tests following project testing strategy and coding rules
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: opus
 ---
 
 # Workflow Tester
