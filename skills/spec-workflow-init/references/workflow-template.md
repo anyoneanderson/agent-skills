@@ -414,6 +414,12 @@ Each workflow phase is delegated to a specialized agent:
 - Agent definition files are not generated. Set up sub-agents manually if needed.
 {end_no_agent_files}
 
+### Runtime-native dispatch
+
+- **Codex**: use `.codex/agents/workflow-*.toml` custom agents. Spawn the agent named in the `Agent` column and pass only task-specific context.
+- **Claude Code**: use `.claude/agents/workflow-*.md` with Claude Code agent team. Ask Claude Code to create an agent team with teammates based on the agent names in the `Agent` column and pass task-specific context to each teammate. This requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+- **Fallback**: if runtime-native agents are unavailable, run roles sequentially or use cmux dispatch when explicitly selected.
+
 {end_multi_agent}
 
 {if_cmux_dispatch}
