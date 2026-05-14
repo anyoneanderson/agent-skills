@@ -179,7 +179,7 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 2. **handover** preserves session continuity:
    - Writes local `handover.md` and `.handover/` state files
    - Keeps handovers private by default with `.gitignore` guards
-   - Installs AGENTS.md / CLAUDE.md startup guidance and optional session-start hooks
+   - Installs AGENTS.md / CLAUDE.md startup guidance and optional Claude Code / Codex session-start hooks
    - Boots later sessions by verifying handover metadata against the current repository state
 
 3. **spec-inspect** validates the specification quality:
