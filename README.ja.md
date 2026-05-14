@@ -179,7 +179,7 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 2. **handover** がセッション継続を支援:
    - ローカルの `handover.md` と `.handover/` 状態ファイルを作成
    - `.gitignore` ガードによりデフォルトで handover を private に保持
-   - AGENTS.md / CLAUDE.md の起動ガイダンスと optional な session-start hook をインストール
+   - AGENTS.md / CLAUDE.md の起動ガイダンスと optional な Claude Code / Codex session-start hook をインストール
    - 次セッションで handover metadata と現在の repository 状態を照合して boot
 
 3. **spec-inspect** が仕様書の品質を検証:

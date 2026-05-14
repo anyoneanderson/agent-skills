@@ -4,7 +4,7 @@ description: |
   Create, install, inspect, and boot from local session handover files for AI agent continuity.
 
   Writes structured handover.md notes, keeps them private by default with .gitignore guards,
-  installs AGENTS.md / CLAUDE.md startup guidance, and optionally configures session-start hooks.
+  installs AGENTS.md / CLAUDE.md startup guidance, and configures Claude Code / Codex session-start hooks.
 
   English triggers: "handover", "create handover", "boot from handover", "resume from handover", "install handover"
   日本語トリガー: 「handover」「引き継ぎを作成」「handoverを見て開始」「引き継ぎから再開」「handoverをインストール」
@@ -144,12 +144,13 @@ Use `install` to make future sessions discover local handovers automatically.
    <!-- handover:end -->
    ```
 7. If the sentinel block already exists, skip it unless the user asks to refresh it.
-8. Optionally configure hooks by running:
+8. Optionally configure Claude Code and Codex hooks by running:
    ```bash
    node skills/handover/scripts/install-handover-hooks.js
    ```
+   Use `--claude` or `--codex` to install only one adapter.
 
-The hook adapter is optional. AGENTS.md / CLAUDE.md guidance is the portable baseline.
+The hook adapters are optional. AGENTS.md / CLAUDE.md guidance is the portable baseline.
 
 ## Mode: status
 
@@ -162,7 +163,7 @@ Check and report:
 - whether `.gitignore` ignores `handover.md` and `.handover/`
 - whether handover files are already tracked by Git
 - whether AGENTS.md / CLAUDE.md contain the handover sentinel block
-- whether a project-local hook config exists
+- whether project-local Claude Code and Codex hook configs exist
 - whether state metadata matches the current branch and HEAD
 
 ## Hook Adapter
@@ -173,7 +174,12 @@ The bundled session-start script is intentionally small:
 node skills/handover/scripts/handover-session-start.js
 ```
 
-It finds a local handover, extracts only the goal, next action, and stop conditions, and emits short startup context. It does not inject the full handover body.
+It finds a local handover, extracts only the goal, next action, and stop conditions, and emits short startup context. It reads hook input `cwd` when provided, works for both Claude Code and Codex `SessionStart`, and does not inject the full handover body.
+
+Hook installer targets:
+
+- Claude Code: `.claude/settings.json`
+- Codex: `.codex/hooks.json`
 
 ## Error Handling
 

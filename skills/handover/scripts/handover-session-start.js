@@ -3,6 +3,15 @@
 const fs = require("fs");
 const path = require("path");
 
+function readHookInput() {
+  try {
+    const raw = fs.readFileSync(0, "utf8").trim();
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 function findHandover(cwd) {
   const candidates = [
     path.join(cwd, "handover.md"),
@@ -50,11 +59,16 @@ function buildContext(handoverPath, markdown) {
 }
 
 function main() {
-  const handoverPath = findHandover(process.cwd());
+  const input = readHookInput();
+  const cwd = input.cwd || process.cwd();
+  const handoverPath = findHandover(cwd);
   if (!handoverPath) return;
 
   const markdown = fs.readFileSync(handoverPath, "utf8");
+  const previousCwd = process.cwd();
+  process.chdir(cwd);
   const additionalContext = buildContext(handoverPath, markdown);
+  process.chdir(previousCwd);
 
   process.stdout.write(
     JSON.stringify({
