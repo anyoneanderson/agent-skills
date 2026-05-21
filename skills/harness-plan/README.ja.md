@@ -28,6 +28,32 @@ Harness はこれらに対処する:
 
 `/spec-*` スキル群（requirements/design/tasks を明示した spec-driven 開発）とは異なる用途。Harness はスプリント粒度の自律反復、`/spec` はタスク粒度の監督付き実装。§9 参照。
 
+### /spec-* スキルとの関係
+
+`/spec-*` と `/harness-*` は対立するものではなく、同じ自律性のはしごの 2 つの段階です:
+
+- **`/spec-*` — 伴走型・spec-driven。** ユーザと LLM が requirements / design / tasks とプロジェクト規約を**一緒に作り**、人間が各ステップをレビューしながらタスク単位で実装する。人間が常にループ内に居る。
+- **`/harness-*` — もう一歩進んだ、ルール制御の自律実行。** 規約とワークフローが揃った後は、Generator ⇄ Evaluator ループが frozen contract と 5 つの Principal Skinner 停止条件の範囲内で sprint まるごとを自走させる。人間は最初に境界（product-spec / roadmap）を決めたら手を引く。
+
+Harness は意図的に **`/spec-*` セットアップ系スキルが敷いた土台の上に乗ります**。`harness-init` Step 4 は次の 3 ファイルを探し、自律エージェントが従う rulebook として渡します:
+
+| ファイル | 生成元 | harness での消費 |
+|---|---|---|
+| `docs/coding-rules.md` | `/spec-rules-init` | Generator — コーディング規約 / Craft rubric 軸 |
+| `docs/review_rules.md` | `/spec-rules-init` | Evaluator — レビュー時の重大度マトリクス |
+| `docs/issue-to-pr-workflow.md` | `/spec-workflow-init` | Evaluator — PR 品質ゲート |
+
+**新規プロジェクトの推奨順序:**
+
+```
+/spec-rules-init  +  /spec-workflow-init           # 規約 + ワークフローの土台づくり（伴走）
+        │
+        ▼
+/harness-init  →  /harness-plan  →  /harness-loop   # その規約の下で自律実行
+```
+
+各ファイルは任意（無くても foundation / bootstrap フェーズとして graceful に動作）だが、自律ループは与えた規約の分しか principled になれないため、先に `/spec-*` セットアップ系を実行することを強く推奨する。
+
 ## 2. 3 スキルの関係
 
 | スキル | 実行タイミング | 頻度 | 出力 |
@@ -385,7 +411,7 @@ cat .harness/_state.json
 | GAN 型の独立採点がほしい | `/harness-loop`（Evaluator が Generator から分離されている） |
 | Greenfield プロジェクトの bootstrap | `/harness-plan` Step 3.5 → Sprint 0（または abort + 手動 bootstrap） |
 
-harness は `/spec-*` の置き換えではない。解く問題が異なる。harness は自律収束が価値を生む場面、`/spec-*` は決定論的タスク実装が必要な場面。
+`/spec-*` と `/harness-*` は対立ではなく相補的な 2 段階（§1 →「/spec-* スキルとの関係」参照）。`/spec-*` は伴走型でタスク単位、harness は `/spec-*` で整えた規約・ワークフローの上で自律的に sprint 単位で回る。各変更を都度レビューしたいなら `/spec-*`、独立検証付きの境界内自律がほしいなら harness。先に `/spec-rules-init` と `/spec-workflow-init` を実行しておくと、harness ループが収束の基準にする rulebook が揃う。
 
 ## 10. クイックスタート
 
