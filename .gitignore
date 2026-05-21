@@ -14,3 +14,11 @@ node_modules/
 
 # Generated specs (user-specific)
 .specs/
+
+# Agent session handovers
+handover.md
+.handover/
+
+# Agent local config / hooks (not shared)
+.claude/
+.codex/
