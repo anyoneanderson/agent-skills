@@ -1,7 +1,7 @@
 # Issue to PR ワークフローガイド
 
 > spec-workflow-init により自動生成されました。
-> 生成日時: 2026-04-08
+> 生成日時: 2026-05-21
 
 ## ワークフロー概要
 
@@ -77,9 +77,7 @@ git checkout -b feature/{issue_number}-{slug}
 
 ### Phase 3: コードレビューゲート
 
-coding-rules.md に基づいて実装コードをレビューする。
-
-> review_rules.md が未生成です。`spec-rules-init --with-review-rules` で生成するとレビュー基準が強化されます。
+`docs/review_rules.md` に基づいて実装コードをレビューする。
 
 #### レビュー観点
 - review_rules.md（または coding-rules.md）に定義された重大度別チェック（セキュリティ、型安全、パターン準拠等）
@@ -103,6 +101,8 @@ coding-rules.md に基づいて実装コードをレビューする。
 6. 3回目で未解消の重大指摘 → ユーザーに判断を委ねる
 7. レビューパス → 次の Phase へ
 
+セカンドオピニオンが必要な場合は cmux-second-opinion で別AIにレビューを依頼する。
+
 ### Phase 4: テスト実装
 
 実装した機能のテストを作成する。
@@ -123,7 +123,13 @@ coding-rules.md に基づいて実装コードをレビューする。
 
 ### Phase 6: 品質ゲート
 
-全テストが通過し、Lintチェックがパスすることを確認する。
+このリポジトリ（agent-skills）では、PR前に以下を確認する（CLAUDE.md の Testing 基準）:
+
+- [ ] `SKILL.md` の frontmatter `name` がディレクトリ名と一致する
+- [ ] 参照しているファイルがすべて存在する
+- [ ] ハードコードされた MCP ツール名（例: `mcp__serena__`, `Context7`）が無い
+- [ ] `SKILL.md` が 500 行未満
+- [ ] `README.md` / `README.ja.md` のスキル表が更新されている
 
 ## 4. テスト
 
@@ -134,12 +140,14 @@ coding-rules.md に基づいて実装コードをレビューする。
 - エラーケースが適切に処理される
 - 認証・認可が正しく動作する
 
+> 注: このリポジトリは Markdown スキル集のため、自動テストの代わりに上記の品質ゲート（Phase 6）の手動検証を実施する。
+
 ## 5. PR作成と品質ゲート
 
 ### PR作成前チェックリスト
 
-- [ ] 全テスト通過
-- [ ] Lint通過
+- [ ] 品質ゲート（Phase 6）の全項目を確認
+- [ ] レビューゲート（Phase 3 / Phase 5）をパス
 
 ### PR作成
 
@@ -148,8 +156,8 @@ gh pr create --base develop --title "feat: {description} (closes #{issue_number}
 - {summary_points}
 
 ## テスト計画
-- [ ] ユニットテスト追加・更新
-- [ ] API E2Eテスト検証済み
+- [ ] スキル定義の品質ゲート確認済み
+- [ ] 参照ファイル・README 更新済み
 
 ## 関連
 - Closes #{issue_number}
@@ -198,13 +206,25 @@ CIが失敗した場合:
 
 | ロール | エージェント | AI | 責務 |
 |--------|-------------|-----|------|
-| 実装者 | workflow-implementer | claude | coding-rules.md に従った実装コード作成 |
+| 実装者 | workflow-implementer | codex | coding-rules.md に従った実装コード作成 |
 | レビュアー | workflow-reviewer | claude | coding-rules.md 基準のコードレビュー |
-| テスター | workflow-tester | claude | テスト作成・実行、カバレッジ確認 |
+| テスター | workflow-tester | codex | テスト作成・実行、カバレッジ確認 |
 
 ### エージェント定義ファイル
 
-- エージェント定義ファイルは生成しません。必要に応じて手動設定してください。
+- `.claude/agents/workflow-implementer.md` — 実装エージェント
+- `.claude/agents/workflow-reviewer.md` — レビューエージェント
+- `.claude/agents/workflow-tester.md` — テストエージェント
+
+- `.codex/agents/workflow-implementer.toml` — 実装エージェント
+- `.codex/agents/workflow-reviewer.toml` — レビューエージェント
+- `.codex/agents/workflow-tester.toml` — テストエージェント
+
+### ランタイム組み込みディスパッチ
+
+- **Codex**: `.codex/agents/workflow-*.toml` の custom agent を使用する。`エージェント` 列の名前で agent を起動し、タスク固有のコンテキストだけを渡す。
+- **Claude Code**: `.claude/agents/workflow-*.md` を Claude Code agent team として使用する。Claude Code に、`エージェント` 列の名前に基づく teammate を持つ agent team を作成するよう依頼し、各 teammate にはタスク固有のコンテキストだけを渡す。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` が必要。
+- **フォールバック**: ランタイム組み込み agent が使えない場合は順次実行するか、明示選択された場合のみ cmux dispatch を使う。
 
 ## ディスパッチ戦略
 
