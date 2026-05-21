@@ -1,0 +1,44 @@
+{
+  "$comment": "Codex hooks registered by harness-init when generator_backend=codex_*. Generated from hooks.json.template; path placeholders are replaced at install time with absolute paths resolved against the project root.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PROJECT_ROOT}}/.codex/hooks/inject-harness-context.sh",
+            "timeout": 5,
+            "statusMessage": "Injecting harness state"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PROJECT_ROOT}}/.codex/hooks/tier-a-guard-codex.sh",
+            "timeout": 5,
+            "statusMessage": "Tier-A guard (codex)"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PROJECT_ROOT}}/.codex/hooks/codex-bash-log.sh",
+            "timeout": 5,
+            "statusMessage": "Logging codex bash"
+          }
+        ]
+      }
+    ]
+  }
+}
