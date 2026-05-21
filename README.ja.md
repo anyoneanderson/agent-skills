@@ -23,6 +23,9 @@
 | [cmux-delegate](skills/cmux-delegate/) | 別のcmuxペインまたはワークスペースでAIエージェントにタスクを委任 |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | cmux経由で別AIエージェントにコードや仕様書の独立レビューを依頼 |
 | [skill-suggest](skills/skill-suggest/) | プロジェクトの技術スタックを自動解析し、skills.shレジストリから最適なスキルを提案・インストール |
+| [harness-init](skills/harness-init/) | Harness Engineering 制御ループ（Planner/Generator/Evaluator エージェント・hooks・ガードスクリプト）をプロジェクトに導入 |
+| [harness-plan](skills/harness-plan/) | epic を計画: product-spec を起草し sprint roadmap を導出、sprint ごとに tracker Issue を起票 |
+| [harness-loop](skills/harness-loop/) | Generator⇄Evaluator の自律 sprint 制御ループを rubric 収束まで実行し PR を作成 |
 
 ## インストール
 

@@ -23,6 +23,9 @@ Reusable AI agent skills for specification-driven development.
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
 | [skill-suggest](skills/skill-suggest/) | Auto-detect project tech stack and suggest optimal skills from skills.sh registry |
+| [harness-init](skills/harness-init/) | Install a Harness Engineering control loop (Planner/Generator/Evaluator agents, hooks, guard scripts) into a project |
+| [harness-plan](skills/harness-plan/) | Plan an epic: draft a product-spec, derive a sprint roadmap, and emit one tracker Issue per sprint |
+| [harness-loop](skills/harness-loop/) | Run the autonomous Generator⇄Evaluator sprint control loop to rubric convergence and open PRs |
 
 ## Installation
 

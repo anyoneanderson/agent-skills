@@ -1,0 +1,438 @@
+<!--
+  NOTE: This README is intentionally duplicated across three skill directories:
+    skills/harness-init/README.md
+    skills/harness-plan/README.md
+    skills/harness-loop/README.md
+  They MUST be kept byte-identical. When updating, edit one and `cp` to the
+  other two. A drift check script may be added later; for now discipline.
+-->
+
+# Harness Engineering — Overview & Glossary
+
+Harness Engineering is a three-skill series (`/harness-init`, `/harness-plan`, `/harness-loop`) that installs an autonomous **sprint control loop** in a project. Two independent agents — a Generator and an Evaluator — iterate in a GAN-like adversarial loop until the sprint's acceptance criteria converge, guarded by pre-defined stop conditions so the loop never runs away.
+
+This document defines the vocabulary, philosophy, and interactions across the three skills. Read this before touching any of the SKILL.md files.
+
+## 1. What problem does this solve?
+
+Autonomous coding sessions (Claude Code, Codex, etc.) are powerful but suffer from two failure modes:
+
+1. **No independent verification** — the model that writes the code also grades it, so optimism wins
+2. **No principled stop** — without external gates, loops either terminate too early (giving up on solvable sprints) or too late (burning cost on unsolvable ones)
+
+Harness addresses both by:
+
+- Splitting **writing** (Generator) and **scoring** (Evaluator) across two agents that cannot see each other's context (file-mediated communication only)
+- Layering **five Principal Skinner termination conditions** (iter cap / wall cap / cost cap / rubric stagnation / human-needed flag) as a hook-level safety net
+- Requiring a **human-in-the-loop Planner** to draft the product spec and approve the roadmap — the autonomous loop only runs inside boundaries humans set
+
+This is different from `/spec-*` skills (spec-driven development with explicit requirements/design/tasks docs). Harness is for sprint-level autonomous iteration; `/spec` is for task-level supervised implementation. See §9.
+
+## 2. The three skills
+
+| Skill | When to run | Frequency | Output |
+|---|---|---|---|
+| `/harness-init` | First time setting up a project | Once per project (re-runnable as reconfigure) | `.harness/` tree + `.claude/agents/` + `.codex/agents/` + hooks |
+| `/harness-plan` | Before starting a new epic | Once per epic | `product-spec.md`, `roadmap.md`, sprint contracts, tracker Issues |
+| `/harness-loop` | To execute the planned sprints | Once per epic | Per-sprint PRs + `metrics.jsonl` + updated `_state.json` |
+
+Strict prerequisite order: `harness-init` → `harness-plan` → `harness-loop`. Each earlier skill writes the state the next skill reads.
+
+### Data flow
+
+```
+ user prompt
+     │
+     ▼
+┌───────────────────┐        .harness/_config.yml
+│  /harness-init    │  ───►  .harness/scripts/*.sh
+│  (once/project)   │        .claude/agents/*.md
+└───────────────────┘        .codex/agents/*.toml  (if codex backend)
+     │
+     ▼
+┌───────────────────┐        .harness/<epic>/product-spec.md
+│  /harness-plan    │  ───►  .harness/<epic>/roadmap.md
+│  (once/epic)      │        .harness/<epic>/sprints/sprint-<n>-*/contract.md
+└───────────────────┘        GitHub Issues (epic + per-sprint)
+     │
+     ▼
+┌───────────────────┐        code changes (Generator)
+│  /harness-loop    │  ───►  evidence/ + feedback/ (Evaluator)
+│  (runs N sprints) │        per-sprint PRs
+└───────────────────┘        metrics.jsonl rows
+```
+
+## 3. Why GAN loop?
+
+Standard single-agent loops face a self-verification problem: whoever writes the code also decides if it's "good enough". This leads to **graceful over-fitting** (passing fabricated or trivial tests) and **premature declaration** (claiming done without true verification).
+
+The GAN approach (inspired by Goodfellow's 2014 Generative Adversarial Networks):
+
+- **Generator** writes code to pass acceptance scenarios
+- **Evaluator** runs those scenarios independently and scores against a **rubric**
+- They communicate **only via files** (`feedback/generator-<iter>.md`, `feedback/evaluator-<iter>.md`) — no shared memory
+- The Evaluator has no incentive to be lenient; the Generator has no way to see what the Evaluator is checking beyond the public rubric
+- A **Planner** drafts the contract and arbitrates if negotiation stalls
+
+This produces a measurable convergence: each iteration's rubric scores are committed to `metrics.jsonl`, so plateaus and regressions are detectable.
+
+## 4. Architecture
+
+### File layout
+
+Created by `/harness-init`:
+
+```
+<project>/
+├── .harness/
+│   ├── _config.yml            # static configuration from hearing
+│   ├── _state.json            # cursor (current epic/sprint/phase/flags)
+│   ├── progress.md            # append-only worklog (tail-read)
+│   ├── metrics.jsonl          # one line per iteration
+│   ├── scripts/               # hook-tier guards (ms latency)
+│   │   ├── progress-append.sh
+│   │   ├── stop-guard.sh
+│   │   ├── tier-a-guard.sh
+│   │   ├── mcp-allowlist.sh
+│   │   ├── restore-after-compact.sh
+│   │   ├── codex-progress-bridge.sh
+│   │   ├── wrap-untrusted.sh
+│   │   └── foundation-readiness.sh
+│   ├── templates/             # copied by harness-plan into <epic>/
+│   │   ├── product-spec.md
+│   │   ├── sprint-contract.md
+│   │   ├── shared_state.md
+│   │   └── foundation-sprint-checklist.md
+│   └── tier-a-patterns.txt    # regex list read by tier-a-guard.sh
+├── .claude/
+│   ├── agents/                # planner.md / generator.md / evaluator.md
+│   └── settings.json          # hooks registration
+└── .codex/                    # only if generator_backend ∈ {codex_cli, codex_cmux}
+    ├── agents/                # *.toml role overlays
+    ├── hooks/                 # codex-side hook scripts
+    ├── hooks.json
+    └── config.toml            # [features] codex_hooks=true + harness [agents.*]
+```
+
+Created by `/harness-plan` per epic:
+
+```
+.harness/<epic>/
+├── product-spec.md            # human-authored intent (What/Why/Scope/Constraints)
+├── roadmap.md                 # sprint decomposition (YAML frontmatter + narrative)
+├── foundation-readiness.md    # Step 3.5 probe report (greenfield only)
+└── sprints/
+    └── sprint-<n>-<feature>/
+        ├── contract.md        # rubric + acceptance_scenarios (or deliverables for foundation)
+        ├── shared_state.md    # sprint-scoped ledger
+        ├── feedback/
+        │   ├── generator-<iter>.md
+        │   ├── generator-<iter>-report.json
+        │   ├── evaluator-<iter>.md
+        │   ├── evaluator-<iter>-report.json
+        │   └── planner-ruling.md    # only if negotiation stalemate
+        └── evidence/
+            └── <AS>.{ax.json,log,trace.zip,...}
+```
+
+### Agents
+
+Three role contracts, instantiated fresh per invocation (no long-lived sessions).
+
+| Agent | Model (default) | Role | Writes | Does NOT write |
+|---|---|---|---|---|
+| **Planner** | opus | Drafts product-spec / roadmap / contracts; arbitrates stalemates | `product-spec.md`, `roadmap.md`, contract drafts, `planner-ruling.md` | source code, other agents' feedback |
+| **Generator** | sonnet (or codex gpt-5.4) | Implements contract; negotiates thresholds | source code, `feedback/generator-<iter>.{md,json}` | self-grade, shared state, `contract.md` after `status:active` |
+| **Evaluator** | opus | Runs acceptance scenarios, scores rubric axes | `feedback/evaluator-<iter>.md`, `${SPRINT_DIR}/evidence/iter-<n>/` | source code, contract after freeze, tests (can run them, not edit) |
+
+**Orchestrator** = the harness-loop skill itself. It is not an agent; it dispatches the agents and owns `_state.json` / `progress.md` / `metrics.jsonl` / git checkpoints / PR creation.
+
+#### Orchestrator's responsibility
+
+The Orchestrator's sole job is to **dispatch Planner / Generator / Evaluator** and own the shared state. Prompts sent to agents contain placeholder substitutions only; design, implementation, and scoring decisions belong to the agents themselves (via `contract.md` + role contract in `.codex/agents/<role>.toml` or `.claude/agents/<role>.md`).
+
+**Do (examples)**
+
+- Substitute declared placeholders only: `{{EPIC_NAME}}`, `{{SPRINT_NUMBER}}`, `{{ITER}}`, `{{EVALUATOR_FB_PATH}}`, etc.
+- Point the agent at the contract / feedback paths it should read
+- Point the agent at the feedback files it must write (narrative + report.json)
+- Write `_state.json` / `progress.md` / `metrics.jsonl` / git commits / PRs (Orchestrator-only writes)
+
+**Don't (examples)**
+
+- Write Prisma schema / model definitions in the prompt
+- Enumerate docker-compose service names, env vars, or port numbers
+- Hard-code CLI flag values, migration names, or file paths
+- Suggest an implementation strategy ("AS-A failed, so fix X")
+- Draft code in the prompt that the agent should write
+
+If `contract.md` or the role contract feels insufficient, **fix the contract** or **fix the role contract**. The Orchestrator never fills the gap itself.
+
+### Communication protocol
+
+All inter-agent communication is **file-mediated**. Agents never see each other's context directly. The Orchestrator reads feedback files to drive state transitions.
+
+```
+Planner → contract.md                 (drafts threshold=? placeholders)
+Generator ⇄ Evaluator (negotiation)   (feedback/generator-neg-<round>.md ⇄ evaluator-<round>.md)
+Planner → contract.md                 (freezes thresholds if stalemate)
+Generator → code + feedback/generator-<iter>.{md,json}
+Evaluator → feedback/evaluator-<iter>.md + evidence/
+Orchestrator → _state.json, progress.md, metrics.jsonl, git commit, PR
+```
+
+## 5. Lifecycle of a sprint
+
+```
+/harness-plan writes contract.md with threshold=?
+
+  contract.status = "pending-negotiation"
+        │
+        ▼
+┌──────────────────────────────────────────────┐
+│  Negotiation phase (max 3 rounds)            │
+│    round 1: Generator proposes thresholds    │
+│             Evaluator counter-proposes       │
+│    round 2: Generator revises                │
+│             Evaluator revises                │
+│    round 3: last attempt at mutual accept    │
+│    stalemate → Planner rules                 │
+└──────────────────────────────────────────────┘
+        │
+        ▼  thresholds frozen
+  contract.status = "active"
+        │
+        ▼
+┌──────────────────────────────────────────────┐
+│  Iteration loop (until pass or Skinner stop) │
+│    Generator writes code + report.json       │
+│    Orchestrator git-commits (WIP)            │
+│    Evaluator runs AS, scores rubric          │
+│    Orchestrator appends metrics.jsonl        │
+│    if all axes ≥ threshold: exit loop        │
+│    else: iteration++, Generator re-dispatched│
+└──────────────────────────────────────────────┘
+        │
+        ▼
+  PR creation (split or bundled)
+        │
+        ▼
+  _state.json.current_sprint += 1 → next sprint
+```
+
+## 6. Glossary
+
+### Tier (Tier-A)
+
+A classification of shell commands by **destructive blast radius**. Currently only **Tier-A** (most dangerous) is implemented; the naming leaves room for Tier-B (warn-only) / Tier-C (log-only) in the future.
+
+**Tier-A** = operations that are irreversible or cross-session dangerous. Categories (see `.harness/tier-a-patterns.txt`):
+
+- Privilege escalation — `sudo`, `doas`
+- Filesystem destruction — `rm -rf /`, `find ... -delete`, `mkfs`, `dd of=/dev/...`
+- Git destructive — `git push --force`, `git reset --hard`, `git clean -f`, `git branch -D`, filter-branch / filter-repo
+- Database destructive — `DROP TABLE`, `TRUNCATE`, `DELETE FROM ... (no WHERE)`
+- Publish / release — `npm publish`, `cargo publish`, `gh release create/delete`
+- Cloud delete — AWS/GCP/Azure/k8s/Terraform delete/destroy
+- Destructive uninstall — `apt purge`, `brew uninstall --zap`
+- System — `shutdown`, `reboot`, `halt`
+
+On a match in **strict** `hook_level`, `tier-a-guard.sh` returns `{"decision":"deny"}` and sets `_state.json.pending_human=true`. In **warn**, it only logs. In **minimal**, it is not installed.
+
+False positives are expected and by design — "better stop a safe rm than allow a dangerous one". Users can edit `tier-a-patterns.txt` to tune.
+
+### Rubric
+
+A **rubric** is a set of scored **axes** for Evaluator judgment. Each axis has:
+
+- `weight: high | std | low` — affects **failure reporting order**, not pass/fail
+- `threshold: float ∈ [0.0, 1.0]` — each axis must score `≥ threshold` for the sprint to pass
+
+Presets by project type (`_config.yml.project_type`):
+
+| Preset | Axes |
+|---|---|
+| web | Functionality (1.0) / Craft (0.7) / Design (0.7) / Originality (0.5) |
+| api | Functionality (1.0) / Craft (0.7) / Consistency (0.7) / Documentation (0.6) |
+| cli | Functionality (1.0) / Craft (0.7) / Ergonomics (0.7) / Documentation (0.6) |
+
+`Functionality` always carries weight `high` and threshold `1.0` — it is the contract itself.
+
+Thresholds in `contract.md` are placeholders (`threshold: ?`) written by Planner; they get filled during **negotiation**.
+
+### Principal Skinner
+
+The **five termination conditions** enforced by `stop-guard.sh`. Named after B.F. Skinner, the psychologist whose operant conditioning experiments codified the idea that reinforcement schedules determine when an agent stops trying. Here the "schedule" is five hard caps, any of which terminates the loop:
+
+| Condition | State key | Config key | Default |
+|---|---|---|---|
+| Loop done | `completed` | — | false |
+| Human needed | `pending_human` | — | false |
+| Iteration cap | `iteration` | `max_iterations` | 8 |
+| Wall-time cap | `start_time` → elapsed | `max_wall_time_sec` | 28800 (8h) |
+| Cost cap | `cumulative_cost_usd` | `max_cost_usd` | 20.0 |
+| Rubric stagnation | `rubric_stagnation_count` | `rubric_stagnation_n` | 3 |
+
+Plus escape hatches: `current_epic=null` or `current_sprint=0` or `phase` in the non-loop allowlist → always allow stop. This keeps harness-plan's interactive phases from being mistakenly treated as an autonomous loop.
+
+### GAN loop
+
+See §3. The Generator ⇄ Evaluator adversarial iteration, where convergence is driven by file-based feedback rather than shared training data.
+
+### Negotiation
+
+The 3-round bargaining phase before a sprint enters implementation. Generator and Evaluator exchange proposed thresholds via `feedback/{generator,evaluator}-<round>.md`. If no agreement by round 3, the Planner rules unilaterally in `feedback/planner-ruling.md` and freezes `contract.md` to `status: active`.
+
+Rules:
+- Evaluator never concedes `Functionality < 1.0` — that axis *is* the contract
+- Generator may propose `max_iterations` changes within `_config.yml.max_iterations` bounds
+- After `status: active`, no further contract edits allowed (except by Planner `ruling` phase)
+
+### Bundling
+
+How sprints map to PRs:
+
+- **split** (default) — one sprint = one PR
+- **bundled** — N sprints ship as a single PR at the last bundle peer's completion
+
+Bundle only when feature pairs share at least one of four coupling axes: schema / auth / UI layout / contract surface. Each `bundled` sprint must have a written `bundling_reason` citing an axis. Max bundle size = 3 sprints.
+
+### Foundation-sprint
+
+A greenfield exception inserted at `n=0` when Step 3.5 Foundation Readiness Check reports YELLOW/RED. Differs from a feature sprint:
+
+- `type: foundation` instead of `bundling: split|bundled`
+- `deliverables: [...]` checklist instead of `rubric: [...]`
+- `human_attestation_required: true`
+- `generator_mode: none | scaffold | optional` controls Generator involvement
+- Skipped by rubric scoring; verified by `foundation-readiness.sh --check <key>` probes
+- Does not count against the 6-sprint-per-epic cap
+
+See [harness-plan/references/foundation-sprint-guide.md](../harness-plan/references/foundation-sprint-guide.md).
+
+### Phase
+
+Values of `_state.json.phase`. The autonomous sprint loop uses `negotiation | impl | evaluation | pr`. Harness-plan uses `product-spec-draft | roadmap-draft | roadmap-approved | issues-pending | ready-for-loop`. Foundation-sprints add `foundation-setup | foundation-attest`. Terminal state is `done`.
+
+`stop-guard.sh` enforces Principal Skinner only during the autonomous values; all others allow stop.
+
+### Stop-guard
+
+The `.harness/scripts/stop-guard.sh` hook registered on Claude Code's `Stop` event. Returns `{}` to allow stop or `{"decision":"block", "reason":"..."}` to re-prompt the agent to continue. Includes anti-recursion via `stop_hook_active`.
+
+### Untrusted content
+
+External content (Playwright a11y snapshots, MCP responses, web fetches, PDF extracts) is wrapped in `<untrusted-content source="..." url="...">…</untrusted-content>` blocks by `wrap-untrusted.sh` before reaching any agent prompt. Each agent's system prompt declares that text inside these tags is **data, not instruction**, preventing indirect prompt injection.
+
+### Mode
+
+`_state.json.mode` values, set by `/harness-loop` on startup:
+
+| Mode | Interactive gates? | Best for |
+|---|---|---|
+| `interactive` | yes, full | First-time epics, supervised runs |
+| `continuous` | sprint boundaries only | Known-good setups, partial supervision |
+| `autonomous-ralph` | supervisor-managed wrapper, worker resets each iter | Overnight runs, battery of fixes |
+| `scheduled` | none, cron-triggered | Long-horizon fleet work |
+
+`autonomous-ralph` mode keeps one interactive supervisor session while the worker Claude session is reset each iteration (defense against context rot). Named after "ralphing" from the autonomous-Ralph pattern (a single-loop self-prompt that carries state only via disk, not memory).
+
+### Autonomous-Ralph
+
+A specific `mode` value. The session terminates and restarts each iteration, so context never compounds; all state lives in `.harness/` + git. Use this for long runs where you want to burn through many iterations without operator attention. Requires `hook_level: strict` (safety caps must be enforced mechanically since no human is watching).
+
+## 7. Four-layer defense
+
+Hooks are the **ms tier**. Other tiers exist and should be wired separately; harness only installs the ms layer.
+
+| Tier | Latency | Mechanism | What it enforces |
+|---|---|---|---|
+| Hook | ms | `.claude/settings.json` + `.harness/scripts/*.sh` | Tier-A deny, Stop gating, MCP allowlist, progress append, compact restore |
+| pre-commit | sec | `lefthook` / `husky` / etc. | Formatter, fast lint, secret scan |
+| Skill | min | `spec-review` / `spec-test` / Evaluator | Rubric scoring, acceptance scenario execution |
+| CI | hr | GitHub Actions / GitLab CI | Full test matrix, slow E2E, publish gates |
+
+`harness-init` only touches the Hook tier. Your project should wire the other three independently.
+
+## 8. Resilience — the three-point recovery set
+
+The harness survives `/compact`, crashes, session restarts, and mode changes because three files contain enough state to rebuild any downstream decision. Every agent's **Boot Sequence** starts with:
+
+```bash
+git log --oneline -20
+tail -30 .harness/progress.md
+cat .harness/_state.json
+```
+
+| File | Role | Writer | Reader | Surviving |
+|---|---|---|---|---|
+| `git` | code + checkpoints | Orchestrator (commit) | all | always |
+| `progress.md` | human-readable worklog | all (append via hook) | tail | compact, restart |
+| `_state.json` | machine cursor | Orchestrator only | all | compact, restart |
+| `metrics.jsonl` | observability stream | Orchestrator (append) | analysis | accumulates |
+
+Nothing essential lives only in conversation context. After any discontinuity, re-running the Boot Sequence fully restores agent situational awareness.
+
+## 9. When to use this vs alternatives
+
+| Situation | Use |
+|---|---|
+| You have a detailed spec with known acceptance criteria | `/spec-generator` + `/spec-implement` + `/spec-review` + `/spec-test` |
+| You have a loose idea and want iteration to shape it | `/harness-init` → `/harness-plan` → `/harness-loop` |
+| You need long autonomous runs with verification | `/harness-loop --mode autonomous-ralph` |
+| You need a single-PR feature implementation | `/spec-implement` |
+| You need a multi-sprint epic broken into PRs | `/harness-plan` |
+| You need GAN-style independent scoring | `/harness-loop` (Evaluator is separate from Generator) |
+| You need a bootstrap of a greenfield project | `/harness-plan` Step 3.5 → Sprint 0 (or abort + manual bootstrap) |
+
+Harness is not a replacement for `/spec-*`. They solve different problems. Harness shines where autonomous convergence is valuable; `/spec-*` shines where deterministic task-by-task implementation is needed.
+
+## 10. Quick start
+
+```bash
+# Once per project
+/harness-init
+# … answer 6 rounds of hearing questions (project type, backend, tools, hook level, tracker, caps)
+
+# Before the first /harness-plan after install
+exit Claude Code completely
+claude --resume
+# … reopen the same repository so planner/generator/evaluator registrations are reloaded
+
+# Once per epic
+/harness-plan
+# … interactive interview for product-spec, roadmap approval, sprint contract drafts, Issue creation
+
+# Runs the epic
+/harness-loop
+# … iterates sprints until all pass or Principal Skinner stops
+```
+
+If `Task(subagent_type="generator"|"evaluator"|"planner")` is missing or
+falls back to a general-purpose agent, `/clear` is not enough. Exit the
+Claude Code process completely and relaunch the repository with
+`claude --resume`, then retry `/harness-plan` or `/harness-loop`.
+
+## 11. Naming origins
+
+- **GAN** — Generative Adversarial Networks (Goodfellow et al., 2014). The generator/evaluator split mirrors the generator/discriminator split, though here the "loss" is a rubric score rather than a learned discriminator
+- **Principal Skinner** — B.F. Skinner (1904–1990), behavioral psychologist whose operant conditioning experiments established that reinforcement schedules shape when a subject gives up. The five stop conditions are the "schedule" applied to the autonomous agent
+- **Autonomous-Ralph / ralphing** — a self-prompting pattern where a single-loop agent restarts itself each iteration, persisting only to disk. Named after community shorthand, no specific person
+- **Tier (Tier-A)** — security/ops convention borrowed from incident severity (P0/P1/P2) and risk management (Tier 1/2/3). The "-A" suffix anticipates future Tier-B (warn) / Tier-C (log) extensions
+- **Rubric** — educational evaluation terminology; each axis is scored on a bounded scale with pass/fail defined by threshold
+- **Bundling** — product management term for grouping features into a release unit
+- **Foundation-sprint** — adapted from "foundation work" in construction / civil engineering; the sprint that makes feature sprints feasible
+
+## 12. Synchronization rule for this README
+
+This file exists as three byte-identical copies:
+
+```
+skills/harness-init/README.md
+skills/harness-plan/README.md
+skills/harness-loop/README.md
+```
+
+(Plus the `.ja.md` counterparts for Japanese.) Wherever you land in the skill tree, you get the complete overview without cross-directory navigation.
+
+**When updating**: edit one copy, then `cp` to the other two. A drift-check script may be added later; for now this is enforced by discipline. Same rule for `README.ja.md`.
