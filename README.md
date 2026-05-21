@@ -1,6 +1,6 @@
 # agent-skills
 
-Reusable AI agent skills for specification-driven development.
+Reusable AI agent skills for specification-driven and autonomous (harness) development.
 
 [日本語版はこちら](README.ja.md)
 
@@ -49,6 +49,11 @@ npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
+
+# Harness Engineering (autonomous) — install spec-rules-init + spec-workflow-init first
+npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-plan -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 ```
 
 > **Note**: cmux skills require [cmux](https://cmux.dev/) (macOS 14.0+) and must be run inside a cmux session.
@@ -172,6 +177,17 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > Find best practice skills
 ```
 
+### Set up autonomous harness development
+
+> Prerequisite: run `/spec-rules-init` and `/spec-workflow-init` first — harness consumes the `coding-rules.md` / `review_rules.md` / `issue-to-pr-workflow.md` they generate.
+
+```
+> Initialize harness          # harness-init: install the control loop
+> Plan the epic               # harness-plan: product-spec → roadmap → tracker Issues
+> Run harness-loop            # harness-loop: autonomous Generator ⇄ Evaluator sprints → PRs
+> Run harness-loop --mode autonomous-ralph
+```
+
 ## How It Works
 
 1. **spec-generator** produces a structured spec in `.specs/{project}/`:
@@ -230,6 +246,16 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 ### Project Setup
 
 13. **skill-suggest** analyzes the project's manifest files (package.json, Cargo.toml, etc.), searches the skills.sh registry for matching best-practice skills, and installs them with agent-targeted installation to prevent unwanted directory creation.
+
+### Harness Engineering (autonomous, optional)
+
+A separate, more autonomous lane than the `/spec-*` flow above. **Prerequisite:** run **spec-rules-init** and **spec-workflow-init** first — harness consumes `docs/coding-rules.md`, `docs/review_rules.md`, and `docs/issue-to-pr-workflow.md` as the rulebook its autonomous agents obey. Where `/spec-*` keeps a human in the loop task-by-task, harness drives whole sprints on its own inside human-set boundaries.
+
+14. **harness-init** installs the control loop: hears environment settings once, then generates Planner/Generator/Evaluator sub-agents, hooks, guard scripts, and the `.harness/` resilience tree. Run once per project.
+
+15. **harness-plan** plans an epic: drafts `product-spec.md`, derives `roadmap.md` with sprint decomposition/bundling, and emits one tracker Issue per sprint. The last human-in-the-loop step before autonomous execution.
+
+16. **harness-loop** runs the GAN control loop: per sprint it negotiates the contract, iterates Generator ⇄ Evaluator to rubric convergence (or a Principal Skinner stop), checkpoints every iteration (`progress.md` + `_state.json` + git + `metrics.jsonl`), and opens the PR. Modes: interactive / continuous / autonomous-ralph / scheduled.
 
 ## Compatibility
 

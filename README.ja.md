@@ -1,6 +1,6 @@
 # agent-skills
 
-仕様駆動開発のための再利用可能なAIエージェントスキル集。
+仕様駆動開発と自律（harness）開発のための再利用可能なAIエージェントスキル集。
 
 [English version](README.md)
 
@@ -49,6 +49,11 @@ npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
+
+# Harness Engineering（自律）— 先に spec-rules-init + spec-workflow-init を入れる
+npx skills add anyoneanderson/agent-skills --skill harness-init -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-plan -g -y
+npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 ```
 
 > **Note**: cmux スキルは [cmux](https://cmux.dev/)（macOS 14.0+）が必要で、cmux セッション内で実行する必要があります。
@@ -172,6 +177,17 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 > ベストプラクティススキルを検索
 ```
 
+### 自律 harness 開発をセットアップする
+
+> 前提: 先に `/spec-rules-init` と `/spec-workflow-init` を実行 — harness はそれらが生成する `coding-rules.md` / `review_rules.md` / `issue-to-pr-workflow.md` を消費します。
+
+```
+> harness を初期化          # harness-init: 制御ループを導入
+> epic を計画               # harness-plan: product-spec → roadmap → tracker Issue
+> harness-loop を実行        # harness-loop: 自律 Generator ⇄ Evaluator sprint → PR
+> harness-loop を実行 --mode autonomous-ralph
+```
+
 ## 仕組み
 
 1. **spec-generator** が `.specs/{project}/` に構造化された仕様書を生成:
@@ -232,6 +248,16 @@ npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 ### プロジェクトセットアップ
 
 14. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
+
+### Harness Engineering（自律、オプション）
+
+上記 `/spec-*` フローより一歩進んだ自律レーン。**前提:** 先に **spec-rules-init** と **spec-workflow-init** を実行 — harness は `docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` を、自律エージェントが従う rulebook として消費する。`/spec-*` が人間をタスク単位でループ内に残すのに対し、harness は人間が決めた境界内で sprint まるごとを自走させる。
+
+15. **harness-init** が制御ループを導入: 環境設定を一度ヒアリングし、Planner/Generator/Evaluator サブエージェント・hooks・ガードスクリプト・`.harness/` resilience ツリーを生成。プロジェクトごとに一度実行。
+
+16. **harness-plan** が epic を計画: `product-spec.md` を起草し、sprint 分解/bundling 付きの `roadmap.md` を導出、sprint ごとに tracker Issue を起票。自律実行前の最後の人間介入ステップ。
+
+17. **harness-loop** が GAN 制御ループを実行: sprint ごとに contract を交渉し、Generator ⇄ Evaluator を rubric 収束（または Principal Skinner 停止）まで反復、毎 iteration で checkpoint（`progress.md` + `_state.json` + git + `metrics.jsonl`）し PR を作成。モード: interactive / continuous / autonomous-ralph / scheduled。
 
 ## 互換性
 
