@@ -1,0 +1,269 @@
+# Roadmap Generation Guide
+
+After `product-spec.md` is complete, the Planner derives
+`.harness/<epic>/roadmap.md`: the epic's sprint decomposition with per-sprint
+`bundling` flags. This file, not the product-spec, drives Issue creation and
+the sprint loop.
+
+## Pipeline
+
+```
+product-spec.md  →  Planner  →  roadmap.md  →  per-sprint contract.md
+                                    │
+                                    └─ issue-create.md (next step)
+```
+
+The Planner executes three passes:
+
+1. **Decompose** What bullets into sprint candidates (1 capability ≈ 1 sprint).
+2. **Judge bundling** via the coupling heuristics below.
+3. **Order** sprints by dependency (prerequisite first) and risk (flakiest
+   first when a peer-order choice exists).
+
+## Decomposition Rules
+
+| Rule | Rationale |
+|---|---|
+| One sprint delivers one **end-to-end user-visible capability** | Keeps acceptance scenarios unambiguous |
+| A sprint that spans multiple What bullets is a decomposition failure | Either split the sprint, or the What bullets should have been one |
+| No "infrastructure sprints" | Infra is a means; fold it into the first sprint that needs it. **Greenfield exception**: a single `type: foundation` sprint at `n=0` is allowed when `harness-plan` Step 3.5 reports YELLOW / RED. See [foundation-sprint-guide.md](foundation-sprint-guide.md) |
+| No "refactor sprints" | Refactor is internal; it must be in service of a capability |
+| Maximum sprints per epic: 6 (guideline) | More suggests the epic is an initiative — ask the user to split. The foundation-sprint at `n=0` does NOT count against this cap |
+
+If a capability requires groundwork (e.g., auth middleware before any
+authenticated feature), the groundwork belongs **inside** sprint 1 of that
+capability — not a preceding "sprint 0".
+
+## Bundling Judgement
+
+Two sprints are **bundling candidates** when they share structural coupling
+such that shipping them in separate PRs would cause rework. The Planner
+checks the four coupling axes below; **any one** is sufficient to mark them
+`bundled`:
+
+| Coupling axis | Bundling signal |
+|---|---|
+| **Schema / data model** | Share a table, document shape, or core entity that both sprints write |
+| **Auth / session** | Share the same authentication flow or session state transitions |
+| **UI layout / component tree** | Share a layout shell, navigation root, or component hierarchy both sprints modify |
+| **Contract surface** | Share a public API signature or event schema both sprints change |
+
+The default is `split`. Bundle only when the heuristic fires with a clear,
+writeable reason — the `bundling_reason` field is mandatory when bundling.
+
+### Worked examples
+
+| Scenario | Decision | Reason |
+|---|---|---|
+| `login` + `signup` on a shared `UserRecord` | `bundled` | Both write the same auth schema; separate PRs would churn the model twice |
+| `login` + `user-profile-edit` | `split` | Profile reads the user record; no concurrent writes to auth fields |
+| `password-reminder` + `signup` sharing email templates | `bundled` | Shared template contract; separating invites divergence |
+| `billing-page` + `notification-preferences` | `split` | Independent surfaces, different data owners |
+| `dashboard` + `dashboard-widget-a` | `bundled` | Layout shell and widget ship together or the widget has nowhere to land |
+
+### Bundle group rules
+
+- A bundle is a **connected component** in the coupling graph: if A bundles
+  with B and B bundles with C, then {A, B, C} is one bundle group.
+- All sprints in a bundle ship as **one PR** at the end of the last sprint
+  in the group.
+- The bundle's PR title lists every feature (`feat: login + signup + password-reminder`).
+- Bundle size ceiling: 3 sprints. Larger → re-examine decomposition; the epic
+  is probably too tightly coupled and should be redesigned upstream.
+
+## Backend Recommendation
+
+For each sprint, the Planner judges which Generator backend (`claude` /
+`codex_cli` / `codex_cmux`) best matches the feature character, emits a
+**single recommended primary** and (in `interactive` mode) confirms the
+final choice with the user via `AskUserQuestion`. The confirmed value
+lands in `roadmap.md` `sprints[n].generator_backend`.
+
+### Suitability rubric
+
+| Feature character | Recommended primary | Notes / secondary candidate |
+|---|---|---|
+| UI-heavy: frontend / component / CSS / design system / micro-interaction / page layout | `claude` | aesthetic judgement / UX copy / brand tone |
+| Backend logic: API / schema / auth / validation / DB | `codex_cli` | type strictness / defensive code passes rubric easily. For design-heavy backend sprints, surface `claude` as a **secondary** option in the AskUserQuestion options list (primary stays `codex_cli`) |
+| Infra / CI/CD / docker / shell / workflow yaml / cloud deploy | `codex_cli` | pipeline / config operational care |
+
+The primary is always **a single value** — `claude` or `codex_cli` (never
+`codex_cli (or claude)`). `codex_cmux` is **not** a rubric primary; it is
+always included in the `AskUserQuestion` options so the user can select
+it for hybrid (UI + backend equally weighted) or cross-check cases.
+
+### User confirmation flow (interactive mode)
+
+For each sprint, the Planner constructs an `AskUserQuestion`:
+
+```
+options for sprint n:
+  1. <primary recommended> (Recommended) — <rubric reason>
+  2. <_config.yml.generator_backend> — harness-init で選択した epic default
+  3. <secondary or remaining enum value> — (重複は除去)
+```
+
+If `recommended == epic default`, item 2 is omitted (deduplication).
+Bundle peers share the primary peer's choice; the question is asked once
+per bundle, not per peer. When `sprints > 4`, split into multiple rounds
+(AskUserQuestion limit is 4 questions per round).
+
+### Non-interactive mode
+
+In `continuous` / `autonomous-ralph` / `scheduled` modes the Planner
+**must not** call `AskUserQuestion`; the rubric primary is auto-confirmed
+and written straight to `roadmap.md`. The user can later edit
+`roadmap.md` and re-run `/harness-plan --replan` to change the choice.
+
+### Legacy bypass
+
+When `_config.yml.sprint_level_generator_override == false`, the Planner
+skips the rubric judgement and the AskUserQuestion entirely; each sprint
+gets `generator_backend: null` so that `harness-loop` falls back to
+`_config.yml.generator_backend` at runtime (current behaviour, preserved
+for backward compatibility).
+
+## `roadmap.md` Output Format
+
+The Planner writes one frontmatter-based markdown file. The YAML is canonical;
+the prose body is advisory.
+
+```markdown
+---
+epic: auth-suite
+generated_at: 2026-04-15T12:00:00Z
+planner_model: claude-opus-4-6
+sprints:
+  - n: 1
+    feature: login
+    bundling: split
+    bundling_reason: "Independent UI, no shared writeable schema"
+    dependencies: []
+    risk: medium
+    generator_backend: claude
+    generator_backend_reason: "UI / UX 重視 sprint (rubric 推奨を user 確認後採用)"
+  - n: 2
+    feature: signup
+    bundling: bundled
+    bundling_reason: "Shares UserRecord schema + password hashing with login"
+    bundled_with: [3]
+    dependencies: [1]
+    risk: medium
+    generator_backend: codex_cli
+    generator_backend_reason: "schema + auth heavy, primary peer の選択で peer 全体を統一"
+  - n: 3
+    feature: password-reminder
+    bundling: bundled
+    bundling_reason: "Shares email template contract with signup"
+    bundled_with: [2]
+    dependencies: [2]
+    risk: low
+    generator_backend: codex_cli
+    generator_backend_reason: "bundle peer (sprint 2 と同 backend を継承)"
+---
+
+# Roadmap: auth-suite
+
+## Sprint Summary
+
+| # | Feature | Bundling | Depends on | Risk |
+|---|---|---|---|---|
+| 1 | login | split | — | medium |
+| 2 | signup | bundled (with 3) | 1 | medium |
+| 3 | password-reminder | bundled (with 2) | 2 | low |
+
+## Bundle Groups
+
+- **Bundle A**: sprints 2 + 3 → single PR at end of sprint 3
+- Sprint 1 → its own PR
+
+## Rationale
+
+<One paragraph per non-obvious decision. Cite the coupling axis for every
+`bundled` entry. If a bundling judgement reversed a user expectation, note
+it here so the roadmap approval AskUserQuestion can surface it clearly.>
+```
+
+### Required fields per sprint entry
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `n` | int | yes | 1-indexed sprint number |
+| `feature` | string (kebab-case) | yes | Used as directory name `sprint-<n>-<feature>/` |
+| `bundling` | `split` \| `bundled` | yes | `split` is default |
+| `bundling_reason` | string | required when bundling=bundled | Cites coupling axis |
+| `bundled_with` | int[] | required when bundling=bundled | Peer sprints in the same bundle; must be reciprocal |
+| `dependencies` | int[] | yes (may be `[]`) | Sprints that must finish first |
+| `risk` | `low` \| `medium` \| `high` | yes | Seeds Evaluator threshold rigor |
+| `generator_backend` | `claude` \| `codex_cli` \| `codex_cmux` \| `null` | optional | Confirmed via AskUserQuestion in interactive mode (or auto-confirmed in non-interactive). `null` defers to `_config.yml.generator_backend` at runtime. See `## Backend Recommendation` |
+| `generator_backend_reason` | string | required when `generator_backend` is non-null | Records why this backend was chosen (rubric primary / epic default / manual override). Free-form, helps audit and `harness-rules-update` |
+
+**Reciprocity check**: if sprint 2 has `bundled_with: [3]`, sprint 3 must
+have `bundled_with: [2]`. Planner validates before writing.
+
+## Sprint Ordering
+
+After bundling, Planner orders sprints:
+
+1. **Topological**: honor `dependencies`. A sprint only runs after all its
+   dependencies have `status: done`.
+2. **Risk-first among peers**: if two sprints are dependency-peers,
+   schedule the `high`-risk one first. Rationale — fail fast when the
+   uncertainty is still cheap.
+3. **Bundle proximity**: peers in the same bundle run consecutively. The
+   PR at the end of the last peer captures all bundle work in one commit
+   range.
+
+## Approval Gate
+
+`harness-plan` surfaces the Sprint Summary table and bundle groups via
+`AskUserQuestion`. This gate is **always interactive** — the `harness-loop`
+`mode` (continuous / autonomous-ralph / scheduled) is decided later and
+cannot be used to short-circuit roadmap approval.
+
+Options:
+
+- **Approve as-is**: proceed to contract/Issue generation
+- **Request changes**: user types changes; Planner regenerates; loop
+- **Cancel**: write partial state to progress.md, exit
+
+The sole bypass is the explicit `--auto-approve-roadmap` flag on
+`/harness-plan`. When passed, the skill skips the prompt and appends an
+audit line to `progress.md`. The user takes responsibility for
+pre-reviewing the generated `roadmap.md` before invocation. If the
+roadmap needs post-hoc correction, the user must edit `roadmap.md`
+manually and re-run `/harness-plan --replan` before the affected sprint
+enters negotiation in `harness-loop`.
+
+## Handoff to Contract Generation
+
+Once approved, `harness-plan` iterates the sprint list and, for each entry:
+
+1. Copies `.harness/templates/sprint-contract.md` to
+   `.harness/<epic>/sprints/sprint-<n>-<feature>/contract.md`
+2. Pre-fills the YAML frontmatter (`sprint`, `feature`, `bundling`,
+   `max_iterations`, `max_negotiation_rounds`) from `_config.yml` and the
+   roadmap entry
+3. **Copies `generator_backend` and `generator_backend_reason`** from the
+   roadmap sprint entry into the contract frontmatter as-is. If the
+   roadmap value is `null` (legacy bypass or unset), the contract field
+   is also `null` and `harness-loop` falls back to `_config.yml.generator_backend`
+   at runtime
+4. Leaves `acceptance_scenarios` and `rubric` empty stubs — those are
+   filled during sprint negotiation in `harness-loop`, not now
+5. Sets `status: negotiating`
+
+The contract's rubric is populated **later** — the Planner does not pre-fill
+axes here, because threshold tuning depends on the sprint's risk level and
+the rubric preset from `_config.yml.rubric_preset`. See
+[rubric-presets.md](../../harness-init/references/rubric-presets.md).
+
+## Recovery
+
+If `harness-plan` is interrupted after product-spec but before roadmap
+approval:
+
+- `.harness/<epic>/roadmap.md` exists as a draft (or not at all)
+- `_state.json.phase = "roadmap-draft"` or `"product-spec-draft"`
+- On resume, Planner re-reads product-spec.md, diffs against the draft
+  roadmap if present, and asks the user whether to continue or regenerate

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# stop-guard.sh — Stop hook
+#
+# Decides whether the agent should stop or continue the loop. Enforces
+# Principal Skinner's 5 termination conditions (loop done, human needed,
+# iteration cap, wall-time cap, cost cap, rubric stagnation) plus the
+# stop_hook_active anti-recursion flag.
+#
+# Input: Claude Code Stop hook JSON on stdin. Example fields:
+#   .stop_hook_active (bool) — true means this hook fired from its own block
+#
+# Output: JSON to stdout.
+#   {"decision": "block", "reason": "..."}  → continue the loop
+#   {}  → allow stop (default)
+
+set -euo pipefail
+
+STATE_FILE=".harness/_state.json"
+CONFIG_FILE=".harness/_config.yml"
+
+payload="$(cat)"
+stop_hook_active="$(printf '%s' "$payload" | jq -r '.stop_hook_active // false')"
+
+# Anti-recursion: if we already blocked once in this chain, allow stop.
+if [ "$stop_hook_active" = "true" ]; then
+  printf '{}\n'
+  exit 0
+fi
+
+# No state → nothing to guard; allow stop.
+[ -f "$STATE_FILE" ] || { printf '{}\n'; exit 0; }
+
+# No active epic → harness-loop has not started yet; allow stop.
+# (harness-init leaves current_epic=null; /harness-plan sets it on first run.)
+current_epic="$(jq -r '.current_epic // ""' "$STATE_FILE")"
+[ -z "$current_epic" ] || [ "$current_epic" = "null" ] && { printf '{}\n'; exit 0; }
+
+# No active sprint → pre-loop; allow stop regardless of phase label.
+# current_sprint=0 means no sprint has entered autonomous execution yet
+# (harness-plan hasn't finished, or harness-loop hasn't picked up sprint 1).
+# Any phase value here is structural metadata, not an active loop state.
+current_sprint="$(jq -r '.current_sprint // 0' "$STATE_FILE")"
+[ "$current_sprint" = "0" ] && { printf '{}\n'; exit 0; }
+
+# Non-loop phases → allow stop. harness-plan phases and the pre-loop handoff
+# state are interactive checkpoints; the autonomous sprint loop has not
+# started yet so iteration / wall / cost caps do not apply. "done" is the
+# terminal post-loop state. foundation-sprint phases (foundation-setup /
+# foundation-attest) are human-attestation driven, not rubric-scored.
+phase="$(jq -r '.phase // ""' "$STATE_FILE")"
+case "$phase" in
+  product-spec-draft|roadmap-draft|roadmap-approved|issues-pending|ready-for-loop|done|foundation-setup|foundation-attest)
+    printf '{}\n'; exit 0 ;;
+esac
+
+# Keys are the canonical ones from references/resilience-schema.md.
+completed="$(jq -r '.completed // false' "$STATE_FILE")"
+pending_human="$(jq -r '.pending_human // false' "$STATE_FILE")"
+pending_worker_exit="$(jq -r '.pending_worker_exit // false' "$STATE_FILE")"
+iteration="$(jq -r '.iteration // 0' "$STATE_FILE")"
+cumulative_cost_usd="$(jq -r '.cumulative_cost_usd // 0' "$STATE_FILE")"
+start_time="$(jq -r '.start_time // ""' "$STATE_FILE")"
+stagnation_n="$(jq -r '.rubric_stagnation_count // 0' "$STATE_FILE")"
+
+# pending_worker_exit — Orchestrator's micro-signal that the current worker
+# turn (negotiation round / iteration checkpoint / contract freeze /
+# foundation Attest / sprint transition) has finished its durable write
+# and should be allowed to exit naturally, even when Principal Skinner
+# caps below have not fired yet. Without this signal, phases like
+# `negotiation` (which never increments `iteration`) keep the loop
+# blocked indefinitely. Reset the flag atomically before allowing stop
+# so it cannot carry over to the next worker invocation.
+if [ "$pending_worker_exit" = "true" ]; then
+  tmp="$(mktemp)"
+  jq '.pending_worker_exit = false' "$STATE_FILE" > "$tmp" 2>/dev/null && mv "$tmp" "$STATE_FILE" || rm -f "$tmp"
+  printf '{}\n'
+  exit 0
+fi
+
+# Caps: prefer _state.json (design §9.2 stores the bound next to the counter),
+# fall back to _config.yml for initial sprints.
+yget() { { grep -E "^$1:" "$CONFIG_FILE" 2>/dev/null | head -1 | awk -F': *' '{print $2}' | tr -d '"'; } || true; }
+jget() { jq -r "$1 // empty" "$STATE_FILE" 2>/dev/null || true; }
+max_iterations="$(jget .max_iterations)";       max_iterations="${max_iterations:-$(yget max_iterations)}";         max_iterations="${max_iterations:-8}"
+max_wall_time_sec="$(jget .max_wall_time_sec)"; max_wall_time_sec="${max_wall_time_sec:-$(yget max_wall_time_sec)}"; max_wall_time_sec="${max_wall_time_sec:-28800}"
+max_cost_usd="$(jget .max_cost_usd)";           max_cost_usd="${max_cost_usd:-$(yget max_cost_usd)}";               max_cost_usd="${max_cost_usd:-20}"
+max_stagnation_n="$(yget rubric_stagnation_n)"; max_stagnation_n="${max_stagnation_n:-3}"
+
+# Derive elapsed wall-time from start_time (ISO-8601 UTC). 0 if unset.
+elapsed_sec=0
+if [ -n "$start_time" ]; then
+  now_epoch="$(date -u +%s)"
+  start_epoch="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$start_time" +%s 2>/dev/null \
+                || date -u -d "$start_time" +%s 2>/dev/null \
+                || printf '0')"
+  if [ "$start_epoch" != "0" ]; then
+    elapsed_sec=$(( now_epoch - start_epoch ))
+    [ "$elapsed_sec" -lt 0 ] && elapsed_sec=0
+  fi
+fi
+
+block() {
+  jq -n --arg r "$1" '{decision:"block", reason:$r}'
+  exit 0
+}
+
+# Principal Skinner: any of these → ALLOW stop (reached a limit).
+[ "$completed" = "true" ]                              && { printf '{}\n'; exit 0; }
+[ "$pending_human" = "true" ]                          && { printf '{}\n'; exit 0; }
+awk -v a="$iteration"           -v b="$max_iterations"    'BEGIN{exit !(a+0>=b+0)}' && { printf '{}\n'; exit 0; }
+awk -v a="$elapsed_sec"         -v b="$max_wall_time_sec" 'BEGIN{exit !(a+0>=b+0)}' && { printf '{}\n'; exit 0; }
+awk -v a="$cumulative_cost_usd" -v b="$max_cost_usd"      'BEGIN{exit !(a+0>=b+0)}' && { printf '{}\n'; exit 0; }
+awk -v a="$stagnation_n"        -v b="$max_stagnation_n"  'BEGIN{exit !(a+0>=b+0)}' && { printf '{}\n'; exit 0; }
+
+# Otherwise, the loop is not done — block stop and re-inject a continue hint.
+block "harness loop incomplete: iter=${iteration}/${max_iterations}, wall=${elapsed_sec}s/${max_wall_time_sec}s, cost=\$${cumulative_cost_usd}/\$${max_cost_usd}, stagnation=${stagnation_n}/${max_stagnation_n}"

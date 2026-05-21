@@ -1,0 +1,125 @@
+# Tier-A destructive-operation patterns (POSIX ERE, one per line).
+# Matched against .tool_input.command by .harness/scripts/tier-a-guard.sh.
+# On hit (strict mode) the command is denied and _state.json.pending_human=true.
+# Blank lines and # comments are ignored.
+#
+# すべての destructive pattern は「行頭 or shell separator (`;`, `&&`, `||`) の直後」に
+# anchor する。commit message body / 日本語句 / 関数名・識別子の一部として偶然 substring
+# match するのを避けるため。さらに tier-a-guard.sh 側で heredoc body を除外してから照合し、
+# generated script や説明文に含まれる destructive-looking text の誤検知を防ぐ。
+#
+# Anchor pattern (各 destructive op に 2 行ずつ):
+#   1. 行頭 anchor : `^[[:space:]]*<cmd>...`   — shell prompt 直接入力の検知
+#   2. shell separator 後 : `(;|&&|\|\|)[[:space:]]*<cmd>...` — 複合コマンドの 2 番目以降も検知
+# 真の destructive op (行頭 or shell separator 後) は検出継続、benign substring は除外。
+
+# --- Privilege escalation ---
+^[[:space:]]*sudo([[:space:]]|$)
+^[[:space:]]*doas([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*sudo([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*doas([[:space:]]|$)
+
+# --- Filesystem destruction ---
+# flag は rm の実在する short option 文字 [rRfvVI] に限定 (旧版は `[a-zA-Z]*[rRf]+[a-zA-Z]*` で
+# `-file` / `-read` 等 benign 文字列も match していた)。path は OS/system 破壊に直結する
+# 限定列挙 (`/etc`, `/usr`, `/var`, `/bin`, `/sbin`, `/System`, `/opt`, `/Library`,
+# `/Applications`) と home root 単体 (`~`, `~/`, `$HOME`, `$HOME/`) のみを対象とする
+# whitelist 方式。project-internal な absolute path (例: `/Users/<user>/.../cleanup.mjs`)
+# や `/tmp/...` 配下の作業 file は match せず、Evaluator の cleanup script 等の false
+# positive を回避する。OS/system 破壊 (`rm -rf /etc`, `rm -rf ~`) は引き続き block。
+^[[:space:]]*rm[[:space:]]+-[rRfvVI]+[[:space:]]+(/(etc|usr|var|bin|sbin|System|opt|Library|Applications)|~/?$|\$HOME/?$)
+(;|&&|\|\|)[[:space:]]*rm[[:space:]]+-[rRfvVI]+[[:space:]]+(/(etc|usr|var|bin|sbin|System|opt|Library|Applications)|~/?$|\$HOME/?$)
+^[[:space:]]*find[[:space:]].*-delete
+(;|&&|\|\|)[[:space:]]*find[[:space:]].*-delete
+^[[:space:]]*mkfs(\.|[[:space:]])
+(;|&&|\|\|)[[:space:]]*mkfs(\.|[[:space:]])
+^[[:space:]]*dd[[:space:]]+.*of=/dev/
+(;|&&|\|\|)[[:space:]]*dd[[:space:]]+.*of=/dev/
+
+# --- Git destructive ---
+^[[:space:]]*git[[:space:]]+push[[:space:]]+.*--force([[:space:]]|$|-)
+(;|&&|\|\|)[[:space:]]*git[[:space:]]+push[[:space:]]+.*--force([[:space:]]|$|-)
+^[[:space:]]*git[[:space:]]+push[[:space:]]+.*-f([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*git[[:space:]]+push[[:space:]]+.*-f([[:space:]]|$)
+^[[:space:]]*git[[:space:]]+reset[[:space:]]+--hard
+(;|&&|\|\|)[[:space:]]*git[[:space:]]+reset[[:space:]]+--hard
+^[[:space:]]*git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f
+(;|&&|\|\|)[[:space:]]*git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f
+^[[:space:]]*git[[:space:]]+branch[[:space:]]+-D
+(;|&&|\|\|)[[:space:]]*git[[:space:]]+branch[[:space:]]+-D
+^[[:space:]]*git[[:space:]]+filter-(branch|repo)
+(;|&&|\|\|)[[:space:]]*git[[:space:]]+filter-(branch|repo)
+^[[:space:]]*git[[:space:]]+update-ref[[:space:]]+-d
+(;|&&|\|\|)[[:space:]]*git[[:space:]]+update-ref[[:space:]]+-d
+
+# --- Database destructive ---
+# 注意: WHERE 句の有無を regex で厳密判定するのは困難 (shell command 文字列に multi-line SQL や quoted
+# subcommand が混ざると false positive が多発する)。DROP / TRUNCATE は destructive 目的が明確なので
+# anchored で検知継続、DELETE は「行頭 (or shell separator 後) の DELETE FROM <identifier>; (WHERE 句なし)」
+# のみに絞る (典型的な destructive case)。複雑な DELETE (psql -c "DELETE FROM ... WHERE ...") は対象外。
+^[[:space:]]*(DROP|drop)[[:space:]]+(TABLE|DATABASE|SCHEMA|table|database|schema)
+(;|&&|\|\|)[[:space:]]*(DROP|drop)[[:space:]]+(TABLE|DATABASE|SCHEMA|table|database|schema)
+^[[:space:]]*(TRUNCATE|truncate)([[:space:]]+TABLE)?[[:space:]]
+(;|&&|\|\|)[[:space:]]*(TRUNCATE|truncate)([[:space:]]+TABLE)?[[:space:]]
+^[[:space:]]*(DELETE|delete)[[:space:]]+FROM[[:space:]]+[A-Za-z_"`]+[[:space:]]*;?[[:space:]]*$
+(;|&&|\|\|)[[:space:]]*(DELETE|delete)[[:space:]]+FROM[[:space:]]+[A-Za-z_"`]+[[:space:]]*;?[[:space:]]*$
+
+# --- Publish / release ---
+^[[:space:]]*npm[[:space:]]+publish
+(;|&&|\|\|)[[:space:]]*npm[[:space:]]+publish
+^[[:space:]]*yarn[[:space:]]+publish
+(;|&&|\|\|)[[:space:]]*yarn[[:space:]]+publish
+^[[:space:]]*pnpm[[:space:]]+publish
+(;|&&|\|\|)[[:space:]]*pnpm[[:space:]]+publish
+^[[:space:]]*cargo[[:space:]]+publish
+(;|&&|\|\|)[[:space:]]*cargo[[:space:]]+publish
+^[[:space:]]*gem[[:space:]]+push
+(;|&&|\|\|)[[:space:]]*gem[[:space:]]+push
+^[[:space:]]*twine[[:space:]]+upload
+(;|&&|\|\|)[[:space:]]*twine[[:space:]]+upload
+^[[:space:]]*gh[[:space:]]+release[[:space:]]+create
+(;|&&|\|\|)[[:space:]]*gh[[:space:]]+release[[:space:]]+create
+^[[:space:]]*gh[[:space:]]+release[[:space:]]+delete
+(;|&&|\|\|)[[:space:]]*gh[[:space:]]+release[[:space:]]+delete
+
+# --- Cloud destructive ---
+^[[:space:]]*aws[[:space:]]+s3[[:space:]]+rb
+(;|&&|\|\|)[[:space:]]*aws[[:space:]]+s3[[:space:]]+rb
+^[[:space:]]*aws[[:space:]]+s3[[:space:]]+rm[[:space:]]+.*--recursive
+(;|&&|\|\|)[[:space:]]*aws[[:space:]]+s3[[:space:]]+rm[[:space:]]+.*--recursive
+^[[:space:]]*aws[[:space:]]+.*[[:space:]]delete-(cluster|instance|bucket|table|function)
+(;|&&|\|\|)[[:space:]]*aws[[:space:]]+.*[[:space:]]delete-(cluster|instance|bucket|table|function)
+^[[:space:]]*gcloud[[:space:]]+.*[[:space:]]delete([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*gcloud[[:space:]]+.*[[:space:]]delete([[:space:]]|$)
+^[[:space:]]*gsutil[[:space:]]+rm[[:space:]]+-r
+(;|&&|\|\|)[[:space:]]*gsutil[[:space:]]+rm[[:space:]]+-r
+^[[:space:]]*az[[:space:]]+.*[[:space:]]delete([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*az[[:space:]]+.*[[:space:]]delete([[:space:]]|$)
+^[[:space:]]*kubectl[[:space:]]+delete[[:space:]]+(ns|namespace|pv|pvc|node)
+(;|&&|\|\|)[[:space:]]*kubectl[[:space:]]+delete[[:space:]]+(ns|namespace|pv|pvc|node)
+^[[:space:]]*terraform[[:space:]]+destroy
+(;|&&|\|\|)[[:space:]]*terraform[[:space:]]+destroy
+^[[:space:]]*docker[[:space:]]+system[[:space:]]+prune[[:space:]]+.*-a
+(;|&&|\|\|)[[:space:]]*docker[[:space:]]+system[[:space:]]+prune[[:space:]]+.*-a
+^[[:space:]]*helm[[:space:]]+uninstall
+(;|&&|\|\|)[[:space:]]*helm[[:space:]]+uninstall
+
+# --- Package manager uninstall/global ---
+^[[:space:]]*npm[[:space:]]+uninstall[[:space:]]+.*--global
+(;|&&|\|\|)[[:space:]]*npm[[:space:]]+uninstall[[:space:]]+.*--global
+^[[:space:]]*pip[[:space:]]+uninstall[[:space:]]+.*-y
+(;|&&|\|\|)[[:space:]]*pip[[:space:]]+uninstall[[:space:]]+.*-y
+^[[:space:]]*brew[[:space:]]+uninstall[[:space:]]+--force
+(;|&&|\|\|)[[:space:]]*brew[[:space:]]+uninstall[[:space:]]+--force
+
+# --- Process / system ---
+# 旧版 `(^|[[:space:]])halt([[:space:]]|$)` は commit message body / heredoc body 内の
+# 日本語句「halt する」や英文「will halt the process」にも match していた。行頭 anchor で解消。
+^[[:space:]]*shutdown([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*shutdown([[:space:]]|$)
+^[[:space:]]*reboot([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*reboot([[:space:]]|$)
+^[[:space:]]*halt([[:space:]]|$)
+(;|&&|\|\|)[[:space:]]*halt([[:space:]]|$)
+^[[:space:]]*kill[[:space:]]+-9[[:space:]]+-?1\b
+(;|&&|\|\|)[[:space:]]*kill[[:space:]]+-9[[:space:]]+-?1\b
