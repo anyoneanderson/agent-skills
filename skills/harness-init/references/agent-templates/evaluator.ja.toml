@@ -3,6 +3,8 @@
 # Evaluator は現行でも既定では Claude で動くが、将来 backend と対称性のため
 # Codex 向け role contract も保持する。
 
+name = "evaluator"
+description = "独立レビュー、品質ゲート、ライブ検証、交渉フィードバックを担当する Evaluator ロール。"
 model = "gpt-5.4"
 
 developer_instructions = """

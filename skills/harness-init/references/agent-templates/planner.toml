@@ -4,6 +4,8 @@
 # provided for parity / future use if Planner is ever routed through
 # Codex. Orchestrator prompt-file activates the role contract.
 
+name = "planner"
+description = "Harness Planner role for interviews, roadmap planning, contract drafting, and negotiation rulings."
 model = "gpt-5.4"
 
 developer_instructions = """

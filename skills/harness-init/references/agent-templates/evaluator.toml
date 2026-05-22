@@ -3,6 +3,8 @@
 # Currently Evaluator still runs as Claude by default, but this TOML keeps the
 # role contract mirrored for parity and future backends.
 
+name = "evaluator"
+description = "Harness Evaluator role for independent review, quality gates, live verification, and negotiation feedback."
 model = "gpt-5.4"
 
 developer_instructions = """

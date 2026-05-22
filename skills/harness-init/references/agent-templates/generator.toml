@@ -9,6 +9,8 @@
 # call, reading _config.yml.codex_generator_model. Leave the declaration
 # as a default for role overlays and future backends.
 
+name = "generator"
+description = "Harness Generator role for implementing sprint contracts and writing structured iteration reports."
 model = "gpt-5.4"
 
 developer_instructions = """
