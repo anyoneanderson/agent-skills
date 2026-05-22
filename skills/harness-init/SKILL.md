@@ -246,7 +246,7 @@ Pick the language variant matching detected input: `<role>.md` (EN) or
 If `generator_backend ∈ {codex_cli, codex_cmux}` OR the project
 already has a `.codex/` directory (indicating Codex CLI is configured),
 also render Codex TOML role configs (plain `ConfigToml` layers with
-top-level `model` + `developer_instructions`):
+top-level `name` + `description` + `model` + `developer_instructions`):
 
 - `.codex/agents/planner.toml` — from `references/agent-templates/planner{.ja}.toml`
 - `.codex/agents/evaluator.toml` — from `references/agent-templates/evaluator{.ja}.toml`

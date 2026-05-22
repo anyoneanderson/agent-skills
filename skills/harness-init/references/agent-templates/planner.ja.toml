@@ -4,6 +4,8 @@
 # 将来 Planner が Codex に委譲される場合のために用意。Orchestrator の
 # prompt-file がロール契約を起動する。
 
+name = "planner"
+description = "ハーネスのヒアリング、ロードマップ設計、契約ドラフト、交渉裁定を担当する Planner ロール。"
 model = "gpt-5.4"
 
 developer_instructions = """
