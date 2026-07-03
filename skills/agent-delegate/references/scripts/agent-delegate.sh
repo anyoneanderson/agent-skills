@@ -14,7 +14,7 @@
 #
 # Notes for maintainers:
 #   - Do NOT use a variable named `status`; it collided with a read-only shell
-#     variable in prior work. This file uses `rc` / `report_status` instead.
+#     variable in prior work. This file uses `RUN_RC` / `REPORT_STATUS` instead.
 #   - report.json is always written to a .tmp then mv'd so callers never read a
 #     half-written file. The report exists on success AND failure, always.
 
@@ -71,8 +71,8 @@ CLAUDE_DISALLOW=""
 # Command assembled by build_cli_command().
 CLI_CMD=()
 
-usage() {
-  cat <<'EOF' >&2
+usage_text() {
+  cat <<'EOF'
 Usage: agent-delegate.sh --mode <delegate|review> --prompt-file <path> --out-dir <path>
        [--label <slug>] [--target <codex|claude>] [--resume <thread_id>]
        [--model <name>] [--effort <level>]
@@ -82,8 +82,12 @@ Usage: agent-delegate.sh --mode <delegate|review> --prompt-file <path> --out-dir
 Exit codes: 0 = executed (read status from report.json) | 2 = precondition error
 The absolute path of report.json is printed as the last line of stdout.
 EOF
-  exit 2
 }
+
+# Error usage: help text to stderr, exit 2 (a usage error is not success).
+usage() { usage_text >&2; exit 2; }
+# Explicit --help: help text to stdout, exit 0 (a request, not an error).
+show_help() { usage_text; exit 0; }
 
 err() { printf 'agent-delegate: %s\n' "$*" >&2; }
 
@@ -111,9 +115,16 @@ find_trust_level() {
 
 snapshot_changed_files() {
   # Tracked-modified + untracked (excluding gitignored), sorted for comm.
+  # `-C <root>` + `--full-name` pins output to repo-root-relative paths so it
+  # matches the root-relative out-dir prefix used for exclusion AND captures
+  # changes outside the current working directory (git ls-files without these
+  # would be cwd-relative and limited to the cwd subtree).
   # Trailing `|| true` keeps a git failure (e.g. run outside a repo) from
   # aborting the script under set -e + pipefail; the report must still appear.
-  git ls-files -m -o --exclude-standard 2>/dev/null | sort -u || true
+  local root
+  if root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    git -C "$root" ls-files --full-name -m -o --exclude-standard 2>/dev/null | sort -u || true
+  fi
 }
 
 # First non-empty line of the peer's final message, capped at 200 chars.
@@ -206,8 +217,12 @@ build_cli_command() {
   CLI_CMD=()
   if [ "$TARGET" = "codex" ]; then
     if [ -n "$RESUME" ]; then
+      # `codex exec resume` only has --sandbox verified as unsupported; the -c
+      # override is unverified there, so drop effort on resume rather than risk
+      # an "unexpected argument" failure. Sandbox/model are already fixed at
+      # session creation and cannot change on resume anyway.
       CLI_CMD=( codex exec resume "$RESUME" --json --output-last-message "$LAST_MSG_FILE" )
-      if [ -n "$EFFORT" ]; then CLI_CMD+=( -c "model_reasoning_effort=\"$EFFORT\"" ); fi
+      if [ -n "$EFFORT" ]; then err "warning: --effort is ignored on codex resume (session settings are fixed at creation)"; fi
     else
       CLI_CMD=( codex exec --sandbox "$CODEX_SANDBOX_VALUE" )
       if [ -n "$MODEL" ]; then CLI_CMD+=( --model "$MODEL" ); fi
@@ -363,8 +378,8 @@ run_cli() {
   build_cli_command
 
   local pre post
-  pre="$(mktemp)"; post="$(mktemp)"
-  TOUCHED_LIST_FILE="$(mktemp)"
+  pre="$(mktemp -t agent-delegate.XXXXXX)"; post="$(mktemp -t agent-delegate.XXXXXX)"
+  TOUCHED_LIST_FILE="$(mktemp -t agent-delegate.XXXXXX)"
   # shellcheck disable=SC2064
   trap "rm -f '$pre' '$post'" RETURN
 
@@ -421,7 +436,7 @@ run_review() {
   fi
   [ -f "$template" ] || { err "review template not found: $template"; exit 2; }
 
-  local combined; combined="$(mktemp)"
+  local combined; combined="$(mktemp -t agent-delegate.XXXXXX)"
   {
     cat "$template"
     printf '\n\n## Review Context\n- Label: %s\n- Direction: %s\n\n---\n\n' "$LABEL" "$DIRECTION"
@@ -454,8 +469,15 @@ run_review() {
   grep -qE 'Gate:[[:space:]]*(PASS|FAIL)'         "$LAST_MSG_FILE" || missing+=("Gate: PASS|FAIL")
 
   if [ "${#missing[@]}" -gt 0 ]; then
+    # Join with ", " manually: parameter expansion with IFS uses only the first
+    # IFS char as the separator, so "IFS=', '" would yield comma-only joins.
+    local joined=""
+    local item
+    for item in "${missing[@]}"; do
+      if [ -z "$joined" ]; then joined="$item"; else joined="$joined, $item"; fi
+    done
     REPORT_STATUS="blocked"
-    BLOCKER="review output malformed: missing $(IFS=', '; printf '%s' "${missing[*]}")"
+    BLOCKER="review output malformed: missing $joined"
     BLOCKER_CATEGORY="malformed_output"
     write_report
     return
@@ -486,23 +508,47 @@ run_job() {
   esac
 }
 
-# --- detach: synthesize a blocked report if the child died silently --------
+# --- synthesize a blocked report when a run dies without one ---------------
 #
-# The monitor wrapper (below) spawns the worker and waits. If the worker exits
-# without producing report.json (e.g. kill -9), the wrapper writes the blocked
-# report itself so callers never re-implement the schema.
+# Two callers: the detach monitor (if the worker is killed, e.g. kill -9) and
+# the synchronous/worker EXIT safety net (if run_job dies via set -e). Either
+# way the schema is produced here so callers never re-implement it and
+# "report.json exists == the run finished" always holds.
 synthesize_blocked_report() {
   REPORT_STATUS="blocked"
   BLOCKER_CATEGORY="env_error"
   if [ -s "$STDERR_FILE" ]; then
-    BLOCKER="$(printf 'worker exited without a report; stderr tail:\n%s' "$(tail -20 "$STDERR_FILE")")"
+    BLOCKER="$(printf 'run exited without a report; stderr tail:\n%s' "$(tail -20 "$STDERR_FILE")")"
   else
-    BLOCKER="worker process exited without producing report.json"
+    BLOCKER="run exited without producing report.json"
   fi
-  SUMMARY="delegated worker terminated before completion"
+  SUMMARY="run terminated before completion"
   THREAD_ID="${RESUME:-unknown}"
-  TOUCHED_LIST_FILE="$(mktemp)"; : > "$TOUCHED_LIST_FILE"
+  TOUCHED_LIST_FILE="$(mktemp -t agent-delegate.XXXXXX)"; : > "$TOUCHED_LIST_FILE"
   write_report
+}
+
+# EXIT trap for the synchronous and worker paths: if we are leaving without a
+# report (an unexpected failure inside run_job under set -e), synthesize a
+# blocked one. A clean run has already written REPORT_FILE, so this is a no-op.
+SAFETY_NET_ARMED=0
+run_job_safety_net() {
+  local ec=$?
+  [ "$SAFETY_NET_ARMED" = "1" ] || return 0
+  if [ ! -f "$REPORT_FILE" ]; then
+    err "run terminated (exit $ec) without a report; synthesizing blocked report"
+    synthesize_blocked_report || true
+  fi
+}
+
+# Wrap run_job with the EXIT safety net so a crash still yields a report.json.
+run_job_guarded() {
+  SAFETY_NET_ARMED=1
+  trap run_job_safety_net EXIT
+  run_job
+  # Clean completion wrote the report; disarm so later exits are untouched.
+  SAFETY_NET_ARMED=0
+  trap - EXIT
 }
 
 # --- re-invocation entry points (env-carried state) ------------------------
@@ -527,7 +573,7 @@ import_resolved_env() {
 
 run_worker() {
   import_resolved_env
-  run_job
+  run_job_guarded
 }
 
 run_monitor() {
@@ -562,7 +608,7 @@ while [ $# -gt 0 ]; do
     --force) FORCE=1; shift ;;
     --_worker) INTERNAL="worker"; shift ;;
     --_monitor) INTERNAL="monitor"; shift ;;
-    -h|--help) usage ;;
+    -h|--help) show_help ;;
     *) err "unknown argument: $1"; usage ;;
   esac
 done
@@ -697,5 +743,5 @@ fi
 
 # --- synchronous run -------------------------------------------------------
 
-run_job
+run_job_guarded
 printf '%s\n' "$REPORT_FILE"
