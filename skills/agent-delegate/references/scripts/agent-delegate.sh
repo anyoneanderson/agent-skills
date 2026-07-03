@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # agent-delegate.sh — headless cross-invocation of Claude Code and Codex CLI.
 #
-# This script is the public contract for the agent-delegate skill. Upper skills
-# (e.g. spec-orchestrate) call it directly, bypassing SKILL.md. It:
+# This script is the public contract for the agent-delegate skill. Other skills
+# call it directly, bypassing SKILL.md. It:
 #   1. resolves which peer CLI to drive (self-detection, --target override)
 #   2. maps a sandbox stage onto the peer CLI's permission flags
 #   3. runs the peer via codex exec / claude -p (prompt over stdin)

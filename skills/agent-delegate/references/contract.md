@@ -1,7 +1,7 @@
 # agent-delegate — Script Contract
 
 This document is the public interface for `references/scripts/agent-delegate.sh`.
-Upper skills (e.g. spec-orchestrate) depend on this contract and call the script
+Other skills and automation depend on this contract and call the script
 directly, without going through `SKILL.md`. The script's current implementation
 is authoritative; this document tracks it. Any change to the arguments or the
 `report.json` schema is a contract change and must be reflected here.
@@ -144,8 +144,8 @@ re-classify from the `blocker` text.
 ## Review mode
 
 - Always `read-only`. The reviewer cannot write files, so it emits the full
-  spec-review compatible review file as its **final message**, and the script
-  persists that message to `--review-output`.
+  structured review file (format verified below) as its **final message**, and
+  the script persists that message to `--review-output`.
 - The prompt sent to the peer is `adversarial-review-prompt.md` (or `.ja.md`
   when `AGENT_DELEGATE_REVIEW_LANG=ja`) followed by the caller's `--prompt-file`
   (the review context: diff, spec paths, perspectives).
@@ -158,7 +158,8 @@ re-classify from the `blocker` text.
   4. a `## Summary` section with a `Gate: PASS|FAIL` line.
 - If the read-only run still modified files (after excluding our artifacts):
   `status: blocked`, `blocker_category: sandbox_violation`.
-- A passing review file is directly consumable by `spec-code --feedback`.
+- The review file format (severity sections + gate) is stable and
+  machine-parsable; downstream tooling can consume it as-is.
 
 ## Resume
 
