@@ -61,6 +61,16 @@ The script drives the *other* agent's CLI. It decides which one in this order:
 The resolved direction (`claude->codex` or `codex->claude`) is recorded in
 `report.json` under `meta.direction`.
 
+**Nested-chain caveat.** In an agent chain (e.g. Claude Code → `codex exec` →
+this script), the parent's `CLAUDECODE` / `CODEX_*` variables are inherited by
+the child shell, so env-based self-detection is unreliable. **Programmatic
+callers (other skills, pipelines) must always pass `--target` explicitly.**
+Self-detection is a convenience for single-agent interactive use only.
+
+Measured runtime markers (2026-07-03, codex-cli 0.142.5): a Codex exec shell has
+`CODEX_SANDBOX` (e.g. `seatbelt`), `CODEX_SANDBOX_NETWORK_DISABLED=1`, and
+`CODEX_THREAD_ID` injected into its environment.
+
 ## Sandbox stages
 
 Priority: `--sandbox` flag > `AGENT_DELEGATE_SANDBOX` env > default `full-access`.
@@ -128,7 +138,7 @@ re-classify from the `blocker` text.
 | `tool_unavailable` | Peer CLI missing / not installed (stderr matched) |
 | `timeout` | Peer timed out (stderr matched, or exit code 124/137) |
 | `sandbox_violation` | A `read-only` review modified files after excluding our own artifacts |
-| `env_error` | Run died without producing a report (synthesized by the safety net); includes running outside git for cases that block |
+| `env_error` | The run exited without producing a report; synthesized by the synchronous/worker safety net or the detach monitor |
 | `unclassified` | Non-zero exit with no matching pattern |
 
 ## Review mode
