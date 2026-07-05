@@ -5,9 +5,10 @@
 `--feedback` オプションはレビュー結果とテスト結果の両方を受け付ける。ファイル形式は自動検出される：
 
 ### ヘッダ判定
-- 最初のメタデータ行で `type: review` または `type: test` を宣言する
+- 最初のメタデータ行で `type: review` / `type: test` / `type: evaluate` のいずれかを宣言する
 - `type: review` は spec-review の契約に従うことを意味する
 - `type: test` は spec-test の契約に従うことを意味する
+- `type: evaluate` は spec-evaluate の契約（受け入れ試験結果）に従うことを意味する
 - ヘッダがない場合のみ、互換性維持のため見出しベースの判定にフォールバックする
 
 ### レビュー結果（spec-review から）
@@ -19,6 +20,10 @@
 - `## Test Cases` セクションにパス/フェイルの状態がある
 - `## Completion Criteria Coverage` テーブルがある
 - 失敗テストと未カバーの完了条件の修正に集中
+
+### 受け入れ試験結果（spec-evaluate から）
+- レビュー結果と同じ `## Findings` 構造（`### Critical` / `### Improvement` / `### Minor`）を使うため、処理はレビューと同一 — Critical を優先的に修正し、次に Improvement に対応
+- `## Blocked` セクションは無視する。blocked はセットアップ不足（例: アプリ起動レシピの欠落）であり実装の不具合ではないため、修正対象にしない
 
 ## コミット規約
 
