@@ -98,8 +98,8 @@ Verification / State-Update steps.
 | (start) | pipeline launched | intake | `phases/intake.md` |
 | intake | manual: dialogue complete / auto: Issue fetched | spec_generate | `phases/intake.md` |
 | spec_generate | spec set + test.md written | inspect | `phases/spec_generate.md` |
-| inspect | findings present (fix) | spec_generate | `phases/inspect.md` |
-| inspect | PASS (no findings) | spec_review | `phases/inspect.md` |
+| inspect | CRITICAL / WARNING (fix) | spec_generate | `phases/inspect.md` |
+| inspect | INFO-only / PASS | spec_review | `phases/inspect.md` |
 | spec_review | Critical / Improvement (fix) | spec_generate | `phases/spec_review.md` |
 | spec_review | Gate PASS | approval | `phases/spec_review.md` |
 | spec_review | stall signal | arbitration | `phases/spec_review.md` |
@@ -131,7 +131,7 @@ in `references/stall-detection.md`.
 | intake | (orchestrator) | — | `phases/intake.md` |
 | spec_generate | spec-generator (planner) | `spec_author` | `phases/spec_generate.md` |
 | inspect | spec-inspect | (machine check) | `phases/inspect.md` |
-| spec_review | agent-delegate `--mode review` | `spec_reviewer` | `phases/spec_review.md` |
+| spec_review | adversarial review (backend per `spec_reviewer`) | `spec_reviewer` | `phases/spec_review.md` |
 | approval | human (AskUserQuestion) | — | `phases/approval.md` |
 | implement | spec-implement | `impl_ui` / `impl_backend` / `impl_test` | `phases/implement.md` |
 | evaluate | spec-evaluate | `e2e_runner` | `phases/evaluate.md` |

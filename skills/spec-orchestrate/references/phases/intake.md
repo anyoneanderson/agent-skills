@@ -13,7 +13,9 @@ input; every later phase reads state, not the human.
 ## Action
 
 **manual:**
-1. Confirm the working directory is a git repo and `gh auth` is valid.
+1. Confirm the working directory is a git repo. `gh auth` is **not** required
+   here — manual mode does not fetch an Issue; `gh` is first needed at the pr
+   phase.
 2. Hand the natural-language request to spec-generator's interactive mode. The
    human dialogue happens inside the planner run, not here — the orchestrator
    does not itself interview the user beyond launching the planner.
@@ -21,7 +23,8 @@ input; every later phase reads state, not the human.
    `.specs/{feature}/` directory name.
 
 **auto:**
-1. Confirm git repo and `gh auth`.
+1. Confirm git repo and `gh auth` (auto fetches the Issue, so `gh` must be
+   authenticated now).
 2. Fetch the Issue:
    ```bash
    gh issue view <N> --json title,body,labels

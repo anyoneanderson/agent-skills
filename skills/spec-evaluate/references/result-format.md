@@ -94,6 +94,15 @@ After the evaluator returns, spec-evaluate re-checks the file it wrote:
 This is the enforcement behind NFR-003: a self-reported pass with no backing
 evidence cannot survive into the accepted result.
 
+**Empty-output cases need a non-empty wrapper log.** When a case's expected
+result is empty output (e.g. a command that should print nothing, or an
+empty-diff assertion), do **not** point the evidence at the raw empty file — the
+machine check treats an empty evidence file as missing and flips a legitimate
+PASS to FAIL. Instead write a non-empty wrapper log as the evidence: record the
+command run, its exit code, and an explicit line stating the output was empty as
+expected (e.g. `stdout: <empty> (0 bytes) — expected`). The wrapper is non-empty,
+so it survives verification while still faithfully capturing the empty result.
+
 ## Feeding Back to spec-code
 
 The Critical and Improvement findings are handed to `spec-code --feedback`

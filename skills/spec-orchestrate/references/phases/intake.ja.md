@@ -13,13 +13,15 @@
 ## アクション
 
 **manual:**
-1. 作業ディレクトリが git リポジトリで、`gh auth` が有効なことを確認。
+1. 作業ディレクトリが git リポジトリであることを確認。`gh auth` はここでは **不要**
+   — manual は Issue を取得しない。`gh` が最初に要るのは pr フェーズ。
 2. 自然言語の要求を spec-generator の対話モードに引き渡す。人との対話は planner の
    実行内で起こる — オーケストレーター自身は planner の起動以上に利用者へ質問しない。
 3. feature 名はその対話で確定し、`.specs/{feature}/` ディレクトリ名になる。
 
 **auto:**
-1. git リポジトリと `gh auth` を確認。
+1. git リポジトリと `gh auth` を確認（auto は Issue を取得するため `gh` の認証が
+   ここで必要）。
 2. Issue を取得:
    ```bash
    gh issue view <N> --json title,body,labels

@@ -39,9 +39,9 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
   spec_review** so the same detector applies: map each FAIL case to a `critical`
   count and each concern to an `improvement` count (blocked cases are neither —
   they are not failures), plus the finding fingerprints (per
-  `../stall-detection.md`) and the gate result. Recording raw pass/fail/blocked
-  tallies instead would leave S2 (which sums `critical + improvement`) unable to
-  evaluate this loop.
+  `../stall-detection.md`, over the Critical + Improvement findings only) and the
+  gate result. Recording raw pass/fail/blocked tallies instead would leave S2
+  (which sums `critical + improvement`) unable to evaluate this loop.
 - Evaluate the stall signals S1–S3 (`../stall-detection.md`). If a signal fires,
   set `phase` to arbitration.
 

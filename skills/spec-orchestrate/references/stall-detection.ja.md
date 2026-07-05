@@ -27,10 +27,11 @@ fingerprint = sha1( req_id + "\x1f" + severity + "\x1f" + norm_path + "\x1f"
 req_id・severity・section を含めるのは意図的: ラウンド間で文言が少し変わっても同じ
 指紋にハッシュされ、本当に再発している指摘を「毎回新規」に見せず検出できる。
 
-シェル形:
+シェル形（Linux は `sha1sum`、macOS は `shasum`。移植性のためフォールバックする）:
 ```bash
+sha1() { sha1sum 2>/dev/null || shasum; }   # macOS は sha1sum ではなく shasum
 gist_80="$(printf '%s' "$gist" | tr -s '[:space:]' ' ' | tr '[:upper:]' '[:lower:]' | cut -c1-80)"
-fp="$(printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' "$req_id" "$severity" "$norm_path" "$section" "$gist_80" | sha1sum | cut -c1-40)"
+fp="$(printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' "$req_id" "$severity" "$norm_path" "$section" "$gist_80" | sha1 | cut -c1-40)"
 ```
 
 ## 各ラウンドが記録するもの
@@ -42,6 +43,11 @@ fp="$(printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' "$req_id" "$severity" "$norm_path" "$s
 {"round": N, "critical": c, "improvement": i, "minor": m,
  "fingerprints": ["<fp>", ...], "gate": "PASS|FAIL"}
 ```
+
+`fingerprints` は **Critical と Improvement の findings のみ** を対象とする — 修正
+ループが実際に対処するもの。Minor は除外する: Minor は記録して持ち越すだけ（REQ-007）
+なので、未修正の Minor が数件ラウンドをまたいで残るだけで S1 を毎回誤発火させて
+しまう。
 
 検知器はこの配列 **だけ** を読む — finding 本文も再パースもしない。これがシグナルを
 state だけから再現可能にする。

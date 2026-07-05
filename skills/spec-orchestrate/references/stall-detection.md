@@ -29,10 +29,11 @@ Including req_id, severity, and section is deliberate: a finding whose wording
 drifts slightly between rounds still hashes to the same fingerprint, so a
 genuinely-recurring objection is detected rather than looking new each round.
 
-Shell form:
+Shell form (`sha1sum` on Linux, `shasum` on macOS — fall back so it is portable):
 ```bash
+sha1() { sha1sum 2>/dev/null || shasum; }   # macOS has shasum, not sha1sum
 gist_80="$(printf '%s' "$gist" | tr -s '[:space:]' ' ' | tr '[:upper:]' '[:lower:]' | cut -c1-80)"
-fp="$(printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' "$req_id" "$severity" "$norm_path" "$section" "$gist_80" | sha1sum | cut -c1-40)"
+fp="$(printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' "$req_id" "$severity" "$norm_path" "$section" "$gist_80" | sha1 | cut -c1-40)"
 ```
 
 ## What Each Round Records
@@ -44,6 +45,11 @@ At the end of every review/evaluate round, append one entry to the matching
 {"round": N, "critical": c, "improvement": i, "minor": m,
  "fingerprints": ["<fp>", ...], "gate": "PASS|FAIL"}
 ```
+
+`fingerprints` covers **only the Critical and Improvement findings** — the ones
+the fix loop actually acts on. Minor findings are excluded: they are recorded and
+carried forward unchanged (REQ-007), so a couple of un-fixed Minors persisting
+across rounds would otherwise trip S1 every time and fire a false stall.
 
 The detector reads **only** this array — no finding bodies, no re-parsing. That
 is what makes a signal reproducible from state alone.
