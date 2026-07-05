@@ -727,3 +727,139 @@ Review criteria:
 
 Classify findings as: Critical / Improvement / Minor
 ```
+
+## Kind-Based Task Routing
+
+This section details the `--roles` layer summarized in SKILL.md → "Phase 6b". It routes
+each task to an executor (spec-code / spec-review, or the agent-delegate peer) by the
+task's `kind` label, so an orchestrator can hand implementation to a different LLM per
+task while keeping the Phase 6 loop and its review gates intact.
+
+### When It Activates
+
+- **`--roles` absent** → legacy path. Every task uses spec-code; every review uses
+  spec-review; spec-test unchanged. agent-delegate is never invoked. This is the exact
+  behavior of specs that predate the pipeline.
+- **`--roles` present** → orchestrated path. Each task's implementer and reviewer are
+  resolved per the rules below.
+
+The loop's control flow is identical in both paths: per-phase iteration, the fix loop
+with its 3-iteration cap, gate evaluation (Critical/Improvement re-run, Minor logged),
+checkbox marking, and commit strategy. Only the *executor* of each step is resolved per
+task.
+
+### Parsing `--roles`
+
+`--roles` accepts either form:
+
+1. **Inline map**: `ui=claude,backend=codex,test=codex` — comma-separated `kind=owner`
+   pairs. Owner is `claude` or `codex`.
+2. **pipeline.yml path**: a file with a `roles:` block. Read `roles.impl_ui`,
+   `roles.impl_backend`, `roles.impl_test` and map them to kinds `ui`/`backend`/`test`.
+
+```bash
+# Inline form → associative lookup
+# roles[ui]=claude roles[backend]=codex roles[test]=codex
+
+# pipeline.yml form (yq or awk); missing keys leave that kind unmapped
+impl_ui="$(yq -r '.roles.impl_ui // empty' "$roles_path")"      # → roles[ui]
+impl_backend="$(yq -r '.roles.impl_backend // empty' "$roles_path")"
+impl_test="$(yq -r '.roles.impl_test // empty' "$roles_path")"
+```
+
+### Owner Resolution (per task)
+
+```
+kind  = value of the task's `kind:` field in its tasks.md detail block
+owner = roles[kind]              if kind is known AND present in the map
+owner = claude                   otherwise (unknown/missing kind, or kind not mapped)
+```
+
+`claude` → the task runs through **spec-code** exactly as today (all dispatch modes in
+"Agent Role Detection" still apply). `codex` → the task runs through the **agent-delegate**
+script per its contract.
+
+### Delegating Implementation to the Peer (`owner == codex`)
+
+Follow `agent-delegate/references/contract.md`. Code implementation may exceed the
+~10-minute Bash ceiling, so use `--detach` + `report.json` polling, and
+`--sandbox workspace-write` (the peer must write files). Pass `--target` explicitly.
+
+```bash
+OUT=".specs/{feature}/delegate/{task-id}"; mkdir -p "$OUT"
+PROMPT="$(mktemp)"
+cat > "$PROMPT" <<EOF
+Implement {task-id} from the spec.
+- Spec dir: .specs/{feature}/  (requirement.md, design.md, tasks.md)
+- Task detail: {paste the task's detail block, including Done criteria and Target files}
+- Coding rules: {path to coding-rules.md}
+Commit nothing; report changed files and any blocker.
+EOF
+
+report="$(agent-delegate.sh --mode delegate --target codex \
+  --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}" \
+  --sandbox workspace-write --detach | tail -1)"
+until [ -f "$report" ]; do sleep 15; done
+status="$(jq -r .status "$report")"     # done | blocked
+```
+
+- `status == done` → the peer finished. Mark the checkbox and commit (the orchestrator,
+  not the peer, owns commits — the peer is told to commit nothing).
+- `status == blocked` → read `blocker` / `blocker_category`; feed into the fix loop
+  (see below) or surface to the caller.
+
+### Peer Review (`owner == claude`, implementer is claude → reviewer is codex)
+
+Reviews are short, so run synchronously (no `--detach`). Review mode is always read-only
+per the contract.
+
+```bash
+OUT=".specs/{feature}/review/{task-id}"; mkdir -p "$OUT"
+git diff "{base_branch}...HEAD" > "$OUT/{task-id}-diff.txt"
+PROMPT="$(mktemp)"
+cat > "$PROMPT" <<EOF
+Review the changes for {task-id}.
+- Diff: $OUT/{task-id}-diff.txt
+- Spec dir: .specs/{feature}/
+- Review criteria: {path to review_rules.md}, {path to coding-rules.md}
+EOF
+
+report="$(agent-delegate.sh --mode review --target codex \
+  --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}-review" | tail -1)"
+review_file="$(jq -r .artifacts.review_file "$report")"
+gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
+```
+
+The review file carries the same severity sections (`### Critical`, `### Improvement`,
+`### Minor`) and `Gate: PASS|FAIL` line as spec-review output, so the existing gate logic
+in "Review Gate Details" consumes it with no change. When the implementer is codex, the
+reviewer is claude and this whole block is replaced by the normal spec-review call.
+
+### Fix Loop Routing
+
+The fix loop's structure (max 3 iterations, then downgrade/ask) is unchanged. Only the
+fix executor follows the task's implementer:
+
+| Implementer | Fix step | Re-review |
+|---|---|---|
+| claude | `spec-code --feedback {findings}` | reviewer re-runs (codex via agent-delegate `--resume {thread_id}`, or claude via spec-review) |
+| codex | agent-delegate `--mode delegate --resume {thread_id}` with findings appended to the prompt | reviewer re-runs (claude via spec-review) |
+
+For agent-delegate re-review across rounds, reuse the review session with
+`--resume {thread_id}` (thread_id read from the prior `report.json`) to preserve context
+and save tokens. Resume keeps the original sandbox; review sessions are read-only, which
+satisfies the contract's resume rule.
+
+### Unavailable Peer Fallback
+
+If a `codex`-owned task cannot be delegated — the script is missing, exits `2`, or the
+report shows `blocker_category: tool_unavailable`:
+
+- **Under an orchestrator**: report the blocker upward. Reassignment (to claude) is the
+  orchestrator's decision per its mode (manual asks the human; auto reassigns and records
+  it). Do not silently decide.
+- **Standalone `/spec-implement`**: warn and fall back to spec-code for that task so the
+  run still completes.
+
+Never inline agent-delegate's internal implementation; depend only on the flags and
+`report.json` schema in its contract.

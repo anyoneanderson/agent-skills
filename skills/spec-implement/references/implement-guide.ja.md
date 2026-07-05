@@ -727,3 +727,130 @@ Review criteria:
 
 Classify findings as: Critical / Improvement / Minor
 ```
+
+## kind ラベルによるタスク単位ルーティング
+
+SKILL.md の「Phase 6b」で要約した `--roles` レイヤーの詳細です。タスクの `kind` ラベルを見て、
+各タスクを実行主体（spec-code / spec-review、または agent-delegate の相手 LLM）に振り分けます。
+オーケストレーターがタスクごとに実装を別の LLM に委ねつつ、Phase 6 のループとレビューゲートは
+そのまま保てます。
+
+### 有効になる条件
+
+- **`--roles` 省略時** → 従来経路。全タスクを spec-code、全レビューを spec-review で処理し、
+  spec-test も従来どおり。agent-delegate は一切呼ばれません。パイプライン以前の仕様書と完全に同じ挙動です。
+- **`--roles` 指定時** → オーケストレーション経路。各タスクの実装担当とレビュー担当を下記の規則で解決します。
+
+ループの制御フローは両経路で同一です（フェーズ単位の反復、3回上限の修正ループ、
+ゲート判定＝ Critical/Improvement は再実行・Minor は記録のみ、チェックボックス更新、コミット方針）。
+タスクごとに解決されるのは各ステップの**実行主体だけ**です。
+
+### `--roles` のパース
+
+`--roles` は次のどちらの形式も受け付けます:
+
+1. **インラインマップ**: `ui=claude,backend=codex,test=codex` — カンマ区切りの `kind=owner` の並び。
+   owner は `claude` か `codex`。
+2. **pipeline.yml のパス**: `roles:` ブロックを持つファイル。`roles.impl_ui` / `roles.impl_backend` /
+   `roles.impl_test` を読み、kind `ui` / `backend` / `test` に対応づけます。
+
+```bash
+# インライン形式 → 連想配列で引く
+# roles[ui]=claude roles[backend]=codex roles[test]=codex
+
+# pipeline.yml 形式（yq や awk）。キーが無い kind は未マッピングのまま
+impl_ui="$(yq -r '.roles.impl_ui // empty' "$roles_path")"      # → roles[ui]
+impl_backend="$(yq -r '.roles.impl_backend // empty' "$roles_path")"
+impl_test="$(yq -r '.roles.impl_test // empty' "$roles_path")"
+```
+
+### 担当解決（タスクごと）
+
+```
+kind  = tasks.md のタスク詳細ブロックの `kind:` フィールドの値
+owner = roles[kind]              kind が既知かつマップに存在する場合
+owner = claude                   それ以外（kind 不明・欠落、またはマップ未登録）
+```
+
+`claude` → そのタスクは従来どおり **spec-code** で処理（「Agent Role Detection」の全ディスパッチ
+モードがそのまま適用）。`codex` → そのタスクは **agent-delegate** スクリプトを契約に従って呼び出します。
+
+### 相手 LLM への実装委譲（`owner == codex`）
+
+`agent-delegate/references/contract.md` に従います。コード実装は Bash の約10分上限を超えることが
+正常系なので、`--detach` + `report.json` ポーリングを使い、`--sandbox workspace-write` を指定します
+（相手はファイルを書く必要があるため）。`--target` は明示的に渡します。
+
+```bash
+OUT=".specs/{feature}/delegate/{task-id}"; mkdir -p "$OUT"
+PROMPT="$(mktemp)"
+cat > "$PROMPT" <<EOF
+Implement {task-id} from the spec.
+- Spec dir: .specs/{feature}/  (requirement.md, design.md, tasks.md)
+- Task detail: {タスク詳細ブロックを貼り付け。Done criteria と Target files を含む}
+- Coding rules: {coding-rules.md のパス}
+Commit nothing; report changed files and any blocker.
+EOF
+
+report="$(agent-delegate.sh --mode delegate --target codex \
+  --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}" \
+  --sandbox workspace-write --detach | tail -1)"
+until [ -f "$report" ]; do sleep 15; done
+status="$(jq -r .status "$report")"     # done | blocked
+```
+
+- `status == done` → 相手が完了。チェックボックスを更新してコミット（コミットは相手ではなく
+  オーケストレーターが持つ。相手には「コミットするな」と指示する）。
+- `status == blocked` → `blocker` / `blocker_category` を読み、修正ループ（下記）に回すか呼び出し元に上げる。
+
+### 相手 LLM によるレビュー（`owner == claude`、実装が claude → レビューは codex）
+
+レビューは短時間なので同期実行（`--detach` なし）。契約上、review モードは常に read-only です。
+
+```bash
+OUT=".specs/{feature}/review/{task-id}"; mkdir -p "$OUT"
+git diff "{base_branch}...HEAD" > "$OUT/{task-id}-diff.txt"
+PROMPT="$(mktemp)"
+cat > "$PROMPT" <<EOF
+Review the changes for {task-id}.
+- Diff: $OUT/{task-id}-diff.txt
+- Spec dir: .specs/{feature}/
+- Review criteria: {review_rules.md のパス}, {coding-rules.md のパス}
+EOF
+
+report="$(agent-delegate.sh --mode review --target codex \
+  --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}-review" | tail -1)"
+review_file="$(jq -r .artifacts.review_file "$report")"
+gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
+```
+
+レビューファイルは spec-review 出力と同じ severity セクション（`### Critical` / `### Improvement` /
+`### Minor`）と `Gate: PASS|FAIL` 行を持つため、「Review Gate Details」の既存ゲートロジックが
+無改修でそのまま消費できます。実装が codex の場合はレビューが claude になり、このブロック全体は
+通常の spec-review 呼び出しに置き換わります。
+
+### 修正ループのルーティング
+
+修正ループの構造（最大3回、その後は降格 or ユーザー確認）は不変です。修正の実行主体だけが
+タスクの実装担当に従います:
+
+| 実装担当 | 修正ステップ | 再レビュー |
+|---|---|---|
+| claude | `spec-code --feedback {findings}` | レビュアーが再実行（codex は agent-delegate `--resume {thread_id}`、claude は spec-review） |
+| codex | agent-delegate `--mode delegate --resume {thread_id}`（findings をプロンプト末尾に追記） | レビュアーが再実行（claude は spec-review） |
+
+ラウンドをまたぐ agent-delegate 再レビューは `--resume {thread_id}`（thread_id は前ラウンドの
+`report.json` から取得）でレビューセッションを継続し、文脈を保ってトークンを節約します。resume は
+作成時のサンドボックスを維持し、レビューセッションは read-only なので契約の resume 規則を満たします。
+
+### 相手 LLM が利用不能な場合のフォールバック
+
+`codex` 担当タスクを委譲できない場合 — スクリプト不在、exit `2`、または report が
+`blocker_category: tool_unavailable` を示す場合:
+
+- **オーケストレーター配下**: ブロッカーを上位に報告する。claude への振り替えはオーケストレーターが
+  モードに応じて判断する（manual は人間に確認、auto は振り替えて記録）。勝手に決めない。
+- **単体 `/spec-implement`**: 警告し、そのタスクを spec-code にフォールバックして実行を完走させる。
+
+agent-delegate の内部実装を取り込んではいけません。依存するのは契約に定義されたフラグと
+`report.json` スキーマのみです。
