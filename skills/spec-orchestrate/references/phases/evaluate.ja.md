@@ -35,13 +35,16 @@
 
 ## state 更新
 
-- このラウンドを `rounds.evaluate` に追加: pass/fail/blocked 件数、findings 指紋、
-  ゲート結果。
-- 停滞シグナルを評価する（検知器は T010）。シグナル成立時は `phase` を arbitration
-  にする。
+- このラウンドを `rounds.evaluate` に追加: pass/fail/blocked 件数、findings 指紋
+  （`../stall-detection.ja.md` に従う）、ゲート結果。spec_review と同じラウンド記録
+  形式なので、同じ検知器がこのループにも効く。
+- 停滞シグナル S1〜S3 を評価する（`../stall-detection.ja.md`）。シグナル成立時は
+  `phase` を arbitration にする。
 
 ## 遷移
 
-- 不合格 findings → **implement**（spec-code --feedback で修正し再試験）
+- 不合格 findings → **implement**。各 FAIL は Critical、各懸念は Improvement として
+  `spec-code --feedback` に渡す（`type: evaluate` の結果は spec-review 互換なので修正
+  ループがそのまま消費する）。その後 `round + 1` で再試験。
 - 全項目合格（Gate PASS）→ **pr**
-- 停滞シグナル成立 → **arbitration**（T010 で処理）
+- 停滞シグナル成立 → **arbitration**（`../stall-detection.ja.md`）

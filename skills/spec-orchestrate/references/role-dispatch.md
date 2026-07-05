@@ -109,4 +109,4 @@ missing, exit 2, `tool_unavailable`):
   `state.role_overrides` and the PR body.
 
 This is a capability fallback, distinct from the stall-driven role swap in
-arbitration (T010), which is capped by `limits.role_swap_max`.
+arbitration (`stall-detection.md`), which is capped by `limits.role_swap_max`.

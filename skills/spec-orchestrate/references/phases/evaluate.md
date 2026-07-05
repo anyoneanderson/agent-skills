@@ -36,12 +36,16 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 ## State Update
 
 - Append this round to `rounds.evaluate`: pass/fail/blocked counts, finding
-  fingerprints, gate result.
-- Evaluate the stall signals (detector in T010). If a signal fires, set `phase`
-  to arbitration.
+  fingerprints (per `../stall-detection.md`), gate result. Same round-record
+  shape as spec_review, so the same detector applies to this loop.
+- Evaluate the stall signals S1–S3 (`../stall-detection.md`). If a signal fires,
+  set `phase` to arbitration.
 
 ## Transitions
 
-- failing findings → **implement** (fix via spec-code --feedback, then re-evaluate)
+- failing findings → **implement**. Each FAIL is a Critical finding and each
+  concern an Improvement; they are handed to `spec-code --feedback` (the
+  `type: evaluate` result is spec-review-compatible, so the fix loop consumes it
+  unchanged). Then re-evaluate at `round + 1`.
 - all cases pass (Gate PASS) → **pr**
-- stall signal fires → **arbitration** (handled per T010)
+- stall signal fires → **arbitration** (`../stall-detection.md`)

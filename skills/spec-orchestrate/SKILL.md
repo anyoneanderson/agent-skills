@@ -109,8 +109,8 @@ Verification / State-Update steps.
 | evaluate | failing findings (spec-code --feedback) | implement | `phases/evaluate.md` |
 | evaluate | all cases pass | pr | `phases/evaluate.md` |
 | evaluate | stall signal | arbitration | `phases/evaluate.md` |
-| arbitration | continue / role swap | spec_review or implement | stall-detection rules (T010) |
-| arbitration | draft PR landing | pr | stall-detection rules (T010) |
+| arbitration | continue / role swap | spec_review or implement | `references/stall-detection.md` |
+| arbitration | draft PR landing | pr | `references/stall-detection.md` |
 | pr | PR created (incl. draft) | retrospective | `phases/pr.md` |
 | retrospective | report + improvements done | (end) | `phases/retrospective.md` |
 
@@ -119,10 +119,10 @@ expensive semantic check (adversarial spec_review), so a peer LLM's tokens are
 never spent on formatting defects (REQ-003).
 
 **Arbitration** is entered only when a stall signal fires in spec_review or
-evaluate. Its detection algorithm and adjudication branches (manual asks the
-human; auto swaps the owner up to the limit, else lands a draft PR) are defined
-by the stall-detection rules added in T010. This task wires the transitions; it
-does not implement the detector.
+evaluate. Its detection algorithm (fingerprints and signals S1–S3, evaluated
+from `state.rounds` alone) and adjudication branches (manual asks the human; auto
+swaps the owner up to `limits.role_swap_max`, else lands a draft PR) are defined
+in `references/stall-detection.md`.
 
 ## Phase Index — Worker and Role
 

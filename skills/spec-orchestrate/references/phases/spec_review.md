@@ -37,14 +37,16 @@ semantic check, run only after inspect is clean.
 ## State Update
 
 - Append this round to `rounds.spec_review`: round number, critical / improvement
-  / minor counts, finding fingerprints, gate result.
-- Record the reviewer `thread_id` under `threads.spec_reviewer`.
-- Evaluate the stall signals over the accumulated rounds (detector defined in
-  T010). If a signal fires, set `phase` to arbitration.
+  / minor counts, finding fingerprints (computed per `../stall-detection.md`),
+  gate result. This entry is the sole input to stall detection.
+- Record the reviewer `thread_id` under `threads.spec_reviewer` for resume.
+- Evaluate the stall signals S1–S3 over the accumulated rounds
+  (`../stall-detection.md`). If a signal fires, set `phase` to arbitration.
 
 ## Transitions
 
 - Critical or Improvement present, no stall → **spec_generate** (fix, then
-  re-review with resume)
-- Gate PASS (Minor only / none) → **approval** (Minor transcribed to PR body)
-- stall signal fires → **arbitration** (handled per T010)
+  re-review by resuming the same session). Minor findings are not fixed here;
+  they are already recorded and are transcribed to the PR body.
+- Gate PASS (Minor only / none) → **approval**
+- stall signal fires → **arbitration** (`../stall-detection.md`)

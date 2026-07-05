@@ -26,7 +26,7 @@ app:                      # spec-evaluate launch recipe (required only when UI c
   stop: "auto"            # auto = kill the launched process; else a stop command
   auth: none              # none | a references path describing the auth steps
 limits:
-  role_swap_max: 1        # auto arbitration owner-swap cap (used by T010)
+  role_swap_max: 1        # auto arbitration owner-swap cap (see stall-detection.md)
 improve:                  # retrospective auto-improvement — specified in T016
   skills_repo: "~/Documents/zenchaine/agent-skills"
   auto_apply: true
@@ -42,7 +42,7 @@ improve:                  # retrospective auto-improvement — specified in T016
     unverified UI requirement silently in an unattended run.
   - In both modes, "config missing (blocked)" is distinct from "test failed".
 - **limits.role_swap_max**: the arbitration owner-swap cap; the detector and
-  adjudication that consume it are specified in T010.
+  adjudication that consume it are in `stall-detection.md`.
 - **improve**: the retrospective self-improvement block. Its fields and behavior
   are specified in T016; this file only fixes their place in the schema.
 
@@ -79,10 +79,10 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 | `language` | Detected I/O language, set at intake |
 | `phase` | Current phase; the loop reads this to decide what to run next |
 | `completed_phases` | Phases finished at least once (for the resume summary) |
-| `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, finding fingerprints, and the gate. Consumed by stall detection (T010) |
+| `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, finding fingerprints, and the gate. Consumed by stall detection (`stall-detection.md`) |
 | `threads` | Peer session ids for resume (e.g. `spec_reviewer`) |
 | `role_overrides` | Roles reassigned this run (capability fallback or arbitration swap) |
-| `arbitrations` | Stall adjudication records (written by T010) |
+| `arbitrations` | Stall adjudication records (see `stall-detection.md`) |
 | `ts_updated` | Last write timestamp |
 
 ### Ownership: orchestrator writes, workers do not even read
