@@ -27,6 +27,10 @@ Generate structured project specifications: requirements, design documents, and 
 
 ## ⚠️ CRITICAL: First Steps (ALWAYS EXECUTE)
 
+**Auto mode short-circuit**: If invoked with `--auto --issue <n>`, skip the
+interactive decision flow below and follow `references/auto-mode.md` (`.ja.md`)
+instead. Auto mode never calls AskUserQuestion.
+
 **BEFORE asking any questions or showing options, you MUST execute these steps:**
 
 1. **Check current directory**:
@@ -69,8 +73,8 @@ Generate structured project specifications: requirements, design documents, and 
 4. Explicit override takes priority (e.g., "in English", "日本語で")
 
 **Reference file selection**: Based on the detected output language, use the corresponding reference files:
-- English → `references/init.md`, `references/design.md`, `references/tasks.md`, `references/test-plan.md`
-- Japanese → `references/init.ja.md`, `references/design.ja.md`, `references/tasks.ja.md`, `references/test-plan.ja.md`
+- English → `references/init.md`, `references/design.md`, `references/tasks.md`, `references/test-plan.md`, `references/auto-mode.md`
+- Japanese → `references/init.ja.md`, `references/design.ja.md`, `references/tasks.ja.md`, `references/test-plan.ja.md`, `references/auto-mode.ja.md`
 
 ## Phases
 
@@ -290,6 +294,7 @@ Project names are converted to English kebab-case:
 | Option | Description | Applicable Phase |
 |--------|-------------|-----------------|
 | `--quick` | Generate without dialogue | init |
+| `--auto --issue <n>` | Non-interactive full generation from a GitHub Issue (no dialogue; see `references/auto-mode.md`) | full |
 | `--deep` | Socratic deep-dive dialogue | init |
 | `--personas` | Multi-perspective analysis/review | init, design |
 | `--analyze` | Analyze existing codebase | init, design, tasks |
@@ -312,6 +317,18 @@ Generate from a brief project description:
 1. Infer typical requirements from the description
 2. Generate based on best practices
 3. Complete without dialogue
+
+### Auto Mode (--auto --issue <n>)
+
+Non-interactive generation driven by a GitHub Issue. See
+`references/auto-mode.md` (`.ja.md`) for the full procedure. Summary:
+1. `gh issue view <n>` supplies the requirement source
+2. Feature name is derived from the Issue title as kebab-case
+3. All four documents are generated with **zero** AskUserQuestion calls
+4. Every point that would need a question is written as an `ASM-XXX`
+   assumption in requirement.md instead
+
+Intended for orchestrated pipelines and sufficiently concrete Issues.
 
 ### Full Workflow (full)
 
