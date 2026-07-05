@@ -55,6 +55,7 @@ improve:                  # retrospective 自動改善 — T016 で規定
   "feature": "user-auth",
   "mode": "auto",
   "issue": 42,
+  "language": "en",
   "phase": "spec_review",
   "completed_phases": ["intake", "spec_generate", "inspect"],
   "rounds": {

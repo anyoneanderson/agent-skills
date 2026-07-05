@@ -176,8 +176,8 @@ Mirrors design §6. In every case, state is preserved so the run is resumable.
 # Manual: talk through the spec, approve once, walk away
 /spec-orchestrate --mode manual
 
-# Auto: hand over an Issue, come back to a PR
-/spec-orchestrate --auto --issue 42
+# Auto: hand over an Issue, come back to a PR (--issue implies auto)
+/spec-orchestrate --mode auto --issue 42
 
 # Resume a multi-hour run after a restart (default when state exists)
 /spec-orchestrate --resume --spec .specs/user-auth/

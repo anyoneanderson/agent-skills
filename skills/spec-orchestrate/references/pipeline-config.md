@@ -55,6 +55,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
   "feature": "user-auth",
   "mode": "auto",
   "issue": 42,
+  "language": "en",
   "phase": "spec_review",
   "completed_phases": ["intake", "spec_generate", "inspect"],
   "rounds": {
