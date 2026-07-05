@@ -342,6 +342,8 @@ If an existing workflow file is detected (from Step 1 or during generation):
    - `.claude/agents/workflow-implementer.md`
    - `.claude/agents/workflow-reviewer.md`
    - `.claude/agents/workflow-tester.md`
+   - `.claude/agents/workflow-planner.md` — spec / test.md generation (spec-orchestrate pipeline)
+   - `.claude/agents/workflow-evaluator.md` — acceptance test execution (spec-orchestrate pipeline)
 
 4. If files already exist, ask for overwrite confirmation (same as Step 5)
 
@@ -362,6 +364,8 @@ If an existing workflow file is detected (from Step 1 or during generation):
    - `.codex/agents/workflow-implementer.toml`
    - `.codex/agents/workflow-reviewer.toml`
    - `.codex/agents/workflow-tester.toml`
+   - `.codex/agents/workflow-planner.toml` — spec / test.md generation (spec-orchestrate pipeline)
+   - `.codex/agents/workflow-evaluator.toml` — acceptance test execution (spec-orchestrate pipeline)
 
 4. Update `.codex/config.toml`:
    - Create file if it doesn't exist
