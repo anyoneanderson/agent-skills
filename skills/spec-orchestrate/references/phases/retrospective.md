@@ -3,8 +3,8 @@
 After the PR (ready or draft), turn the structured run records into a
 retrospective report and a metrics line, and — where allowed — skill
 improvements. The report and metrics are produced here; Tier judgment and the
-auto-apply / revert mechanics are the improve-apply rules (T016), referenced but
-not implemented here.
+auto-apply / revert mechanics are in `../improve-apply.md`, referenced but not
+implemented in this phase guide.
 
 The detailed aggregation procedure, the `pipeline-metrics.jsonl` schema, the
 `retrospective.md` §5.6 template, and the previous-run comparison are in
@@ -16,8 +16,8 @@ Runs after pr completes (including a draft landing). A run that failed before
 reaching pr may still run retrospective as a learning step — failed runs are the
 most instructive — **but then it stops at report generation and Issue filing; no
 auto-apply** (a metrics comparison against a clean completion does not hold, so
-the T016 apply step is skipped). spec-orchestrate can also be invoked to run this
-phase standalone against an existing state file.
+the `../improve-apply.md` apply step is skipped). spec-orchestrate can also be
+invoked to run this phase standalone against an existing state file.
 
 ## Input
 
@@ -47,10 +47,10 @@ edits skill files directly.
    is recorded as an **observation**, not a proposal.
 3. **Compare metrics.** Read the previous run's line and judge whether this run
    worsened or improved on the shared metrics (rounds, blocker categories,
-   stalls). The auto-revert decision that consumes this is the improve-apply
-   rules (T016); retrospective only records the comparison.
+   stalls). The auto-revert decision that consumes this is in
+   `../improve-apply.md`; retrospective only records the comparison.
 4. **Apply improvements** (Tier judgment, line-budget check, branch/PR/merge or
-   Issue-filing fallback, revert) is the improve-apply step (T016). Skipped for a
+   Issue-filing fallback, revert) is `../improve-apply.md`. Skipped for a
    pr-not-reached run.
 
 ## Output
@@ -59,7 +59,7 @@ edits skill files directly.
   summary / failure breakdown table / stall-and-arbitration record / improvement
   proposals with rationale + Tier / observations).
 - One appended line in `.specs/pipeline-metrics.jsonl`.
-- (Via T016) any improvement branch/PR or filed Issue.
+- (Via `../improve-apply.md`) any improvement branch/PR or filed Issue.
 
 ## Verification
 
@@ -77,4 +77,5 @@ edits skill files directly.
 
 ## Transitions
 
-- report + metrics written (+ improvements or Issue fallback via T016) → **(end)**
+- report + metrics written (+ improvements or Issue fallback via
+  `../improve-apply.md`) → **(end)**

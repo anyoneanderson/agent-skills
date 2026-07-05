@@ -27,7 +27,7 @@ app:                      # spec-evaluate launch recipe (required only when UI c
   auth: none              # none | a references path describing the auth steps
 limits:
   role_swap_max: 1        # auto arbitration owner-swap cap (see stall-detection.md)
-improve:                  # retrospective auto-improvement — specified in T016
+improve:                  # retrospective auto-improvement — see improve-apply.md
   skills_repo: "~/Documents/zenchaine/agent-skills"
   auto_apply: true
   line_budget: 300
@@ -44,7 +44,7 @@ improve:                  # retrospective auto-improvement — specified in T016
 - **limits.role_swap_max**: the arbitration owner-swap cap; the detector and
   adjudication that consume it are in `stall-detection.md`.
 - **improve**: the retrospective self-improvement block. Its fields and behavior
-  are specified in T016; this file only fixes their place in the schema.
+  are in `improve-apply.md`; this file only fixes their place in the schema.
 
 ## pipeline-state.json
 

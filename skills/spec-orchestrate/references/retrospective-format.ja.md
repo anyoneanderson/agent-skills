@@ -47,7 +47,7 @@ English version: [retrospective-format.md](retrospective-format.md)
 | `rounds_spec` / `rounds_eval` | 2ループのラウンド数 |
 | `stalls` | この実行の arbitration エントリ数 |
 | `blocker_categories` | カテゴリ → 件数のマップ（Step 1 から） |
-| `applied_improvements` | この実行で自動適用した提案ID（T016 が埋める。ここでは `[]`） |
+| `applied_improvements` | この実行で自動適用した提案ID（`improve-apply.ja.md` の適用ステップが埋める。ここでは `[]`） |
 | `ts` | ISO 8601 タイムスタンプ |
 
 アトミックに追記:
@@ -85,9 +85,9 @@ type: retrospective
 
 規則:
 - `type: retrospective` ヘッダは必須。
-- 各提案は対象ファイルと Tier を明示する（Tier 判定そのものは improve-apply
-  ステップ・T016）。ここでの Tier は提案者の分類で、T016 が適用前に canonical path
-  で再検証する。
+- 各提案は対象ファイルと Tier を明示する（Tier 判定そのものは
+  `improve-apply.ja.md`）。ここでの Tier は提案者の分類で、`improve-apply.ja.md` が
+  適用前に canonical path で再検証する。
 - 各提案の Rationale は特定の失敗集計行とその件数を指す。件数がなければ Proposals
   ではなく Observations に置く（REQ-019: レポートは自由記述の感想ではなく集計で駆動）。
 
@@ -103,5 +103,5 @@ type: retrospective
 比較の判定（メトリクス別に better / worse / mixed）を `retrospective.md` に記録する。
 実行ごとに機能も難度も異なるため、単発の worse 比較は **それ自体では** revert の理由
 にならない — 自動 revert 条件（「同一スキル・同系の退行が2実行連続」）は
-improve-apply 規則（T016）にある。retrospective は比較を記録するだけで、revert は
+`improve-apply.ja.md` にある。retrospective は比較を記録するだけで、revert は
 決めない。

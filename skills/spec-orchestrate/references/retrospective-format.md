@@ -49,7 +49,7 @@ Append exactly one line per run:
 | `rounds_spec` / `rounds_eval` | Round counts for the two loops |
 | `stalls` | Number of arbitration entries this run |
 | `blocker_categories` | Category → count map (from Step 1) |
-| `applied_improvements` | Proposal ids auto-applied this run (filled by T016; `[]` here) |
+| `applied_improvements` | Proposal ids auto-applied this run (filled by the apply step in `improve-apply.md`; `[]` here) |
 | `ts` | ISO 8601 timestamp |
 
 Append atomically:
@@ -87,9 +87,9 @@ Findings without frequency backing; recorded, not acted on.
 
 Rules:
 - `type: retrospective` header is mandatory.
-- Every proposal names a target file and a Tier (Tier judgment itself is the
-  improve-apply step, T016). The Tier here is the proposer's classification; T016
-  re-verifies it against the canonical path before applying.
+- Every proposal names a target file and a Tier (Tier judgment itself is in
+  `improve-apply.md`). The Tier here is the proposer's classification;
+  `improve-apply.md` re-verifies it against the canonical path before applying.
 - Every proposal's Rationale points at a specific failure-breakdown row and its
   count. No count → it belongs under Observations, not Proposals (REQ-019: the
   report is driven by tallies, not free-form impressions).
@@ -107,5 +107,5 @@ Record the comparison verdict (better / worse / mixed, per metric) in
 `retrospective.md`. Because features and difficulty differ run to run, a single
 worse comparison is **not** by itself a reason to revert — the automatic-revert
 condition ("same skill, same-family regression across two consecutive runs")
-lives in the improve-apply rules (T016). Retrospective only records the
-comparison; it does not decide the revert.
+lives in `improve-apply.md`. Retrospective only records the comparison; it does
+not decide the revert.
