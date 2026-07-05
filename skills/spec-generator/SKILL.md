@@ -69,8 +69,8 @@ Generate structured project specifications: requirements, design documents, and 
 4. Explicit override takes priority (e.g., "in English", "日本語で")
 
 **Reference file selection**: Based on the detected output language, use the corresponding reference files:
-- English → `references/init.md`, `references/design.md`, `references/tasks.md`
-- Japanese → `references/init.ja.md`, `references/design.ja.md`, `references/tasks.ja.md`
+- English → `references/init.md`, `references/design.md`, `references/tasks.md`, `references/test-plan.md`
+- Japanese → `references/init.ja.md`, `references/design.ja.md`, `references/tasks.ja.md`, `references/test-plan.ja.md`
 
 ## Phases
 
@@ -79,7 +79,7 @@ Generate structured project specifications: requirements, design documents, and 
 | init | requirement.md | "Create requirements", "要件定義を作って" |
 | design | design.md | "Create design doc", "設計書を作って" |
 | tasks | tasks.md | "Create task list", "タスクリストを作って" |
-| full | All three above | "Create full spec", "仕様を全部" |
+| full | All three above + test.md | "Create full spec", "仕様を全部" |
 
 ## Interaction Policy: AskUserQuestion
 
@@ -268,6 +268,7 @@ Refer to the appropriate reference file (based on Language Rules):
   - File/directory structure follows detected patterns
   - Skill-derived `[SHOULD]` rules (e.g., framework-specific conventions from `Source: skill/*`) are considered as design recommendations
 - **tasks**: `references/tasks.md` / `references/tasks.ja.md` — Task list generation
+- **test** (full workflow only): `references/test-plan.md` / `references/test-plan.ja.md` — Acceptance test plan generation
 
 ### 4. Output Directory
 
@@ -275,7 +276,8 @@ Refer to the appropriate reference file (based on Language Rules):
 .specs/[project-name]/
 ├── requirement.md  (init)
 ├── design.md       (design)
-└── tasks.md        (tasks)
+├── tasks.md        (tasks)
+└── test.md         (full workflow only — acceptance test plan)
 ```
 
 Project names are converted to English kebab-case:
@@ -313,10 +315,14 @@ Generate from a brief project description:
 
 ### Full Workflow (full)
 
-Generate all three documents sequentially:
+Generate all four documents sequentially:
 1. Generate requirement.md
 2. Read requirement.md → generate design.md
 3. Read design.md → generate tasks.md
+4. Read requirement.md + design.md + tasks.md → generate test.md
+   (acceptance test plan; see `references/test-plan.md` / `.ja.md`)
+
+The three-document output of steps 1–3 is unchanged; step 4 only reads them.
 
 ## Requirement ID System
 
@@ -326,7 +332,8 @@ Specifications use the following ID prefixes:
 - `[NFR-XXX]`: Non-functional requirements
 - `[CON-XXX]`: Constraints
 - `[ASM-XXX]`: Assumptions
-- `[T-XXX]`: Tasks
+- `[T-XXX]`: Implementation tasks (tasks.md)
+- `[T-AXX]`: Acceptance test cases (test.md; `T-A` prefix avoids collision with `T-`)
 
 These IDs ensure traceability across documents.
 
@@ -423,7 +430,7 @@ options:
 
 **After full:**
 ```
-question: "All three spec documents are complete."
+question: "All four spec documents (3-set + test.md) are complete."
 options:
   - "Run spec-inspect (quality check)" → invoke spec-inspect skill
   - "Skip to GitHub Issue" → invoke spec-to-issue skill
