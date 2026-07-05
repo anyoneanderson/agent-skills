@@ -50,6 +50,10 @@ requirement_content = Read(".specs/{project-name}/requirement.md")
 design_content = Read(".specs/{project-name}/design.md")
 tasks_content = Read(".specs/{project-name}/tasks.md")
 
+# Optional: acceptance test plan (only present for full-workflow / pipeline specs).
+# Absence is expected for legacy three-document specs — do NOT treat as an error.
+test_content = Read(".specs/{project-name}/test.md") or None
+
 # Optional: load coding rules if available
 coding_rules = Read("docs/coding-rules.md") or None
 # Also check CLAUDE.md / AGENTS.md for alternative path
@@ -368,6 +372,23 @@ Execute the following checks sequentially. Add detected issues to an issues list
   - [ ] DOC-001: Update {section} in {filename} ({reason})
   ```
 
+#### Check 16: Acceptance Test Coverage (test.md) [WARNING]
+
+**Purpose**: Verify the acceptance test plan (test.md) exists and covers every requirement. test.md is produced by the spec-generator full workflow and consumed by acceptance evaluation. Legacy three-document specs (created before test.md existed) stay valid — its absence is reported as INFO, never as an error, so this check never breaks existing specs.
+
+**Test case format** (defined by spec-generator, in `skills/spec-generator/references/test-plan.md`): each case heading is `## T-A{nn}: [REQ-XXX] ...`, followed by a verification method field `Verify:` (Japanese: `検証方法:`) valued `playwright` / `command` / `file-check`.
+
+**Procedure**:
+1. If `test_content` is None (test.md absent) → emit one INFO finding (see below) and skip steps 2–4. Do not fail; legacy specs remain valid.
+2. Extract test case IDs (`T-A\d+`) and, per case heading, the requirement IDs referenced (`\[(REQ|NFR)-\d+\]`).
+3. Extract all `REQ` / `NFR` IDs from requirement.md; each with no referencing test case → coverage gap.
+4. Each test case whose `Verify:` / `検証方法:` field is empty, missing, or not one of `playwright` / `command` / `file-check` → verification gap.
+
+**Outputs** (existing findings format):
+- **[INFO]** test.md absent: `INFO-{seq}` "Acceptance test plan (test.md) not found" — File: test.md. "Acceptance coverage was not checked; run the spec-generator full workflow to generate test.md, or ignore for a three-document-only spec."
+- **[WARNING]** uncovered requirements: `WARNING-{seq}` "Acceptance coverage: {covered}/{total} requirements have a test case" + list of REQ/NFR IDs with no `T-A` case + "Add a T-A case referencing each."
+- **[WARNING]** empty verification method: `WARNING-{seq}` "Test case {case_id} has no verification method" + "Set Verify (検証方法) to playwright / command / file-check."
+
 ### Step 4: Generate Summary
 
 Aggregate detected issues by severity:
@@ -462,5 +483,6 @@ Write(".specs/{project-name}/.inspection_result.json", json_content)
 
 - Requirement ID reference error detection rate: 100%
 - Missing required section detection rate: 100%
+- Acceptance coverage gap detection (when test.md present): 100% of uncovered REQ/NFR flagged; test.md absence reported as INFO without failing legacy specs
 - Contradiction detection accuracy: Best effort (depends on LLM reasoning capability)
 - Processing time: Under 30 seconds for combined spec files under 3000 lines
