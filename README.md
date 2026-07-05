@@ -18,7 +18,9 @@ Reusable AI agent skills for specification-driven and autonomous (harness) devel
 | [spec-code](skills/spec-code/) | Autonomously implement a single task from spec documents |
 | [spec-review](skills/spec-review/) | Structured code review with rule × file matrix approach |
 | [spec-test](skills/spec-test/) | Create and run tests based on task completion criteria |
+| [spec-evaluate](skills/spec-evaluate/) | Run an acceptance test plan (test.md) against the build, save evidence, and report requirement-level pass/fail |
 | [spec-implement](skills/spec-implement/) | Orchestrate spec-code, spec-review, spec-test from specs to PR |
+| [spec-orchestrate](skills/spec-orchestrate/) | Drive an Issue or request from spec through adversarial review, implementation, and acceptance testing to PR — manual or fully autonomous |
 | [cmux-fork](skills/cmux-fork/) | Fork Claude Code conversation into a new cmux pane or workspace |
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
@@ -45,7 +47,9 @@ npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-code -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-review -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-test -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-evaluate -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-orchestrate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
@@ -195,6 +199,7 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
    - `requirement.md` — Requirements document
    - `design.md` — Technical design document
    - `tasks.md` — Implementation task list
+   - `test.md` — Acceptance test plan (generated as the final step of the full workflow)
 
 2. **handover** preserves session continuity:
    - Writes local `handover.md` and `.handover/` state files

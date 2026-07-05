@@ -15,9 +15,8 @@ unresolved items. A stall landing produces a draft PR instead of a ready one.
 1. Run spec-implement's final PR-creation step (branch and commit conventions
    follow `issue-to-pr-workflow.md`).
 2. Attach the evidence sections to the PR body. The exact section layout
-   (Adversarial Review History, Acceptance Evidence, Unresolved) is defined by
-   the PR-assembly rules added in T011; this phase supplies the transition and
-   the inputs.
+   (Adversarial Review History, Acceptance Evidence, Unresolved) is defined in
+   `../pr-assembly.md`; this phase supplies the transition and the inputs.
 3. If the run reached pr via an arbitration draft landing, create the PR as a
    **draft** and list unresolved Critical / Improvement under `## Unresolved`.
 

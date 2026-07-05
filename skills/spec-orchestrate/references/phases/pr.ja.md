@@ -14,8 +14,8 @@
 1. spec-implement の最終 PR 作成ステップを実行する（ブランチ・コミット規約は
    `issue-to-pr-workflow.md` に従う）。
 2. 証跡セクションを PR 本文に添付する。正確なセクション構成（Adversarial Review
-   History、Acceptance Evidence、Unresolved）は T011 で追加する PR 組み立て規則が
-   定義する。このフェーズは遷移と入力を用意する。
+   History、Acceptance Evidence、Unresolved）は `../pr-assembly.ja.md` が定義する。
+   このフェーズは遷移と入力を用意する。
 3. 裁定の draft 着地で pr に来た場合、PR を **draft** で作成し、未解決の
    Critical / Improvement を `## Unresolved` に列挙する。
 
