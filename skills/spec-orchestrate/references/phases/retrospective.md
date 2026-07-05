@@ -38,7 +38,7 @@ edits skill files directly.
 
 1. **Aggregate (mechanical — orchestrator).** Build the category breakdown from
    `state`, all `report.json` `blocker_category` counts, and the evaluate
-   failures. Append one line to `.specs/pipeline-metrics.jsonl`. Procedure and
+   failures. Compose (but do not yet append) the metrics values. Procedure and
    schema: `../retrospective-format.md`.
 2. **Analyze (LLM — delegated worker).** Give the aggregation table to a worker
    subagent. For each frequent pattern it identifies which skill's which file's
@@ -52,6 +52,11 @@ edits skill files directly.
 4. **Apply improvements** (Tier judgment, line-budget check, branch/PR/merge or
    Issue-filing fallback, revert) is `../improve-apply.md`. Skipped for a
    pr-not-reached run.
+5. **Append the metrics line last.** After the apply step, append one line to
+   `.specs/pipeline-metrics.jsonl` with `applied_improvements` set to what was
+   actually applied (`[]` if nothing applied, degraded, or pr not reached). The
+   append is deferred to here because JSON Lines is append-only and cannot be
+   back-filled.
 
 ## Output
 

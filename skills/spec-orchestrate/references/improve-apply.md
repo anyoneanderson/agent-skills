@@ -51,14 +51,22 @@ symlink, or a case difference could slip a Tier 2 target past the Tier 1 rule an
 auto-merge it. Because auto-merge is the trust boundary, normalize and validate
 **before** matching:
 
+`$target` is a **repository-relative** path (e.g. `skills/foo/references/g.md`),
+and it must be anchored to `repo_root` — **not** the current directory. The
+orchestrator normally runs with the target *project* as its cwd while
+`skills_repo` is a separate directory (§7), so anchoring on cwd would push every
+legitimate target outside the repo-root check and reject it (fail-closed, so not
+a security hole, but REQ-020 auto-apply would never fire).
+
 ```bash
 repo_root="$(git -C "$skills_repo" rev-parse --show-toplevel)"
 
-# Portable canonicalization (BSD realpath lacks -m/--no-symlinks; use python3):
+# Portable canonicalization (BSD realpath lacks -m/--no-symlinks; use python3).
+# Anchor $target on repo_root, not cwd.
 #   physical = resolves ../ AND symlinks to the true on-disk path
 #   lexical  = resolves ../ only, does NOT expand symlinks
-physical="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$target")"
-lexical="$(python3 -c 'import os,sys; print(os.path.normpath(os.path.join(os.getcwd(), sys.argv[1])))' "$target")"
+physical="$(python3 -c 'import os,sys; print(os.path.realpath(os.path.join(sys.argv[1], sys.argv[2])))' "$repo_root" "$target")"
+lexical="$(python3 -c 'import os,sys; print(os.path.normpath(os.path.join(sys.argv[1], sys.argv[2])))' "$repo_root" "$target")"
 
 # (1) both computed above.
 # (2) must live under the repository root

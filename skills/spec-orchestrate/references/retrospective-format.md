@@ -34,10 +34,10 @@ Produce the **failure breakdown table** — one row per `blocker_category` seen:
 `env_error`, `unclassified`). The orchestrator may re-classify from the
 `blocker` text, but the category is the grouping key.
 
-## Step 2: pipeline-metrics.jsonl
+## Step 2: pipeline-metrics.jsonl (composed here, appended last)
 
-One repository-wide history file, `.specs/pipeline-metrics.jsonl` (JSON Lines).
-Append exactly one line per run:
+One repository-wide history file, `.specs/pipeline-metrics.jsonl` (JSON Lines),
+one line per run:
 
 ```json
 {"feature":"user-auth","run_id":"2026-07-05T09:00:00Z-a1b2","mode":"auto","rounds_spec":3,"rounds_eval":2,"stalls":1,"blocker_categories":{"malformed_output":3,"timeout":1},"applied_improvements":["P-01"],"ts":"2026-07-05T09:00:00Z"}
@@ -49,10 +49,15 @@ Append exactly one line per run:
 | `rounds_spec` / `rounds_eval` | Round counts for the two loops |
 | `stalls` | Number of arbitration entries this run |
 | `blocker_categories` | Category → count map (from Step 1) |
-| `applied_improvements` | Proposal ids auto-applied this run (filled by the apply step in `improve-apply.md`; `[]` here) |
+| `applied_improvements` | Proposal ids actually auto-applied this run (from the `improve-apply.md` apply step; `[]` if nothing was applied or the run degraded) |
 | `ts` | ISO 8601 timestamp |
 
-Append atomically:
+**Append the line last, after the apply step finishes** — not during
+aggregation. JSON Lines is append-only, so a line written before `improve-apply.md`
+runs could never record `applied_improvements`. Compose the metrics values from
+Step 1 here, hold them, and append once the applied set is known (which is `[]`
+when nothing was applied or the run degraded to Issue-only or did not reach pr):
+
 ```bash
 printf '%s\n' "$line" >> .specs/pipeline-metrics.jsonl
 ```

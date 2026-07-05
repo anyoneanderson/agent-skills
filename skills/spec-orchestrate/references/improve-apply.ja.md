@@ -47,14 +47,21 @@ English version: [improve-apply.md](improve-apply.md)
 大小文字差が、Tier 2 対象を Tier 1 規則に潜り込ませて自動マージしうる。自動マージは
 信頼境界なので、マッチの **前** に正規化・検証する:
 
+`$target` は **リポジトリ相対** パス（例: `skills/foo/references/g.md`）であり、
+cwd ではなく `repo_root` にアンカーする必要がある。オーケストレーターは通常、対象
+*プロジェクト* を cwd に実行し `skills_repo` は別ディレクトリ（§7）のため、cwd に
+アンカーすると正当な適用先も (2) の repo-root 配下チェックで全拒否される
+（fail-closed なのでセキュリティ穴ではないが、REQ-020 の自動適用が機能しない）。
+
 ```bash
 repo_root="$(git -C "$skills_repo" rev-parse --show-toplevel)"
 
-# 移植性のある正規化（BSD realpath は -m/--no-symlinks 非対応。python3 を使う）:
+# 移植性のある正規化（BSD realpath は -m/--no-symlinks 非対応。python3 を使う）。
+# $target は cwd ではなく repo_root にアンカーする。
 #   physical = ../ と symlink を実体の on-disk パスへ解決
 #   lexical  = ../ のみ解決、symlink は展開しない
-physical="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$target")"
-lexical="$(python3 -c 'import os,sys; print(os.path.normpath(os.path.join(os.getcwd(), sys.argv[1])))' "$target")"
+physical="$(python3 -c 'import os,sys; print(os.path.realpath(os.path.join(sys.argv[1], sys.argv[2])))' "$repo_root" "$target")"
+lexical="$(python3 -c 'import os,sys; print(os.path.normpath(os.path.join(sys.argv[1], sys.argv[2])))' "$repo_root" "$target")"
 
 # (1) 上記で両方を算出。
 # (2) リポジトリルート配下であること

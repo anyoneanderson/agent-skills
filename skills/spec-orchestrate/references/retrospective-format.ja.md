@@ -32,10 +32,10 @@ English version: [retrospective-format.md](retrospective-format.md)
 `unclassified`）。オーケストレーターは `blocker` テキストから再分類してよいが、
 カテゴリがグルーピングキー。
 
-## Step 2: pipeline-metrics.jsonl
+## Step 2: pipeline-metrics.jsonl（ここで組み立て、追記は最後）
 
 リポジトリ横断の履歴ファイル `.specs/pipeline-metrics.jsonl`（JSON Lines）。1実行
-につき正確に1行追記する:
+につき1行:
 
 ```json
 {"feature":"user-auth","run_id":"2026-07-05T09:00:00Z-a1b2","mode":"auto","rounds_spec":3,"rounds_eval":2,"stalls":1,"blocker_categories":{"malformed_output":3,"timeout":1},"applied_improvements":["P-01"],"ts":"2026-07-05T09:00:00Z"}
@@ -47,10 +47,14 @@ English version: [retrospective-format.md](retrospective-format.md)
 | `rounds_spec` / `rounds_eval` | 2ループのラウンド数 |
 | `stalls` | この実行の arbitration エントリ数 |
 | `blocker_categories` | カテゴリ → 件数のマップ（Step 1 から） |
-| `applied_improvements` | この実行で自動適用した提案ID（`improve-apply.ja.md` の適用ステップが埋める。ここでは `[]`） |
+| `applied_improvements` | この実行で実際に自動適用した提案ID（`improve-apply.ja.md` の適用ステップの結果。何も適用しない/縮退時は `[]`） |
 | `ts` | ISO 8601 タイムスタンプ |
 
-アトミックに追記:
+**行の追記は集計時ではなく、適用ステップの完了後に最後に行う。** JSON Lines は
+追記専用なので、`improve-apply.ja.md` の実行前に書いた行には `applied_improvements`
+を後から記録できない。Step 1 の値をここで組み立てて保持し、適用された集合が確定して
+から1行追記する（何も適用しない・Issue 縮退・pr 未到達のときは `[]`）:
+
 ```bash
 printf '%s\n' "$line" >> .specs/pipeline-metrics.jsonl
 ```
