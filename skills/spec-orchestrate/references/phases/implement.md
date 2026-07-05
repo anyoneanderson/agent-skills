@@ -10,7 +10,8 @@ the outcome.
 - `tasks.md` (with `kind:` labels) and the rest of the spec set.
 - The role map for implementation (`impl_ui` / `impl_backend` / `impl_test`),
   passed to spec-implement as its `--roles` argument so it routes each task to
-  spec-code (claude) or agent-delegate (codex) by kind.
+  spec-code (claude) or agent-delegate (codex) by kind. Map construction and the
+  reviewer-inversion rule are in `../role-dispatch.md` → "implement".
 - On re-entry from evaluate: the failing acceptance findings to feed back.
 
 ## Action

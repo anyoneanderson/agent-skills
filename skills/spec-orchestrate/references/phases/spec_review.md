@@ -8,7 +8,8 @@ semantic check, run only after inspect is clean.
 
 - The four spec files (the reviewer reads the files themselves, not a diff).
 - The prior round's fix summary, for round ≥ 2.
-- `spec_reviewer` role → backend (default codex via agent-delegate).
+- `spec_reviewer` role → backend (default codex via agent-delegate), resolved by
+  `../role-dispatch.md` → "spec_review".
 - The reviewer session `thread_id` from state, for resume on round ≥ 2.
 
 ## Action

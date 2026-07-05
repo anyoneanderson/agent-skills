@@ -8,7 +8,8 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 
 - `test.md`, the `app:` launch recipe from `pipeline.yml`, and the round number.
 - `e2e_runner` role → spec-evaluate backend (self / claude subagent / codex via
-  agent-delegate `--mode delegate`, workspace-write).
+  agent-delegate `--mode delegate`, workspace-write), resolved by
+  `../role-dispatch.md` → "evaluate".
 
 ## Action
 

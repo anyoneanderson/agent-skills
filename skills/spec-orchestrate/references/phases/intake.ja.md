@@ -49,7 +49,8 @@
   "completed_phases": ["intake"], "rounds": {}, "threads": {},
   "role_overrides": {}, "arbitrations": [] }
 ```
-詳細スキーマは T009 が持つ。intake は spec_generate に入るのに必要な最小限を書く。
+詳細スキーマと jq/awk の書き込み流儀は `../pipeline-config.ja.md` にある。intake は
+spec_generate に入るのに必要な最小限を書く。
 
 ## 遷移
 

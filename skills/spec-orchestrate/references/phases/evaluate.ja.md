@@ -8,7 +8,8 @@
 
 - `test.md`、`pipeline.yml` の `app:` 起動レシピ、ラウンド番号。
 - `e2e_runner` ロール → spec-evaluate バックエンド（self / claude サブエージェント /
-  agent-delegate `--mode delegate`・workspace-write 経由の codex）。
+  agent-delegate `--mode delegate`・workspace-write 経由の codex）。解決は
+  `../role-dispatch.ja.md` の「evaluate」。
 
 ## アクション
 

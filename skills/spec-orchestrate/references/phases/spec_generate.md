@@ -10,7 +10,7 @@ inspect or spec_review or approval sends findings back for revision.
 - Re-entry (fix): the findings that sent us back — inspect findings, spec_review
   Critical/Improvement findings, or manual approval feedback — plus a short
   summary of what changed in prior rounds.
-- `spec_author` role → backend resolution (T009).
+- `spec_author` role → backend resolution (`../role-dispatch.md`).
 
 ## Action
 

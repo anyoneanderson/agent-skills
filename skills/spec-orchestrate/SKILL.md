@@ -70,17 +70,22 @@ The orchestrator runs one loop until the pipeline reaches a terminal state:
 2. Open references/phases/<phase>.md and follow its Input → Action →
    Verification → State Update steps.
 3. Dispatch the phase's worker (see Phase Index). Resolve claude vs codex
-   backends by the role-dispatch rules (added in T009); until then claude
-   phases run as subagents and codex phases run via agent-delegate.
+   backends with `references/role-dispatch.md` (claude → subagent, codex →
+   agent-delegate).
 4. Verify the worker's result. If it fails machine verification, do not advance.
 5. Update pipeline-state.json (completed phase, round counts, fingerprints,
    thread ids) and select the next phase per the Transition Table.
 ```
 
+The config file (`pipeline.yml`) and the state file (`pipeline-state.json`) —
+their schemas, the jq/awk read/write idiom, and the orchestrator-only write rule
+— are specified in `references/pipeline-config.md`.
+
 **Resume is the default.** On startup, if `pipeline-state.json` exists, read it,
 summarize the completed phases and the next action in one short block, and
 continue from there. A full run spanning several hours and surviving a crash or
-restart is the normal case, not an exception (REQ-005).
+restart is the normal case, not an exception (REQ-005). See the Resume Behavior
+section of `references/pipeline-config.md`.
 
 ## State Machine — Transition Table
 
@@ -134,7 +139,7 @@ does not implement the detector.
 | retrospective | orchestrator (aggregate) + worker (edits) | — | `phases/retrospective.md` |
 
 Role keys resolve to a backend (claude subagent or codex via agent-delegate)
-through the role-dispatch rules (T009). If `pipeline.yml` is absent, the default
+through `references/role-dispatch.md`. If `pipeline.yml` is absent, the default
 roles apply and the app recipe is empty.
 
 ## Intake Summary

@@ -51,8 +51,8 @@ Write the initial `pipeline-state.json`:
   "completed_phases": ["intake"], "rounds": {}, "threads": {},
   "role_overrides": {}, "arbitrations": [] }
 ```
-The detailed schema is owned by T009; intake writes the minimum required to
-enter spec_generate.
+The full schema and the jq/awk write idiom are in `../pipeline-config.md`;
+intake writes the minimum required to enter spec_generate.
 
 ## Transitions
 
