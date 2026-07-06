@@ -65,7 +65,9 @@ status="$(jq -r .status "$report")"   # done | blocked
 
 ### evaluate（受け入れ試験）
 
-`e2e_runner` → spec-evaluate の同名バックエンド。`claude` は evaluator を
+`e2e_runner` → spec-evaluate の同名バックエンド。spec-evaluate の起動時には
+**必ず `--backend` で明示**して渡す（spec-evaluate 単体実行時の既定は `self` で、
+パイプライン内でこれに頼ると2つの既定が混ざる）。`claude` は evaluator を
 サブエージェント（`workflow-evaluator`）で走らせ、`codex` は agent-delegate
 `--mode delegate --sandbox workspace-write` で走らせる（review ではない — アプリ
 起動とブラウザ操作を伴うため）。spec-evaluate `references/execution-backend.md` 参照。

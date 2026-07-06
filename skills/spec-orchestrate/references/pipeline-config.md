@@ -82,7 +82,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 | `phase` | Current phase; the loop reads this to decide what to run next |
 | `completed_phases` | Phases finished at least once (for the resume summary) |
 | `inspect` | Summary of the last inspect result: CRITICAL / WARNING / INFO counts and the gate (`PASS` when no CRITICAL/WARNING). inspect is a single machine check, not a review loop, so it is one summary object here, not a `rounds` array |
-| `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, finding fingerprints, and the gate. Consumed by stall detection (`stall-detection.md`) |
+| `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, finding fingerprints, and the gate. `evaluate` entries also carry a `blocked` count (blocked cases are neither critical nor improvement; see `phases/evaluate.md`). Consumed by stall detection (`stall-detection.md`) |
 | `threads` | Peer session ids for resume (e.g. `spec_reviewer`) |
 | `role_overrides` | Roles reassigned this run (capability fallback or arbitration swap) |
 | `arbitrations` | Stall adjudication records (see `stall-detection.md`) |

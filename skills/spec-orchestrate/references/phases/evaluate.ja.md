@@ -9,7 +9,9 @@
 - `test.md`、`pipeline.yml` の `app:` 起動レシピ、ラウンド番号。
 - `e2e_runner` ロール → spec-evaluate バックエンド（self / claude サブエージェント /
   agent-delegate `--mode delegate`・workspace-write 経由の codex）。解決は
-  `../role-dispatch.ja.md` の「evaluate」。
+  `../role-dispatch.ja.md` の「evaluate」。spec-evaluate の起動時には解決結果を
+  **必ず `--backend` で明示**して渡す。spec-evaluate 単体実行時の既定は `self` で、
+  これをパイプライン実行に混ぜないため。
 
 ## アクション
 
@@ -37,7 +39,8 @@
 
 - このラウンドを `rounds.evaluate` に **spec_review と同じフィールド形式** で追加し、
   同じ検知器が効くようにする: 各 FAIL 項目を `critical` 件数に、各懸念を
-  `improvement` 件数に写像する（blocked はどちらでもない — 不合格ではない）。加えて
+  `improvement` 件数に写像する（blocked はどちらでもない — 不合格ではない。件数は
+  独立の `blocked` フィールドに記録し、再開時に未検証分が見えるようにする）。加えて
   findings 指紋（`../stall-detection.ja.md` に従い、Critical + Improvement のみ）と
   ゲート結果。生の pass/fail/blocked 件数のまま記録すると、S2（`critical +
   improvement` を合算）がこのループを評価できなくなる。
@@ -50,4 +53,11 @@
   `spec-code --feedback` に渡す（`type: evaluate` の結果は spec-review 互換なので修正
   ループがそのまま消費する）。その後 `round + 1` で再試験。
 - 全項目合格（Gate PASS）→ **pr**
+- blocked あり・FAIL なし（blocked のみで Gate FAIL — blocked は `critical` にも
+  `improvement` にも数えないため、修正ループに渡すものが無い）→ モード別に処理
+  （`../pipeline-config.ja.md` の「app」参照）:
+  - manual: 人間に確認する — 不足している app レシピを追加して `round + 1` で再試験、
+    または明示的にスキップを受け入れる。
+  - auto: `phase` を **arbitration** にする（blocked 項目を `## Unresolved` に列挙した
+    draft PR 着地は正当な結末）。無人実行で未検証要件を ready PR に昇格させない。
 - 停滞シグナル成立 → **arbitration**（`../stall-detection.ja.md`）

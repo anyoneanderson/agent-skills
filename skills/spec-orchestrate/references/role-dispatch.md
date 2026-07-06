@@ -66,7 +66,9 @@ only sandbox a resume can keep).
 
 ### evaluate (acceptance test)
 
-`e2e_runner` → spec-evaluate's backend of the same name. `claude` runs the
+`e2e_runner` → spec-evaluate's backend of the same name, passed **explicitly**
+as `--backend` when dispatching spec-evaluate (its standalone default is `self`;
+relying on it inside the pipeline would mix the two defaults). `claude` runs the
 evaluator as a subagent (`workflow-evaluator`); `codex` runs agent-delegate
 `--mode delegate --sandbox workspace-write` (not review — the run launches the
 app and drives a browser). See spec-evaluate `references/execution-backend.md`.

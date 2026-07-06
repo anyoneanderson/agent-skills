@@ -87,8 +87,14 @@ LLM の自己改善は指示を追加する方向へ偏る。Tier 1 の各対象
 追加行 ÷ 2）なら、自動適用を拒否する。提案は置き換え/削除を伴う編集に作り直すか、
 Tier 2（人間レビュー）へ降格する。
 
+計測対象はパス正規化で得た**正規化済みパス**（`$physical` = `$repo_root/$rel`）で
+あること。生の `$target` はリポジトリ相対で、オーケストレーターの cwd（通常は対象
+プロジェクト側で skills リポジトリではない）基準に解決されてしまい、別ファイルを
+読むか存在せず落ちる。読めない場合は fail-closed で自動適用を拒否する。
+
 ```bash
-lines_after="$(wc -l < "$target")"
+[ -r "$physical" ] || { echo "reject: $physical を読めない — fail-closed で自動適用しない"; exit 1; }
+lines_after="$(wc -l < "$physical")"
 if [ "$lines_after" -gt "$line_budget" ] && [ "$removed" -lt $((added / 2)) ]; then
   echo "reject: 超過かつ追加のみ — 置き換え型に作り直すか Tier 2 へ降格"
 fi

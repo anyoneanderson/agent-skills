@@ -9,7 +9,9 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 - `test.md`, the `app:` launch recipe from `pipeline.yml`, and the round number.
 - `e2e_runner` role → spec-evaluate backend (self / claude subagent / codex via
   agent-delegate `--mode delegate`, workspace-write), resolved by
-  `../role-dispatch.md` → "evaluate".
+  `../role-dispatch.md` → "evaluate". Pass the resolved value **explicitly** as
+  `--backend` when dispatching spec-evaluate: its own standalone default is
+  `self`, which must not leak into pipeline runs.
 
 ## Action
 
@@ -38,7 +40,8 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 - Append this round to `rounds.evaluate` using the **same field shape as
   spec_review** so the same detector applies: map each FAIL case to a `critical`
   count and each concern to an `improvement` count (blocked cases are neither —
-  they are not failures), plus the finding fingerprints (per
+  they are not failures; record their number in a separate `blocked` field so a
+  resumed run can see what is still unverified), plus the finding fingerprints (per
   `../stall-detection.md`, over the Critical + Improvement findings only) and the
   gate result. Recording raw pass/fail/blocked tallies instead would leave S2
   (which sums `critical + improvement`) unable to evaluate this loop.
@@ -52,4 +55,12 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
   `type: evaluate` result is spec-review-compatible, so the fix loop consumes it
   unchanged). Then re-evaluate at `round + 1`.
 - all cases pass (Gate PASS) → **pr**
+- blocked cases present, no FAIL (Gate FAIL on blocked alone — blocked counts
+  toward neither `critical` nor `improvement`, so there is nothing for the fix
+  loop to consume) → mode-dependent, per `../pipeline-config.md` "app":
+  - manual: ask the human — add the missing app recipe (then re-evaluate at
+    `round + 1`) or explicitly accept the skip.
+  - auto: set `phase` to **arbitration** (draft-PR landing with the blocked
+    cases listed under `## Unresolved` is an accepted outcome). Never let an
+    unattended run promote unverified requirements to a ready PR.
 - stall signal fires → **arbitration** (`../stall-detection.md`)

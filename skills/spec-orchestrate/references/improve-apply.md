@@ -93,8 +93,15 @@ after the edit, if the file's line count exceeds `improve.line_budget`
 lines ÷ 2), reject the automatic apply. The proposal must be reworked into a
 replacing/deleting edit, or downgraded to Tier 2 (human review).
 
+Measure the **normalized** path from Path Normalization above (`$physical`, i.e.
+`$repo_root/$rel`) — never raw `$target`, which is repo-relative and would
+resolve against the orchestrator's cwd (usually the target project, not the
+skills repo), reading the wrong file or none at all. If the file cannot be
+read, fail closed: reject the automatic apply.
+
 ```bash
-lines_after="$(wc -l < "$target")"
+[ -r "$physical" ] || { echo "reject: cannot read $physical — fail closed, no auto-apply"; exit 1; }
+lines_after="$(wc -l < "$physical")"
 if [ "$lines_after" -gt "$line_budget" ] && [ "$removed" -lt $((added / 2)) ]; then
   echo "reject: over budget and additive-only — rework as replacement or downgrade to Tier 2"
 fi
