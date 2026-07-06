@@ -4,6 +4,10 @@
 に1つ）と `pipeline-state.json`（実行中の状態、機能ごとに1つ）。このファイルは両者と、
 起動時に状態を読む再開動作を規定する。
 
+既定の `pipeline.yml` は spec-workflow-init が生成できる（その
+`references/pipeline-yml-template.ja.md` を参照）。ファイルが無くてもオーケストレーター
+は組み込みの既定値で動く。
+
 English version: [pipeline-config.md](pipeline-config.md)
 
 ## pipeline.yml
