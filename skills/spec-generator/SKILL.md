@@ -289,6 +289,14 @@ Project names are converted to English kebab-case:
 - "株価分析ツール" → `stock-analysis-tool`
 - "Stock analysis tool" → `stock-analysis-tool`
 
+### 5. Output Integrity Self-Check
+
+After writing each spec file, re-read its tail and confirm no tool-call residue
+has leaked into the content — stray closing tags such as `</content>` or
+`</invoke>`, or any other markup from the write mechanism. Strip any such
+residue before reporting the phase complete. Report completion only once every
+generated file ends with real document content.
+
 ## Options
 
 | Option | Description | Applicable Phase |

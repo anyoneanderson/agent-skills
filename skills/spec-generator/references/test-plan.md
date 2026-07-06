@@ -58,6 +58,12 @@ Each case MUST declare exactly one verification method:
   available, still write the case but flag that it needs a recipe to run.
 - The verification method field is **mandatory** on every case. A case with no
   verification method is not executable and MUST NOT be emitted.
+- Verification commands MUST be runnable in the target environment exactly as
+  written. Avoid shell-dialect constructs, PCRE extensions (for example negative
+  lookahead in `grep -E`, which is invalid in POSIX ERE), and language-version
+  dependent APIs (for example `sys.stdlib_module_names`, added in Python 3.10).
+  When such a feature is unavoidable, state the required version or tool as a
+  precondition in the case's `Command` field.
 
 ### 5. Output Format
 
@@ -110,3 +116,6 @@ Post-generation verification:
 4. [ ] Every case has a non-empty `Verify` field (playwright / command / file-check)
 5. [ ] `playwright` cases note their app launch dependency
 6. [ ] No case invents behavior absent from the spec set
+7. [ ] Every verification command runs in the target environment as written — no
+   shell-dialect, PCRE, or version-dependent API assumptions, or the assumption
+   is stated as a precondition

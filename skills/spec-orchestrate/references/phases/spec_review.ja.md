@@ -19,6 +19,11 @@ agent-delegate 経由の codex、または Claude サブエージェント。
 まず `../role-dispatch.ja.md` でバックエンドを解決し、対応する経路を走らせる。どちらの
 経路も同じレビューファイルを生成し、同じ修正ループに供給する。
 
+**Gate 規則（両バックエンド共通）:** レビュープロンプトでは、`Gate` 行を severity 集計と
+機械的に一致させるようレビュアーに求める — Critical または Improvement が1件でもあれば
+`Gate: FAIL`、Minor のみ / 指摘なしのときだけ `Gate: PASS`。Gate が件数と食い違わないよう、
+毎ラウンドこれをプロンプトに明示する。
+
 **codex バックエンド（agent-delegate）:**
 1. ラウンド1: agent-delegate `--mode review`（read-only）を、仕様ファイル一覧・
    敵対的観点・直前までの修正概要とともに起動する。

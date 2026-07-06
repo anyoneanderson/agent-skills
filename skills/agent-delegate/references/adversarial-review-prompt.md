@@ -56,10 +56,11 @@ type: review
 - Gate: PASS | FAIL
 ```
 
-Gate logic (apply exactly):
+Gate logic (apply exactly) — the Gate line must match the severity tally
+mechanically, with no discretion:
 
-- Any Critical finding → `Gate: FAIL`.
-- Only Improvement/Minor findings, or none → `Gate: PASS`.
+- Any Critical **or Improvement** finding → `Gate: FAIL`.
+- Minor findings only, or no findings → `Gate: PASS`.
 
 Use the label and direction supplied in the review context below for the
 `# Review:` heading and the `Reviewer:` line. Fill `Date` with the current

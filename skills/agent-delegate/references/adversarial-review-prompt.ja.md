@@ -54,10 +54,10 @@ type: review
 - Gate: PASS | FAIL
 ```
 
-Gate 判定（この通りに適用）:
+Gate 判定（この通りに適用）— Gate 行は severity 集計と機械的に一致させ、裁量を挟まない:
 
-- Critical が1件でもあれば → `Gate: FAIL`。
-- Improvement/Minor のみ、または findings 無し → `Gate: PASS`。
+- Critical **または Improvement** が1件でもあれば → `Gate: FAIL`。
+- Minor のみ、または findings 無しのときだけ → `Gate: PASS`。
 
 `# Review:` の見出しと `Reviewer:` 行には、下記のレビュー文脈で渡されるラベルと方向を
 使うこと。`Date` には現在の UTC タイムスタンプを ISO 8601 で入れる。レビュー文脈と
