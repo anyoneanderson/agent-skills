@@ -33,9 +33,10 @@ subagent, a delegated peer LLM, or the invoking agent itself. The driver
 5. **Run against synthetic fixtures, never real data.** Execute the acceptance
    cases with synthetic fixtures or dummy data. Do not capture real personal
    information or real transaction data into evidence (screenshots, logs) — that
-   data would otherwise persist wherever the evidence is kept. If a check truly
-   requires real data, do not run it here: propose it to the human as a separate
-   manual smoke test.
+   data would otherwise persist wherever the evidence is kept. A check that truly
+   requires real data is **permission-gated**: present to the human what will be
+   checked and with which data, and run it only after explicit approval. Never
+   touch real data without that approval.
 
 ## Procedure
 
