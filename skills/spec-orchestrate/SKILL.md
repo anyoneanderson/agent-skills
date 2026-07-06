@@ -47,6 +47,11 @@ delegates all of them. The only actions it performs directly are:
 - Running `gh` commands (Issue fetch, PR create, Issue comments).
 - Composing and formatting worker prompts.
 
+Worker completion is judged by the result file — its existence and a content
+check — not by a subagent's completion notice or chat message. Treat
+notifications as auxiliary: a missing, split, or re-sent completion message does
+not change the outcome; decide from the result file.
+
 If a phase tempts you to "just fix it yourself", stop — that is a worker's job.
 If the required worker skill is not installed, show its install step and halt
 with state preserved (resumable).

@@ -150,3 +150,7 @@ To continue a session, re-run with `--resume <thread_id>` from the prior report
 - The `report.json` schema, sandbox mapping, resume rules, and the read-only
   guarantee-level difference between directions are documented in
   [references/contract.md](references/contract.md).
+- Codex under the `workspace-write` sandbox may refuse to write agent-config dot
+  directories (`.agents/`, `.claude/`), reporting `writing outside of the
+  project`; this can occur with repo layouts that include symlinks. When a task's
+  edits target those directories, prefer assigning it to claude.

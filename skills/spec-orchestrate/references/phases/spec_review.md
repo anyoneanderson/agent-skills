@@ -21,6 +21,12 @@ subagent.
 Resolve the backend via `../role-dispatch.md` first, then run the matching path.
 Both paths produce the same review file and feed the same fix loop.
 
+**Gate rule (both backends):** the review prompt must require the reviewer to set
+the `Gate` line to match the severity tally mechanically — `Gate: FAIL` when
+there is any Critical or Improvement finding, `Gate: PASS` only when the findings
+are Minor-only or none. State this in the prompt every round so the Gate never
+diverges from the counts.
+
 **codex backend (agent-delegate):**
 1. Round 1: launch agent-delegate `--mode review` (read-only) with the spec file
    list, adversarial perspectives, and any prior fix summary.
