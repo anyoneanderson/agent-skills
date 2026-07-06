@@ -30,7 +30,7 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 
 - **Evidence check (do not skip):** for every case reported PASS, confirm its
   evidence pointer resolves to an existing, non-empty file. A PASS with a missing
-  evidence file is forced to FAIL regardless of the evaluator's claim (NFR-003).
+  evidence file is forced to FAIL regardless of the evaluator's claim.
   spec-evaluate performs this; the orchestrator confirms it was applied.
 - Blocked cases (e.g. no app recipe for a playwright case) are distinct from
   failures and are not silently upgraded to pass.

@@ -40,7 +40,7 @@ English version: [role-dispatch.md](role-dispatch.md)
 
 ## Step 3: 同期 vs detach を選ぶ
 
-適切な実行形態はフェーズの所要時間で決まる（design §4.4）:
+適切な実行形態はフェーズの所要時間で決まる:
 
 | フェーズ種別 | 形態 | 理由 |
 |------------|------|------|
@@ -76,7 +76,7 @@ status="$(jq -r .status "$report")"   # done | blocked
 
 実装タスクをここから1件ずつ差配しない。`impl_*` ロールを spec-implement の
 `--roles` 引数として渡し、タスク単位の `kind → 担当` ルーティングは spec-implement
-内部に任せる（REQ-002: 二重管理をしない）。
+内部に任せる（二重管理をしない）。
 
 - `roles` からマップを組む: `ui=<impl_ui>,backend=<impl_backend>,test=<impl_test>`、
   または `pipeline.yml` のパスを渡す（spec-implement が `roles.impl_{kind}` を読む）。

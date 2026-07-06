@@ -1,7 +1,7 @@
 # 振り返り形式 — 集計・メトリクス・レポート
 
 このファイルは retrospective フェーズが生成するものを規定する: 機械的集計、
-`pipeline-metrics.jsonl` の行、`retrospective.md` テンプレート（§5.6）、前回実行との
+`pipeline-metrics.jsonl` の行、`retrospective.md` テンプレート、前回実行との
 比較。要点は、提案を件数で裏づけること — 頻度の裏づけがない気づきは観察に留める。
 
 English version: [retrospective-format.md](retrospective-format.md)
@@ -59,7 +59,7 @@ English version: [retrospective-format.md](retrospective-format.md)
 printf '%s\n' "$line" >> .specs/pipeline-metrics.jsonl
 ```
 
-## Step 3: retrospective.md（§5.6 形式）
+## Step 3: retrospective.md
 
 `.specs/{feature}/retrospective.md` に書く:
 
@@ -93,7 +93,7 @@ type: retrospective
   `improve-apply.ja.md`）。ここでの Tier は提案者の分類で、`improve-apply.ja.md` が
   適用前に canonical path で再検証する。
 - 各提案の Rationale は特定の失敗集計行とその件数を指す。件数がなければ Proposals
-  ではなく Observations に置く（REQ-019: レポートは自由記述の感想ではなく集計で駆動）。
+  ではなく Observations に置く（レポートは自由記述の感想ではなく集計で駆動）。
 
 ## Step 4: 前回実行との比較
 

@@ -25,7 +25,7 @@ Both paths produce the same review file and feed the same fix loop.
 1. Round 1: launch agent-delegate `--mode review` (read-only) with the spec file
    list, adversarial perspectives, and any prior fix summary.
 2. Round ≥ 2: resume the same session with `--resume <thread_id>` so context
-   carries over (NFR-002). Review sessions start read-only, which is the only
+   carries over. Review sessions start read-only, which is the only
    sandbox that resume can keep, so only resume sessions created read-only.
 
 **claude backend (subagent):**
@@ -49,7 +49,7 @@ Both paths produce the same review file and feed the same fix loop.
   Findings with Critical/Improvement/Minor, Summary with `Gate: PASS|FAIL`). A
   malformed review is a worker failure: re-run once, then blocked.
 - Findings must carry a severity. Only Critical / Improvement drive the fix loop;
-  Minor is recorded and carried forward, not fixed (REQ-007).
+  Minor is recorded and carried forward, not fixed.
 
 ## State Update
 

@@ -91,7 +91,7 @@ After the evaluator returns, spec-evaluate re-checks the file it wrote:
    Critical finding: "evidence not found for {case}: {pointer}".
 3. Recompute the `## Summary` counts and the `Gate:` line.
 
-This is the enforcement behind NFR-003: a self-reported pass with no backing
+This is the enforcement of the evidence-first principle: a self-reported pass with no backing
 evidence cannot survive into the accepted result.
 
 **Empty-output cases need a non-empty wrapper log.** When a case's expected

@@ -16,7 +16,7 @@ write.
   completion does not hold (see `phases/retrospective.md` Timing).
 - **`improve.skills_repo` unset or not writable** → degrade to Issue-only (see
   Degradation). Improvements apply to the skills **source repository** only
-  (default `improve.skills_repo`), never to installed copies (§7).
+  (default `improve.skills_repo`), never to installed copies.
 - **`improve.auto_apply: false`** → even Tier 1 proposals are left as PRs awaiting
   human review; nothing auto-merges.
 
@@ -36,8 +36,8 @@ string.
 | `docs/coding-rules.md`, `docs/review_rules.md` | 2 | PR left for human review |
 
 `contract*.md` is **always** Tier 2 even though it lives under `references/`: other
-skills depend on the public contract, so an automatic rewrite could break them
-(§7). SKILL.md and scripts are Tier 2 because they are the skill's executable
+skills depend on the public contract, so an automatic rewrite could break them.
+SKILL.md and scripts are Tier 2 because they are the skill's executable
 surface. When a proposal touches any Tier 2 path, the whole PR is Tier 2.
 
 **Evaluation order matters:** test the specific Tier 2 rows (`contract*.md`,
@@ -54,9 +54,9 @@ auto-merge it. Because auto-merge is the trust boundary, normalize and validate
 `$target` is a **repository-relative** path (e.g. `skills/foo/references/g.md`),
 and it must be anchored to `repo_root` — **not** the current directory. The
 orchestrator normally runs with the target *project* as its cwd while
-`skills_repo` is a separate directory (§7), so anchoring on cwd would push every
+`skills_repo` is a separate directory, so anchoring on cwd would push every
 legitimate target outside the repo-root check and reject it (fail-closed, so not
-a security hole, but REQ-020 auto-apply would never fire).
+a security hole, but auto-apply would never fire).
 
 ```bash
 repo_root="$(git -C "$skills_repo" rev-parse --show-toplevel)"
@@ -85,7 +85,7 @@ rel="${physical#$repo_root/}"
 A path that fails any of (1)–(3) is **rejected** (not applied), not defaulted to
 Tier 1. Match `rel` against the Tier table above.
 
-## Line Budget Check (REQ-021)
+## Line Budget Check
 
 LLM self-improvement drifts toward adding instructions. Guard each Tier 1 target:
 after the edit, if the file's line count exceeds `improve.line_budget`
@@ -107,10 +107,10 @@ if [ "$lines_after" -gt "$line_budget" ] && [ "$removed" -lt $((added / 2)) ]; t
 fi
 ```
 
-## Apply Procedure (REQ-020)
+## Apply Procedure
 
 The orchestrator does only git/PR; a **worker subagent** makes the file edits
-(REQ-002 — the orchestrator never edits skill files itself).
+(the orchestrator never edits skill files itself — delegation-only).
 
 1. In `improve.skills_repo`, create the improve branch `improve/{feature}-{run-id}`.
 2. A worker subagent applies the proposal's edits on that branch.
@@ -122,7 +122,7 @@ The orchestrator does only git/PR; a **worker subagent** makes the file edits
    - **Tier 2 included** → leave the PR open for human review; do not merge.
 
 Even Tier 1 goes branch → PR → merge (never a direct push) so the audit shape
-matches Tier 2 and any bad change reverts with a single `git revert` (§7).
+matches Tier 2 and any bad change reverts with a single `git revert`.
 
 ## Degradation (no writable skills repo)
 
@@ -130,7 +130,7 @@ If `improve.skills_repo` is unset or not writable, do not apply anything. Instea
 file an Issue on the agent-skills repository containing the proposals (target,
 Tier, rationale). This keeps the learning without requiring write access.
 
-## Revert (REQ-022)
+## Revert
 
 Because features and difficulty differ run to run, a single worse comparison is
 noise; auto-reverting on it makes improvement and rollback oscillate. So revert is

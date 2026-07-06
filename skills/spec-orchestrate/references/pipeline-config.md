@@ -135,4 +135,4 @@ feature, the orchestrator does not start over.
    is safe because every phase verifies its own output before advancing.
 
 A multi-hour run that is interrupted or crashes resumes from the last recorded
-phase — this is the normal path, not an exception (REQ-005).
+phase — this is the normal path, not an exception.

@@ -1,8 +1,8 @@
 # Retrospective Format — Aggregation, Metrics, and Report
 
 This file specifies what the retrospective phase produces: the mechanical
-aggregation, the `pipeline-metrics.jsonl` line, the `retrospective.md` template
-(§5.6), and the previous-run comparison. The point is that proposals are backed
+aggregation, the `pipeline-metrics.jsonl` line, the `retrospective.md` template,
+and the previous-run comparison. The point is that proposals are backed
 by counts, not vibes — a suggestion with no frequency behind it stays an
 observation.
 
@@ -62,7 +62,7 @@ when nothing was applied or the run degraded to Issue-only or did not reach pr):
 printf '%s\n' "$line" >> .specs/pipeline-metrics.jsonl
 ```
 
-## Step 3: retrospective.md (§5.6 format)
+## Step 3: retrospective.md
 
 Write to `.specs/{feature}/retrospective.md`:
 
@@ -96,7 +96,7 @@ Rules:
   `improve-apply.md`). The Tier here is the proposer's classification;
   `improve-apply.md` re-verifies it against the canonical path before applying.
 - Every proposal's Rationale points at a specific failure-breakdown row and its
-  count. No count → it belongs under Observations, not Proposals (REQ-019: the
+  count. No count → it belongs under Observations, not Proposals (the
   report is driven by tallies, not free-form impressions).
 
 ## Step 4: Previous-Run Comparison

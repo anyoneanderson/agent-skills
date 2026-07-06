@@ -50,8 +50,8 @@ An evaluator claiming "I tested it and it passed" is not trusted. Every passing
 case must point to real evidence on disk (a screenshot, a command log, or a
 verified artifact). Before a result is accepted, the evidence pointers in it are
 checked for existence: **a case marked PASS whose referenced evidence file does
-not exist is forced to FAIL**, regardless of what the evaluator reported
-(NFR-003). See §Evidence Rules and `references/result-format.md`.
+not exist is forced to FAIL**, regardless of what the evaluator reported.
+See §Evidence Rules and `references/result-format.md`.
 
 ## Execution Flow
 

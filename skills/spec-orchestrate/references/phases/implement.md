@@ -31,7 +31,7 @@ the outcome.
 ## Verification
 
 - Tasks in tasks.md are marked complete and the git diff reflects real changes
-  (measured, not self-reported — NFR-003).
+  (measured, not self-reported).
 - spec-implement returned without an unresolved blocker. If a `codex`-owned task
   reports agent-delegate unavailable, apply the reassignment rule from
   §Error Handling (auto reassigns and records; manual confirms).

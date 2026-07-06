@@ -1,7 +1,7 @@
 # Stall Detection and Arbitration
 
 Review loops have no hard iteration cap — ten round-trips on a hard review is
-normal (design §7). What must not happen is an *unproductive* loop running
+normal. What must not happen is an *unproductive* loop running
 forever. This file defines a purely mechanical detector over `state.rounds` and
 the adjudication that runs only when the detector fires. The machine records the
 signal; a human or the LLM makes the call.
@@ -48,7 +48,7 @@ At the end of every review/evaluate round, append one entry to the matching
 
 `fingerprints` covers **only the Critical and Improvement findings** — the ones
 the fix loop actually acts on. Minor findings are excluded: they are recorded and
-carried forward unchanged (REQ-007), so a couple of un-fixed Minors persisting
+carried forward unchanged, so a couple of un-fixed Minors persisting
 across rounds would otherwise trip S1 every time and fire a false stall.
 
 The detector reads **only** this array — no finding bodies, no re-parsing. That
@@ -109,7 +109,7 @@ No human is present, so choose autonomously:
    re-run with a claude reviewer.)
 2. **(b) Land a draft PR.** If the swap budget is already spent (already swapped
    once), option (a) is unavailable and arbitration lands a **draft PR** with the
-   unresolved Critical / Improvement recorded (design §4.6, PR assembly in
+   unresolved Critical / Improvement recorded (PR assembly in
    pr.md).
 
 So the first stall in auto swaps once; a second stall (post-swap) lands a draft.

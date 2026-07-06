@@ -27,7 +27,7 @@ the result, updates state, and advances.
 ## Language Rules
 
 1. **Auto-detect input language** → produce specs, reports, and PR body in the
-   same language (REQ-018).
+   same language.
 2. Japanese input → Japanese output, use the `*.ja.md` phase guides under
    `references/phases/`.
 3. English input → English output, use the `*.md` phase guides.
@@ -39,11 +39,11 @@ the result, updates state, and advances.
 > **🚨 BLOCKING — this rule overrides every phase guide.**
 
 spec-orchestrate does **not** write specifications, code, tests, or reviews. It
-delegates all of them (REQ-002). The only actions it performs directly are:
+delegates all of them. The only actions it performs directly are:
 
 - Reading and writing `pipeline-state.json` (state is orchestrator-owned).
 - Verifying worker results against machine-checkable evidence (git diff, result
-  files, screenshots) — never trusting a worker's self-report (NFR-003).
+  files, screenshots) — never trusting a worker's self-report.
 - Running `gh` commands (Issue fetch, PR create, Issue comments).
 - Composing and formatting worker prompts.
 
@@ -84,12 +84,12 @@ their schemas, the jq/awk read/write idiom, and the orchestrator-only write rule
 **Resume is the default.** On startup, if `pipeline-state.json` exists, read it,
 summarize the completed phases and the next action in one short block, and
 continue from there. A full run spanning several hours and surviving a crash or
-restart is the normal case, not an exception (REQ-005). See the Resume Behavior
+restart is the normal case, not an exception. See the Resume Behavior
 section of `references/pipeline-config.md`.
 
 ## State Machine — Transition Table
 
-Every transition in the design's state diagram (§2.1) is listed here. The
+Every state transition is listed here. The
 `Guide` column is the phase file that carries the detailed Input / Action /
 Verification / State-Update steps.
 
@@ -116,7 +116,7 @@ Verification / State-Update steps.
 
 **Ordering principle:** run the cheap machine check (inspect) before the
 expensive semantic check (adversarial spec_review), so a peer LLM's tokens are
-never spent on formatting defects (REQ-003).
+never spent on formatting defects.
 
 **Arbitration** is entered only when a stall signal fires in spec_review or
 evaluate. Its detection algorithm (fingerprints and signals S1–S3, evaluated
@@ -159,7 +159,7 @@ language, `phase: spec_generate`) and proceed.
 
 ## Error Handling
 
-Mirrors design §6. In every case, state is preserved so the run is resumable.
+In every case, state is preserved so the run is resumable.
 
 | Situation | Response |
 |---|---|

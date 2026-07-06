@@ -41,7 +41,7 @@ contract forbids relying on environment self-detection in a nested chain.
 
 ## Step 3: Choose Sync vs Detached Execution
 
-The right execution form depends on how long the phase runs (design §4.4):
+The right execution form depends on how long the phase runs:
 
 | Phase kind | Form | Why |
 |------------|------|-----|
@@ -77,7 +77,7 @@ app and drives a browser). See spec-evaluate `references/execution-backend.md`.
 
 Do **not** route implementation tasks one-by-one from here. Pass the `impl_*`
 roles to spec-implement as its `--roles` argument, and let spec-implement do the
-per-task `kind → owner` routing internally (REQ-002: no double management).
+per-task `kind → owner` routing internally (no double management).
 
 - Build the map from `roles`: `ui=<impl_ui>,backend=<impl_backend>,test=<impl_test>`,
   or pass the `pipeline.yml` path (spec-implement reads `roles.impl_{kind}` from it).

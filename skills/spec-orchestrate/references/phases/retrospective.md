@@ -7,7 +7,7 @@ auto-apply / revert mechanics are in `../improve-apply.md`, referenced but not
 implemented in this phase guide.
 
 The detailed aggregation procedure, the `pipeline-metrics.jsonl` schema, the
-`retrospective.md` §5.6 template, and the previous-run comparison are in
+`retrospective.md` template, and the previous-run comparison are in
 `../retrospective-format.md`.
 
 ## Timing
@@ -31,7 +31,7 @@ invoked to run this phase standalone against an existing state file.
 
 ## Action
 
-Role division (design §4.10, consistent with REQ-002): the orchestrator does the
+Role division: the orchestrator does the
 mechanical aggregation, the Tier judgment, and the git/PR operations; the
 **analysis and any file edits are delegated to a worker**. The orchestrator never
 edits skill files directly.
@@ -60,7 +60,7 @@ edits skill files directly.
 
 ## Output
 
-- `retrospective.md` in `.specs/{feature}/` in the §5.6 format (execution
+- `retrospective.md` in `.specs/{feature}/` in the retrospective format (execution
   summary / failure breakdown table / stall-and-arbitration record / improvement
   proposals with rationale + Tier / observations).
 - One appended line in `.specs/pipeline-metrics.jsonl`.
@@ -68,7 +68,7 @@ edits skill files directly.
 
 ## Verification
 
-- `retrospective.md` follows the §5.6 format and every proposal carries a
+- `retrospective.md` follows the retrospective format and every proposal carries a
   rationale (the aggregation row it came from) and a Tier.
 - The metrics line was appended and parses as JSON.
 - The failure breakdown is reproducible from `state` + `report.json` files alone

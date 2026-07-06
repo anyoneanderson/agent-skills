@@ -10,12 +10,12 @@ history and the acceptance evidence — and how a stalled run lands as a draft.
 ## Base: spec-implement + Workflow Conventions
 
 The PR is created by spec-implement's final step. The orchestrator does not
-reinvent branch or PR conventions (REQ-002):
+reinvent branch or PR conventions:
 
-- If `issue-to-pr-workflow.md` exists, its branch naming and PR conventions win
-  (REQ-016). spec-implement already reads it as its playbook.
+- If `issue-to-pr-workflow.md` exists, its branch naming and PR conventions win.
+  spec-implement already reads it as its playbook.
 - If `coding-rules.md` exists, it is handed to spec-implement (which passes it to
-  spec-code); the orchestrator does not apply coding rules itself (REQ-016).
+  spec-code); the orchestrator does not apply coding rules itself.
 - The orchestrator's only additions are the body sections below, appended to the
   workflow's PR template.
 
@@ -29,7 +29,7 @@ result files — never from the orchestrator's recollection.
 From `state.rounds` (`spec_review` and the per-task implementation reviews):
 
 - Per loop: the number of rounds and the final gate (PASS / FAIL-then-landed).
-- Unresolved **Minor** findings, listed (Minor is recorded, not fixed — REQ-007).
+- Unresolved **Minor** findings, listed (Minor is recorded, not fixed).
 - If a role swap or arbitration occurred, one line per `state.arbitrations` entry
   (signal + decision), so a reader sees why the run swapped owners or landed a
   draft.

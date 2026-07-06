@@ -22,8 +22,8 @@ agent-delegate 経由の codex、または Claude サブエージェント。
 **codex バックエンド（agent-delegate）:**
 1. ラウンド1: agent-delegate `--mode review`（read-only）を、仕様ファイル一覧・
    敵対的観点・直前までの修正概要とともに起動する。
-2. ラウンド2以降: `--resume <thread_id>` で同一セッションを継続し文脈を持ち越す
-   （NFR-002）。レビューセッションは read-only で開始され、resume が保てる sandbox
+2. ラウンド2以降: `--resume <thread_id>` で同一セッションを継続し文脈を持ち越す。
+   レビューセッションは read-only で開始され、resume が保てる sandbox
    はそれだけなので、read-only で作られたセッションのみを resume する。
 
 **claude バックエンド（サブエージェント）:**
@@ -47,7 +47,7 @@ agent-delegate 経由の codex、または Claude サブエージェント。
   /Minor を持つ Findings、`Gate: PASS|FAIL` 行を持つ Summary）。形式不正はワーカー
   失敗: 1回再実行し、なお不正なら blocked。
 - findings は severity 必須。修正ループを回すのは Critical / Improvement のみ。
-  Minor は記録して持ち越し、修正しない（REQ-007）。
+  Minor は記録して持ち越し、修正しない。
 
 ## state 更新
 

@@ -188,7 +188,7 @@ For Claude Code agent team:
 For cmux dispatch:
 1. Read workflow's dispatch strategy and agent definition file paths
 2. Map roles to agents (implementer/tester → cmux-delegate, reviewer → cmux-second-opinion)
-3. Pass skill commands — worker skills handle their own context loading via §4.0
+3. Pass skill commands — worker skills handle their own context loading
 
 ### Phase 6b: Kind-Based Task Routing (`--roles`)
 
