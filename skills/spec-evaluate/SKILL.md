@@ -111,7 +111,9 @@ After the backend returns, the runner independently checks the result file:
 2. Resolve each pointer relative to `{spec}/` and test for existence.
 3. Any PASS case with a missing or empty evidence file → rewrite it to FAIL and
    add a Critical finding noting the missing evidence.
-4. Recompute the Gate line after any such downgrade.
+4. Recompute each Evidence Manifest row's sha256/size and compare to the
+   manifest; on a mismatch, rewrite that case to FAIL with a Critical finding.
+5. Recompute the Gate line after any such downgrade.
 
 This step is what makes the evidence principle enforceable rather than advisory.
 

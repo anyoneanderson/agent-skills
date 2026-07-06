@@ -30,15 +30,37 @@
    auto モードでは AskUserQuestion を一切呼ばない。
 4. feature 名を Issue タイトルから kebab-case で導出する。
 
+**両モード共通 — 運転記録の `.gitignore`:**
+
+`.specs/.gitignore` が運転記録を除外するようにする。`.specs/` を追跡している
+プロジェクトでも運転記録をコミットしないためのもの。ファイルが無ければ、以下の内容
+そのままで作成する。あれば、不足しているパターンのみ追記する — 既存行は変更・削除
+しない（プロジェクトが1行を削って意図的にある記録を戻している場合がある）。
+
+```
+# spec-orchestrate run records — local only (see spec-orchestrate references/pipeline-config.md)
+# Delete lines here if your project intentionally commits run records.
+pipeline-metrics.jsonl
+*/pipeline-state.json
+*/inspection-report.md
+*/.inspection_result.json
+*/review-*.md
+*/evaluate-*.md
+*/evidence/
+*/retrospective.md
+```
+
 ## 出力
 
 - 確定した書き込み可能な `.specs/{feature}/` ディレクトリパス。
 - 初期 `pipeline-state.json`（state 更新を参照）。
+- 運転記録を除外する `.specs/.gitignore`（新規作成または追記）。
 - auto: Issue から導いた整形済みの無対話 planner 入力。
 
 ## 検証
 
 - `.specs/{feature}/` のパスが決まり、書き込み可能である。
+- `.specs/.gitignore` が存在し、上記の運転記録パターンを含む。
 - auto: Issue が存在し取得できた（title/body が非空）。`gh` の認証/不在エラー時は
   §エラー処理に従いここで停止する。
 

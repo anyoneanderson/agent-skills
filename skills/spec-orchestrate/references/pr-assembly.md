@@ -45,18 +45,30 @@ From `state.rounds` (`spec_review` and the per-task implementation reviews):
 
 ### `## Acceptance Evidence`
 
-From the final `evaluate-{n}.md` and the `evidence/{n}/` directory:
+From the final `evaluate-{n}.md`, including its Evidence Manifest:
 
 - The requirement-ID pass/fail table (case, requirement, verify, verdict).
-- Each row's evidence as a **relative path** under `.specs/{feature}/evidence/`,
-  so a reviewer can open the screenshot or log from the PR.
+- An evidence manifest — filename, byte size, and sha256 — for each evidence
+  file, copied from the result file's manifest.
+- The evidence files themselves are run records and are **not committed or
+  attached** (see `pipeline-config.md` → Artifact Classification). The PR carries
+  the manifest, not the binaries: the hashes let a reviewer confirm the evidence
+  was not swapped after the run, without screenshots or logs entering git
+  history. Do not embed screenshots or raw review files in the PR body — the
+  review rounds are already summarized under Adversarial Review History above.
 
 ```markdown
 ## Acceptance Evidence
-| Case | Requirement | Verify | Verdict | Evidence |
-|------|-------------|--------|---------|----------|
-| T-A01 | REQ-001 | playwright | PASS | .specs/user-auth/evidence/2/T-A01-login.png |
-| T-A02 | NFR-001 | command | PASS | .specs/user-auth/evidence/2/T-A02-latency.log |
+| Case | Requirement | Verify | Verdict |
+|------|-------------|--------|---------|
+| T-A01 | REQ-001 | playwright | PASS |
+| T-A02 | NFR-001 | command | PASS |
+
+### Evidence Manifest
+| File | Bytes | sha256 |
+|------|-------|--------|
+| evidence/2/T-A01-login.png | 51384 | a1b2c3d4… |
+| evidence/2/T-A02-latency.log | 892 | d4e5f6a7… |
 ```
 
 ### `## Unresolved` (draft landing only)

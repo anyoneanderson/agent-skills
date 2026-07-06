@@ -23,6 +23,14 @@ the outcome.
    `spec-code --feedback` through spec-implement so the same fix loop applies to
    test failures, then re-run the affected tasks.
 
+**Staging guard:** stage implementation files by explicit pathspec — plus the
+four spec files (`requirement.md` / `design.md` / `tasks.md` / `test.md`) only
+when the project's policy is to commit spec artifacts. Never stage run records
+(`evidence/`, `review-*.md`, `inspection-report.md`, `.inspection_result.json`,
+`evaluate-*.md`, `pipeline-state.json`, `retrospective.md`,
+`pipeline-metrics.jsonl`). The pathspec exclusion at staging is the first guard;
+the `.specs/.gitignore` written at intake is the backstop.
+
 ## Output
 
 - Implemented changes on the feature branch, with the corresponding `tasks.md`

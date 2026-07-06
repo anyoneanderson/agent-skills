@@ -51,6 +51,13 @@ type: evaluate
   pipeline.yml. Evidence: `evidence/{n}/app-startup.log`. Not counted as a
   failure; needs a launch recipe to run.
 
+## Evidence Manifest
+| File | Bytes | sha256 |
+|------|-------|--------|
+| evidence/{n}/T-A01-login.png | 51384 | a1b2c3d4e5f6… |
+| evidence/{n}/T-A02-latency.log | 892 | d4e5f6a7b8c9… |
+| evidence/{n}/T-A03-export.log | 240 | f0e1d2c3b4a5… |
+
 ## Summary
 - Cases: 2 PASS / 1 FAIL / 1 BLOCKED (4 total)
 - Critical: 1 | Improvement: 1 | Minor: 0
@@ -72,6 +79,17 @@ type: evaluate
 - **Blocked** section lists cases that could not run for want of setup. Blocked
   is distinct from FAIL: it is not a Critical finding and is not a quality defect
   in the implementation.
+- **Evidence Manifest** lists every evidence file cited by the result, with its
+  byte size and sha256 digest. It exists so the PR can carry a verifiable record
+  of the evidence without committing the files themselves (which are run records,
+  kept local). Compute each row with `shasum`:
+
+  ```bash
+  # from the evidence directory; wc -c gives the byte size, shasum -a 256 the digest
+  for f in evidence/{n}/*; do
+    printf '| %s | %s | %s |\n' "$f" "$(wc -c < "$f")" "$(shasum -a 256 "$f" | cut -d' ' -f1)"
+  done
+  ```
 
 ## Gate Logic
 
@@ -89,7 +107,11 @@ After the evaluator returns, spec-evaluate re-checks the file it wrote:
    `.specs/{feature}/`.
 2. If the file is missing or empty, rewrite the verdict to FAIL and add a
    Critical finding: "evidence not found for {case}: {pointer}".
-3. Recompute the `## Summary` counts and the `Gate:` line.
+3. For each Evidence Manifest row, recompute the file's sha256 and byte size and
+   compare them to the manifest. If a digest does not match (the evidence on disk
+   differs from what the manifest recorded), rewrite that case's verdict to FAIL
+   and add a Critical finding: "evidence hash mismatch for {case}: {file}".
+4. Recompute the `## Summary` counts and the `Gate:` line.
 
 This is the enforcement of the evidence-first principle: a self-reported pass with no backing
 evidence cannot survive into the accepted result.
