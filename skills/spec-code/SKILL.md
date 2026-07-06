@@ -90,6 +90,7 @@ The feedback file is auto-detected by its `type:` header line:
 
 - **type: review** → Read `## Findings` section. Fix Critical findings at specified file:line, then Improvements.
 - **type: test** → Read `## Test Cases` for failures and `## Completion Criteria Coverage` for uncovered criteria. Fix the failing tests by modifying implementation code.
+- **type: evaluate** → Same `## Findings` processing as `type: review` (identical `### Critical` / `### Improvement` structure). Fix Critical findings first, then Improvements. Ignore the `## Blocked` section: blocked cases are setup gaps, not failures, and are not fix targets.
 
 For both types:
 - Focus on items marked as FAIL or `- [ ]` (unchecked)

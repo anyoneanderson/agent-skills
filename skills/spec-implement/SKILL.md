@@ -32,6 +32,7 @@ Coordinate worker skills (spec-code, spec-review, spec-test) to implement from s
 | `--issue {N}` | Specify GitHub Issue number for context |
 | `--spec {path}` | Specify .specs/ directory path (default: auto-detect) |
 | `--dry-run` | Show execution plan without making any changes |
+| `--roles {map}` | Per-task owner routing by `kind`. Format: `ui=claude,backend=codex,test=codex`, or a path to a `pipeline.yml` whose `roles.impl_{kind}` keys supply the mapping. Omitted → every task uses spec-code and every review uses spec-review (legacy behavior, no agent-delegate involvement). |
 
 ## Role: Orchestrator Only
 
@@ -187,7 +188,42 @@ For Claude Code agent team:
 For cmux dispatch:
 1. Read workflow's dispatch strategy and agent definition file paths
 2. Map roles to agents (implementer/tester → cmux-delegate, reviewer → cmux-second-opinion)
-3. Pass skill commands — worker skills handle their own context loading via §4.0
+3. Pass skill commands — worker skills handle their own context loading
+
+### Phase 6b: Kind-Based Task Routing (`--roles`)
+
+This layer sits **on top of** the Phase 6 loop and only activates when `--roles` is
+provided (orchestrated mode). Without `--roles`, every task uses spec-code and every
+review uses spec-review — identical to legacy behavior, with no agent-delegate
+involvement. The loop's control flow (per-phase iteration, fix loop with its 3-iteration
+cap, gate evaluation, checkbox marking, spec-test) is unchanged; only the executor of
+each step is resolved per task.
+
+**Owner resolution (per task):**
+1. Read the task's `kind:` field (`ui | backend | test`) from its detail block in tasks.md.
+2. `owner = roles[kind]` when kind is known and present in the map; otherwise `claude` (default).
+3. Implementation executor:
+   - `owner == claude` → **spec-code** (all existing dispatch modes apply, unchanged).
+   - `owner == codex` → **agent-delegate** script, `--mode delegate` (detach + poll `report.json`).
+
+**Reviewer inversion (review gate):** the reviewer is always the opposite side of the
+task's implementer ("the author does not review their own work"):
+
+| Implementer (from kind) | Reviewer | How |
+|---|---|---|
+| codex | claude | **spec-review** (unchanged) |
+| claude | codex | **agent-delegate** script, `--mode review` (synchronous) |
+
+Fixes route to the implementer's executor: `spec-code --feedback` for claude,
+agent-delegate `--mode delegate` (resume) for codex. The agent-delegate review file is
+spec-review-compatible (severity sections + `Gate: PASS|FAIL`), so the existing fix loop
+consumes it unchanged.
+
+agent-delegate is a public-contract dependency: call the script per
+`agent-delegate/references/contract.md` and **always pass `--target` explicitly** (the
+contract's nested-chain caveat forbids self-detection for programmatic callers). See
+`references/implement-guide.md` → "Kind-Based Task Routing" for invocation details,
+polling, sandbox stages, resume, and unavailable-peer fallback.
 
 ### Phase 7: Final Quality Gate
 
@@ -223,6 +259,7 @@ gh pr create \
 | `tasks.md` missing | Warning: generate simple checklist from Issue |
 | On protected branch | 🚨 BLOCKING: stop, require feature branch |
 | Worker skill not installed | Error: suggest `npx skills add anyoneanderson/agent-skills --skill {name}` |
+| agent-delegate unavailable for a `codex`-owned task (script missing / exit 2 / `tool_unavailable`) | Report the blocker to the caller (orchestrator decides reassignment per its mode). Standalone: warn and fall back to spec-code for that task. |
 | Review FAIL after 3 iterations | Ask user to decide |
 | Test FAIL after fix attempt | Ask user to decide |
 

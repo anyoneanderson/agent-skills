@@ -5,9 +5,10 @@
 The `--feedback` option accepts both review results and test results. The file format is auto-detected:
 
 ### Header Detection
-- The first metadata line must declare the feedback type: `type: review` or `type: test`
+- The first metadata line must declare the feedback type: `type: review`, `type: test`, or `type: evaluate`
 - `type: review` means the file follows the spec-review contract
 - `type: test` means the file follows the spec-test contract
+- `type: evaluate` means the file follows the spec-evaluate contract (acceptance results)
 - If the header is missing, fall back to section-based detection only as a best-effort compatibility path
 
 ### Review Result (from spec-review)
@@ -19,6 +20,10 @@ The `--feedback` option accepts both review results and test results. The file f
 - Contains `## Test Cases` section with pass/fail status
 - Contains `## Completion Criteria Coverage` table
 - Focus on fixing failing tests and uncovered criteria
+
+### Evaluate Result (from spec-evaluate)
+- Uses the same `## Findings` structure as a review result (`### Critical` / `### Improvement` / `### Minor`), so it is processed identically — address Critical findings first, then Improvements
+- Ignore the `## Blocked` section: blocked cases are setup gaps (e.g., a missing app launch recipe), not implementation failures, and are not fix targets
 
 ## Commit Conventions
 

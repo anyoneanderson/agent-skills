@@ -18,7 +18,9 @@
 | [spec-code](skills/spec-code/) | 仕様書から1タスクを自律的に実装 |
 | [spec-review](skills/spec-review/) | ルール×ファイルのマトリックスによる構造化コードレビュー |
 | [spec-test](skills/spec-test/) | タスク完了条件に基づくテスト作成・実行 |
+| [spec-evaluate](skills/spec-evaluate/) | 受け入れテスト計画（test.md）をビルドに対して実行し、証跡を保存して要件別の合否を報告 |
 | [spec-implement](skills/spec-implement/) | spec-code/review/testをオーケストレーションし仕様書からPRまで |
+| [spec-orchestrate](skills/spec-orchestrate/) | Issue や要求を仕様→敵対的レビュー→実装→受け入れ試験→PRまで一気通貫で駆動（manual / 完全自律） |
 | [cmux-fork](skills/cmux-fork/) | Claude Codeの会話を新しいcmuxペインまたはワークスペースにフォーク |
 | [cmux-delegate](skills/cmux-delegate/) | 別のcmuxペインまたはワークスペースでAIエージェントにタスクを委任 |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | cmux経由で別AIエージェントにコードや仕様書の独立レビューを依頼 |
@@ -45,7 +47,9 @@ npx skills add anyoneanderson/agent-skills --skill spec-workflow-init -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-code -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-review -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-test -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-evaluate -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-implement -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-orchestrate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
@@ -195,6 +199,7 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
    - `requirement.md` — 要件定義書
    - `design.md` — 技術設計書
    - `tasks.md` — 実装タスクリスト
+   - `test.md` — 受け入れテスト計画（full ワークフローの最終ステップで生成）
 
 2. **handover** がセッション継続を支援:
    - ローカルの `handover.md` と `.handover/` 状態ファイルを作成

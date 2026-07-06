@@ -50,6 +50,7 @@ Each task includes:
 | Field | Description |
 |-------|-------------|
 | Task ID | T001, T002... |
+| Kind | `ui` \| `backend` \| `test` — the nature of the work (required) |
 | Requirement ID | REQ-001, NFR-001... |
 | Task Name | Clear, actionable description |
 | Design Reference | design.md L:123-145 |
@@ -57,6 +58,26 @@ Each task includes:
 | Estimated Time | Time to completion |
 | Target Files | Files to create/modify |
 | Done Criteria | Specific acceptance criteria |
+
+### Kind Label (required on every task detail)
+
+Every task detail MUST carry a `kind` label as its first field:
+
+| Kind | Work it covers |
+|------|----------------|
+| `ui` | User-facing screens, components, styling, client-side interaction |
+| `backend` | APIs, business logic, data access, schema, server-side jobs |
+| `test` | Test code, fixtures, test harness setup |
+
+**One kind per task — do not mix.** If a single task would touch both UI and
+backend (e.g., "add a login screen and its auth API"), **split it into two
+tasks** (`kind: ui` and `kind: backend`) with an explicit dependency between
+them. Mixed-kind tasks cannot be routed to a single owner and are disallowed.
+
+`kind` labels a task's nature; the phase-level `[code]` / `[orchestrator]` role
+tag (see §8) is a separate axis and both are present. A downstream skill that
+does not read `kind` simply ignores the extra line and processes tasks.md
+unchanged (backward compatible).
 
 ### 5. Task Hierarchy (--hierarchy)
 
@@ -136,8 +157,8 @@ Task decomposition based on design document
 - [ ] T001-R: spec-review + spec-test for Phase 1
 
 ### Phase 2: Core Implementation [code]
-- [ ] T003: [REQ-001] Authentication
-- [ ] T004: [REQ-002] Data management
+- [ ] T003: [REQ-001] Authentication API
+- [ ] T004: [REQ-001] Login screen
 
 ### Phase 2-R: Core Implementation Review Gate [orchestrator]
 - [ ] T003-R: spec-review + spec-test for Phase 2
@@ -149,6 +170,7 @@ Task decomposition based on design document
 ## 3. Task Details
 
 ### T001: Add Dependencies and Create Config Files
+- kind: backend
 - Requirement ID: — (foundation task)
 - Design reference: design.md L:45-60
 - Dependencies: None
@@ -160,23 +182,35 @@ Task decomposition based on design document
   - [ ] Development environment starts successfully
 - Parallel execution: Can run simultaneously with T002
 
-### T003: [REQ-001] Authentication
+### T003: [REQ-001] Authentication API
+- kind: backend
 - Requirement ID: REQ-001
 - Design reference: design.md L:120-180
 - Dependencies: T001
 - Estimated time: 4 hours
-- Target files: src/auth/*, src/api/auth.ts
+- Target files: src/api/auth.ts
 - Done criteria:
-  - [ ] Login functionality works
+  - [ ] Login endpoint works
   - [ ] JWT tokens issued correctly
   - [ ] Unit tests pass
+
+### T004: [REQ-001] Login Screen
+- kind: ui          # split from T003: UI and backend are separate kinds
+- Requirement ID: REQ-001
+- Design reference: design.md L:120-180
+- Dependencies: T003
+- Estimated time: 3 hours
+- Target files: src/auth/LoginForm.tsx
+- Done criteria:
+  - [ ] Login form renders and submits to the auth API
+  - [ ] Validation errors are shown inline
 
 ## 4. Dependency Graph
 
 ```mermaid
 graph LR
     T001 --> T003
-    T001 --> T004
+    T003 --> T004
     T003 --> T005
     T004 --> T005
 ```
@@ -186,7 +220,7 @@ graph LR
 | Phase | Parallelizable Tasks |
 |-------|---------------------|
 | 1 | T001, T002 |
-| 2 | T003, T004 |
+| 2 | T003 (then T004) |
 | 3 | T005, T006 |
 ```
 
@@ -233,3 +267,5 @@ Post-generation verification:
 4. [ ] Time estimates are realistic
 5. [ ] Done criteria are specific and measurable
 6. [ ] Parallel execution opportunities maximized
+7. [ ] Every task detail has a `kind` label (ui / backend / test)
+8. [ ] No task mixes multiple kinds (mixed work was split into separate tasks)
