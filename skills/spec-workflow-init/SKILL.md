@@ -380,6 +380,16 @@ If an existing workflow file is detected (from Step 1 or during generation):
 
 5. If files already exist, ask for overwrite confirmation
 
+### Step 6c: Pipeline Config Generation
+
+Generate the default `.specs/pipeline.yml` that spec-orchestrate reads for role
+assignments, following `references/pipeline-yml-template.md` (`.ja.md` for
+Japanese output):
+
+1. If `.specs/pipeline.yml` already exists, report the path and skip — do not
+   overwrite it.
+2. Otherwise, create `.specs/` if missing and write the template verbatim.
+
 ### Step 7: AGENTS.md / CLAUDE.md Reference Update
 
 1. Check for convention files:
