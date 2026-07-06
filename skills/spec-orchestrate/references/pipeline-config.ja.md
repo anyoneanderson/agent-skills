@@ -122,6 +122,34 @@ awk 流儀）:
 awk '/^roles:/{f=1;next} f&&/^[a-z]/{exit} f&&/spec_reviewer:/{print $2}' "$pipeline"
 ```
 
+## 成果物の分類
+
+パイプラインは `.specs/` 配下に2種類のファイルを書き、それぞれコミット方針が異なる。
+
+**仕様成果物** — `requirement.md` / `design.md` / `tasks.md` / `test.md`。
+これらをコミットするかはプロジェクトの判断（既存の動作から変更なし）。人が読める
+ドキュメントであり、機能の設計記録に属する。
+
+**運転記録** — `pipeline-state.json` / `inspection-report.md` /
+`.inspection_result.json` / `review-*.md` / `evaluate-*.md` / `evidence/` /
+`retrospective.md` / `pipeline-metrics.jsonl`。これらは**既定でコミットしない**。
+理由:
+
+- バイナリ証跡（スクリーンショット）は diff でレビューできない。
+- 稼働中のシステムから採った証跡は、実在の個人情報や機密データを git 履歴に永続
+  させうる。
+- レビューラウンドの生ファイルは PR 本文と重複する。PR 本文には機械生成のレビュー
+  履歴要約と、証跡マニフェスト付きの合否表が既に載る。
+
+中断再開に運転記録のコミットは要らない: 中断復帰はローカルの `pipeline-state.json`
+で成立する（「再開動作」参照）ため、運転記録はローカルディスクにあれば足り、git に
+は要らない。
+
+intake は全機能を横断して運転記録を除外する `.specs/.gitignore` を1つ書く。運転記録
+を意図的にコミットしたいプロジェクトは、そのファイル（案内コメント付き）を編集する。
+コミット手順（implement / pr）のステージ pathspec が第一の防壁、`.specs/.gitignore`
+が最後の防壁。
+
 ## 再開動作
 
 再開が既定: 起動時に対象機能の `pipeline-state.json` があれば、オーケストレーターは

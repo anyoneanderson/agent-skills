@@ -12,7 +12,13 @@
 ## アクション
 
 1. spec-implement の最終 PR 作成ステップを実行する（ブランチ・コミット規約は
-   `issue-to-pr-workflow.md` に従う）。
+   `issue-to-pr-workflow.md` に従う）。implement フェーズと同じステージのガードを
+   適用する: 実装ファイル（および仕様成果物をコミットする方針のときだけ仕様4ファイル）
+   を明示 pathspec でステージし、運転記録（`evidence/`・`review-*.md`・
+   `inspection-report.md`・`.inspection_result.json`・`evaluate-*.md`・
+   `pipeline-state.json`・`retrospective.md`・`pipeline-metrics.jsonl`）は決して
+   ステージしない。pathspec 除外が第一の防壁、intake の `.specs/.gitignore` が最後の
+   防壁。
 2. 証跡セクションを PR 本文に添付する。正確なセクション構成（Adversarial Review
    History、Acceptance Evidence、Unresolved）は `../pr-assembly.ja.md` が定義する。
    このフェーズは遷移と入力を用意する。
@@ -22,14 +28,14 @@
 ## 出力
 
 - 作成された pull request（URL）。ready または draft。本文にレビュー履歴・受け入れ
-  証跡ポインタ・未解決項目を持つ。
+  合否表と証跡マニフェスト・未解決項目を持つ。
 
 ## 検証
 
 - `gh` が PR URL を返す。受け入れ試験が不合格の間は PR を作成しない（非 draft の
   PR は合格した evaluate ゲートを要する）。
-- PR 本文が参照する証跡ポインタが `.specs/{feature}/evidence/` 配下のファイルに
-  解決する。
+- PR 本文の証跡マニフェストが列挙するファイルが `.specs/{feature}/evidence/` 配下に
+  実在する。証跡ファイル自体はローカルに残り、コミットも添付もしない。
 
 ## state 更新
 

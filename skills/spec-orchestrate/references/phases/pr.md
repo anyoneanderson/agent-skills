@@ -13,7 +13,13 @@ unresolved items. A stall landing produces a draft PR instead of a ready one.
 ## Action
 
 1. Run spec-implement's final PR-creation step (branch and commit conventions
-   follow `issue-to-pr-workflow.md`).
+   follow `issue-to-pr-workflow.md`). Apply the same staging guard as the
+   implement phase: stage implementation files (and the four spec files only
+   under a commit-spec-artifacts policy) by explicit pathspec, and never stage
+   run records (`evidence/`, `review-*.md`, `inspection-report.md`,
+   `.inspection_result.json`, `evaluate-*.md`, `pipeline-state.json`,
+   `retrospective.md`, `pipeline-metrics.jsonl`). The pathspec exclusion is the
+   first guard; the `.specs/.gitignore` from intake is the backstop.
 2. Attach the evidence sections to the PR body. The exact section layout
    (Adversarial Review History, Acceptance Evidence, Unresolved) is defined in
    `../pr-assembly.md`; this phase supplies the transition and the inputs.
@@ -23,14 +29,16 @@ unresolved items. A stall landing produces a draft PR instead of a ready one.
 ## Output
 
 - An opened pull request (URL), ready or draft, whose body carries the review
-  history, acceptance evidence pointers, and any unresolved items.
+  history, the acceptance pass/fail table with an evidence manifest, and any
+  unresolved items.
 
 ## Verification
 
 - A PR URL is returned by `gh`. Do not create a PR while acceptance tests are
   failing (a non-draft PR requires a passing evaluate gate).
-- The evidence pointers referenced in the PR body resolve to files under
-  `.specs/{feature}/evidence/`.
+- The evidence manifest in the PR body lists files that exist under
+  `.specs/{feature}/evidence/`; the evidence files themselves stay local and are
+  not committed or attached.
 
 ## State Update
 

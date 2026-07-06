@@ -30,6 +30,13 @@ subagent, a delegated peer LLM, or the invoking agent itself. The driver
    honestly — never silently upgraded to PASS or downgraded to a normal FAIL.
 4. **One case, one verdict, one evidence pointer set.** Keep the mapping between
    case ID, verdict, and evidence explicit.
+5. **Run against synthetic fixtures, never real data.** Execute the acceptance
+   cases with synthetic fixtures or dummy data. Do not capture real personal
+   information or real transaction data into evidence (screenshots, logs) — that
+   data would otherwise persist wherever the evidence is kept. A check that truly
+   requires real data is **permission-gated**: present to the human what will be
+   checked and with which data, and run it only after explicit approval. Never
+   touch real data without that approval.
 
 ## Procedure
 
@@ -83,6 +90,9 @@ Produce the result file in the exact `references/result-format.md` format:
   each concern/degradation becomes an **Improvement** finding, BLOCKED cases are
   listed under a `## Blocked` section (not counted as failures).
 - Every PASS row cites its evidence file by relative pointer.
+- An `## Evidence Manifest` listing every evidence file with its byte size and
+  sha256 (see `references/result-format.md` for the format and the `shasum`
+  one-liner).
 - A `## Summary` with a `Gate: PASS|FAIL` line.
 
 Gate is FAIL if any case FAILED. BLOCKED cases do not by themselves fail the

@@ -33,15 +33,38 @@ input; every later phase reads state, not the human.
    requirement, labels as hints). No AskUserQuestion is called in auto mode.
 4. Derive the feature name as kebab-case from the Issue title.
 
+**Both modes — run-record `.gitignore`:**
+
+Make sure `.specs/.gitignore` excludes the run records, so a project that tracks
+`.specs/` never commits them. If the file does not exist, create it with exactly
+this content. If it exists, append only the patterns that are missing — never
+modify or remove existing lines (a project may have deliberately opted a record
+back in by deleting one).
+
+```
+# spec-orchestrate run records — local only (see spec-orchestrate references/pipeline-config.md)
+# Delete lines here if your project intentionally commits run records.
+pipeline-metrics.jsonl
+*/pipeline-state.json
+*/inspection-report.md
+*/.inspection_result.json
+*/review-*.md
+*/evaluate-*.md
+*/evidence/
+*/retrospective.md
+```
+
 ## Output
 
 - A decided, writable `.specs/{feature}/` directory path.
 - The initial `pipeline-state.json` (see State Update).
+- A `.specs/.gitignore` that excludes the run records (created or updated).
 - For auto: the reshaped, no-dialogue planner input derived from the Issue.
 
 ## Verification
 
 - The `.specs/{feature}/` directory path is decided and writable.
+- `.specs/.gitignore` exists and contains the run-record patterns above.
 - auto: the Issue exists and was fetched (non-empty title/body). On a `gh`
   auth/not-found error, stop here per §Error Handling.
 

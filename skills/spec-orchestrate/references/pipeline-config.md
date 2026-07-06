@@ -122,6 +122,36 @@ flat `roles:` block):
 awk '/^roles:/{f=1;next} f&&/^[a-z]/{exit} f&&/spec_reviewer:/{print $2}' "$pipeline"
 ```
 
+## Artifact Classification
+
+The pipeline writes two kinds of files under `.specs/`, and they have different
+commit policies.
+
+**Spec artifacts** — `requirement.md`, `design.md`, `tasks.md`, `test.md`.
+Whether these are committed is the project's decision (unchanged from existing
+behavior). They are human-readable and belong to the feature's design record.
+
+**Run records** — `pipeline-state.json`, `inspection-report.md`,
+`.inspection_result.json`, `review-*.md`, `evaluate-*.md`, `evidence/`,
+`retrospective.md`, `pipeline-metrics.jsonl`. These are **not committed by
+default**. The reasons:
+
+- Binary evidence (screenshots) cannot be reviewed in a diff.
+- Evidence captured from a running system can carry personally identifiable
+  information or confidential data into permanent git history.
+- Review-round files are redundant with the PR body, which already carries a
+  machine-generated review-history summary and an acceptance pass/fail table
+  with an evidence manifest.
+
+Resume does not require committing run records: interruption recovery runs off
+the local `pipeline-state.json` (see Resume Behavior), so the run records only
+need to exist on local disk, not in git.
+
+intake writes a single `.specs/.gitignore` that excludes the run records across
+every feature. A project that deliberately wants to commit its run records edits
+that file (it carries a comment saying so). The staging pathspec in the commit
+steps (implement / pr) is the first guard; `.specs/.gitignore` is the backstop.
+
 ## Resume Behavior
 
 Resume is the default: on startup, if `pipeline-state.json` exists for the target
