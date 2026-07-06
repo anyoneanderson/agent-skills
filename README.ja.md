@@ -53,6 +53,7 @@ npx skills add anyoneanderson/agent-skills --skill spec-orchestrate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
+npx skills add anyoneanderson/agent-skills --skill agent-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 
 # Harness Engineering（自律）— 先に spec-rules-init + spec-workflow-init を入れる
@@ -142,12 +143,27 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 > /spec-test --task T-003 --spec .specs/auth-feature/
 ```
 
+### ビルドに対して受け入れ試験を実行する
+
+```
+> /spec-evaluate --spec .specs/auth-feature/
+> /spec-evaluate --spec .specs/auth-feature/ --round 2 --backend self
+```
+
 ### 仕様書から実装してPRを作成する（オーケストレーション）
 
 ```
 > 仕様書から実装 --issue 42
 > 実装を開始 --spec .specs/auth-feature/
 > 実装を再開 --resume
+```
+
+### 仕様からPRまでパイプライン全体を1コマンドで回す
+
+```
+> /spec-orchestrate --mode manual          # 対話で仕様を固め、承認したらあとは任せる
+> /spec-orchestrate --issue 42             # auto: Issue を渡して PR を待つ
+> /spec-orchestrate --resume               # 中断した実行を pipeline-state.json から再開
 ```
 
 ### 会話をフォークする（cmux）
@@ -172,6 +188,14 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 > この diff をセカンドオピニオンして
 > 仕様書のセカンドオピニオンをもらって
 > 自由にレビューしてもらって
+```
+
+### ヘッドレスで委譲・レビューする — cmux 不要（agent-delegate）
+
+```
+> このタスクを Codex に投げて
+> Codex にこの diff をレビューさせて
+> cmux なしでセカンドオピニオン
 ```
 
 ### ベストプラクティススキルを提案する
@@ -236,34 +260,57 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
    - 既存のテストパターンとフレームワークを検出
    - 結果を `test-{task-id}.md` に出力
 
-10. **spec-implement** がパイプライン全体をオーケストレーション（自分ではコードもレビューも書かない）:
-   - 委任: spec-code → spec-review → fix loop → spec-test
-   - `[code]` フェーズはワーカースキルに委任、`[orchestrator]` フェーズは直接実行
-   - review + test 両方 PASS 後にのみ tasks.md を更新
-   - オプション: **cmux dispatch** でサブエージェント並列実行
-   - 品質ゲート通過後にPRを作成
+10. **spec-evaluate** が受け入れテスト計画（`test.md`）を実装済み機能に対して実行:
+    - 各項目を検証方法別（playwright / command / file-check）に実行
+    - 証跡（スクリーンショット・ログ）を `.specs/{feature}/evidence/{round}/` に保存
+    - 証跡を機械検証: 裏づけファイルのない PASS 報告は FAIL に倒す
+    - `evaluate-{round}.md` を出力 — spec-review 互換 findings として `spec-code --feedback` に渡せる
+
+11. **spec-implement** がパイプライン全体をオーケストレーション（自分ではコードもレビューも書かない）:
+    - 委任: spec-code → spec-review → fix loop → spec-test
+    - `[code]` フェーズはワーカースキルに委任、`[orchestrator]` フェーズは直接実行
+    - review + test 両方 PASS 後にのみ tasks.md を更新
+    - オプション: `--roles` でタスクの `kind:` ラベルごとに Claude（spec-code）/ Codex（agent-delegate）へ振り分け。レビューは常に実装担当の反対側
+    - オプション: **cmux dispatch** でサブエージェント並列実行
+    - 品質ゲート通過後にPRを作成
+
+12. **spec-orchestrate** が要求や Issue から PR までパイプライン全体を駆動:
+    - フェーズ: 受付 → 仕様生成 → 機械検査 → 敵対的仕様レビュー（別 LLM）→ 人間承認（manual のみ）→ 実装 → 受け入れ試験 → PR → 振り返り
+    - 2モード: `manual`（仕様承認の1箇所だけ人間ゲート）と `auto`（Issue を入れると PR が出る、人間の入力なし）
+    - フェーズ別の担当割りを `.specs/pipeline.yml` で設定（claude ⇄ codex）。codex 担当は agent-delegate 経由で実行
+    - 停滞したレビューループを機械シグナル（findings 指紋）で検知し裁定: 担当を入れ替えるか draft PR で着地
+    - 状態は `pipeline-state.json` に保存。中断しても最後の完了フェーズから再開
+    - 振り返りでは実行記録を集計して改善提案を生成し、安全なものは自動適用（ブランチ → PR → 自動マージ。公開契約と SKILL.md は常に人間レビュー）
+
+### エージェント間委譲（cmux 不要）
+
+13. **agent-delegate** がもう一方のエージェント（Claude Code ⇄ Codex）へのタスク委譲・敵対的レビューをヘッドレスで実行:
+    - `--mode delegate` は peer CLI でタスクを実行、`--mode review` は read-only の敵対的レビュー
+    - 機械可読な `report.json` を返す（stdout の最終行が常にそのパス）
+    - 長時間タスクは `--detach` で切り離し、report ファイルをポーリング
+    - `--resume <thread_id>` でセッション継続 — 多ラウンドのレビューを1つの文脈で回せる
 
 ### cmux スキル（オプション、[cmux](https://cmux.dev/) が必要）
 
-11. **cmux-fork** が現在の会話を新しい cmux ペインまたはワークスペースにフォーク。会話コンテキストを完全に引き継ぎ。
+14. **cmux-fork** が現在の会話を新しい cmux ペインまたはワークスペースにフォーク。会話コンテキストを完全に引き継ぎ。
 
-12. **cmux-delegate** が別の cmux ワークスペースに AI エージェントを起動し、タスクを送信・監視・結果回収。Claude Code / Codex / Gemini CLI 対応。
+15. **cmux-delegate** が別の cmux ワークスペースに AI エージェントを起動し、タスクを送信・監視・結果回収。Claude Code / Codex / Gemini CLI 対応。
 
-13. **cmux-second-opinion** が別の AI エージェントに独立したレビューを依頼。親と異なるエージェントを自動選択。コードレビュー・仕様書レビュー対応、基準モード3種。
+16. **cmux-second-opinion** が別の AI エージェントに独立したレビューを依頼。親と異なるエージェントを自動選択。コードレビュー・仕様書レビュー対応、基準モード3種。
 
 ### プロジェクトセットアップ
 
-14. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
+17. **skill-suggest** がプロジェクトのマニフェストファイル（package.json, Cargo.toml 等）を解析し、skills.sh レジストリからベストプラクティス系スキルを検索・提案・インストール。`--agent` オプションで不要ディレクトリの生成を防止。
 
 ### Harness Engineering（自律、オプション）
 
 上記 `/spec-*` フローより一歩進んだ自律レーン。**前提:** 先に **spec-rules-init** と **spec-workflow-init** を実行 — harness は `docs/coding-rules.md` / `docs/review_rules.md` / `docs/issue-to-pr-workflow.md` を、自律エージェントが従う rulebook として消費する。`/spec-*` が人間をタスク単位でループ内に残すのに対し、harness は人間が決めた境界内で sprint まるごとを自走させる。
 
-15. **harness-init** が制御ループを導入: 環境設定を一度ヒアリングし、Planner/Generator/Evaluator サブエージェント・hooks・ガードスクリプト・`.harness/` resilience ツリーを生成。プロジェクトごとに一度実行。
+18. **harness-init** が制御ループを導入: 環境設定を一度ヒアリングし、Planner/Generator/Evaluator サブエージェント・hooks・ガードスクリプト・`.harness/` resilience ツリーを生成。プロジェクトごとに一度実行。
 
-16. **harness-plan** が epic を計画: `product-spec.md` を起草し、sprint 分解/bundling 付きの `roadmap.md` を導出、sprint ごとに tracker Issue を起票。自律実行前の最後の人間介入ステップ。
+19. **harness-plan** が epic を計画: `product-spec.md` を起草し、sprint 分解/bundling 付きの `roadmap.md` を導出、sprint ごとに tracker Issue を起票。自律実行前の最後の人間介入ステップ。
 
-17. **harness-loop** が GAN 制御ループを実行: sprint ごとに contract を交渉し、Generator ⇄ Evaluator を rubric 収束（または Principal Skinner 停止）まで反復、毎 iteration で checkpoint（`progress.md` + `_state.json` + git + `metrics.jsonl`）し PR を作成。モード: interactive / continuous / autonomous-ralph / scheduled。
+20. **harness-loop** が GAN 制御ループを実行: sprint ごとに contract を交渉し、Generator ⇄ Evaluator を rubric 収束（または Principal Skinner 停止）まで反復、毎 iteration で checkpoint（`progress.md` + `_state.json` + git + `metrics.jsonl`）し PR を作成。モード: interactive / continuous / autonomous-ralph / scheduled。
 
 ## 互換性
 

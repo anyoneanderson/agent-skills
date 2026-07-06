@@ -53,6 +53,7 @@ npx skills add anyoneanderson/agent-skills --skill spec-orchestrate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
+npx skills add anyoneanderson/agent-skills --skill agent-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 
 # Harness Engineering (autonomous) — install spec-rules-init + spec-workflow-init first
@@ -142,12 +143,27 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 > /spec-test --task T-003 --spec .specs/auth-feature/
 ```
 
+### Run acceptance tests against the build
+
+```
+> /spec-evaluate --spec .specs/auth-feature/
+> /spec-evaluate --spec .specs/auth-feature/ --round 2 --backend self
+```
+
 ### Orchestrate full implementation to PR
 
 ```
 > Implement from spec --issue 42
 > Start implementation --spec .specs/auth-feature/
 > Resume implementation --resume
+```
+
+### Run the whole pipeline — spec to PR in one command
+
+```
+> /spec-orchestrate --mode manual          # talk through the spec, approve once, walk away
+> /spec-orchestrate --issue 42             # auto: hand over an Issue, come back to a PR
+> /spec-orchestrate --resume               # continue an interrupted run from pipeline-state.json
 ```
 
 ### Fork a conversation (cmux)
@@ -172,6 +188,14 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 > Get a second opinion on this diff
 > Have another AI review the specs
 > Second opinion, freely review
+```
+
+### Delegate or review headlessly — no cmux needed (agent-delegate)
+
+```
+> Delegate this task to Codex
+> Have Codex review this diff
+> Second opinion without cmux
 ```
 
 ### Suggest best practice skills
@@ -234,34 +258,57 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
    - Detects existing test patterns and frameworks
    - Outputs results to `test-{task-id}.md`
 
-9. **spec-implement** orchestrates the full pipeline (does NOT write code or review itself):
-   - Delegates: spec-code → spec-review → fix loop → spec-test
-   - Processes `[code]` phases via worker skills, `[orchestrator]` phases directly
-   - Updates tasks.md ONLY after review AND test PASS
-   - Optional: **cmux dispatch** for parallel sub-agent execution
-   - Creates PR with quality gates passed
+9. **spec-evaluate** runs the acceptance test plan (`test.md`) against the built feature:
+   - Executes each case by its verification method (playwright / command / file-check)
+   - Saves evidence (screenshots, logs) under `.specs/{feature}/evidence/{round}/`
+   - Machine-verifies evidence: a reported PASS with no backing file is forced to FAIL
+   - Outputs `evaluate-{round}.md` — spec-review-compatible findings that feed `spec-code --feedback`
+
+10. **spec-implement** orchestrates the full pipeline (does NOT write code or review itself):
+    - Delegates: spec-code → spec-review → fix loop → spec-test
+    - Processes `[code]` phases via worker skills, `[orchestrator]` phases directly
+    - Updates tasks.md ONLY after review AND test PASS
+    - Optional: `--roles` routes tasks per `kind:` label to Claude (spec-code) or Codex (agent-delegate), with the reviewer always on the opposite side of the implementer
+    - Optional: **cmux dispatch** for parallel sub-agent execution
+    - Creates PR with quality gates passed
+
+11. **spec-orchestrate** drives the entire pipeline from a request or Issue to a PR:
+    - Phases: intake → spec generation → mechanical inspection → adversarial spec review (another LLM) → human approval (manual mode only) → implementation → acceptance testing → PR → retrospective
+    - Two modes: `manual` (one human gate at spec approval) and `auto` (Issue in, PR out, no human input)
+    - Role assignment per phase via `.specs/pipeline.yml` (claude ⇄ codex), executed through agent-delegate
+    - Detects stalled review loops by machine signals (finding fingerprints) and adjudicates: swap roles or land a draft PR
+    - State lives in `pipeline-state.json`; interrupted runs resume from the last completed phase
+    - Retrospective aggregates run records into improvement proposals and can auto-apply safe ones (branch → PR → auto-merge; contracts and SKILL.md always require human review)
+
+### Cross-Agent Delegation (no cmux required)
+
+12. **agent-delegate** hands a task to the other agent (Claude Code ⇄ Codex) headlessly, or gets an adversarial review from it:
+    - `--mode delegate` executes a task on the peer CLI; `--mode review` gets a read-only adversarial review
+    - Returns a machine-readable `report.json` (last line of stdout is always its path)
+    - `--detach` for long runs: poll the report file instead of holding the session
+    - Session continuation via `--resume <thread_id>` keeps multi-round reviews in one context
 
 ### cmux Skills (optional, requires [cmux](https://cmux.dev/))
 
-10. **cmux-fork** forks the current conversation into a new cmux pane or workspace, preserving full context.
+13. **cmux-fork** forks the current conversation into a new cmux pane or workspace, preserving full context.
 
-11. **cmux-delegate** launches an AI agent in a separate cmux workspace, sends a task, monitors completion, and collects results. Supports Claude Code, Codex, Gemini CLI.
+14. **cmux-delegate** launches an AI agent in a separate cmux workspace, sends a task, monitors completion, and collects results. Supports Claude Code, Codex, Gemini CLI.
 
-12. **cmux-second-opinion** gets an independent review from a different AI agent. Automatically selects an agent different from the parent. Supports code review and spec review with 3 criteria modes.
+15. **cmux-second-opinion** gets an independent review from a different AI agent. Automatically selects an agent different from the parent. Supports code review and spec review with 3 criteria modes.
 
 ### Project Setup
 
-13. **skill-suggest** analyzes the project's manifest files (package.json, Cargo.toml, etc.), searches the skills.sh registry for matching best-practice skills, and installs them with agent-targeted installation to prevent unwanted directory creation.
+16. **skill-suggest** analyzes the project's manifest files (package.json, Cargo.toml, etc.), searches the skills.sh registry for matching best-practice skills, and installs them with agent-targeted installation to prevent unwanted directory creation.
 
 ### Harness Engineering (autonomous, optional)
 
 A separate, more autonomous lane than the `/spec-*` flow above. **Prerequisite:** run **spec-rules-init** and **spec-workflow-init** first — harness consumes `docs/coding-rules.md`, `docs/review_rules.md`, and `docs/issue-to-pr-workflow.md` as the rulebook its autonomous agents obey. Where `/spec-*` keeps a human in the loop task-by-task, harness drives whole sprints on its own inside human-set boundaries.
 
-14. **harness-init** installs the control loop: hears environment settings once, then generates Planner/Generator/Evaluator sub-agents, hooks, guard scripts, and the `.harness/` resilience tree. Run once per project.
+17. **harness-init** installs the control loop: hears environment settings once, then generates Planner/Generator/Evaluator sub-agents, hooks, guard scripts, and the `.harness/` resilience tree. Run once per project.
 
-15. **harness-plan** plans an epic: drafts `product-spec.md`, derives `roadmap.md` with sprint decomposition/bundling, and emits one tracker Issue per sprint. The last human-in-the-loop step before autonomous execution.
+18. **harness-plan** plans an epic: drafts `product-spec.md`, derives `roadmap.md` with sprint decomposition/bundling, and emits one tracker Issue per sprint. The last human-in-the-loop step before autonomous execution.
 
-16. **harness-loop** runs the GAN control loop: per sprint it negotiates the contract, iterates Generator ⇄ Evaluator to rubric convergence (or a Principal Skinner stop), checkpoints every iteration (`progress.md` + `_state.json` + git + `metrics.jsonl`), and opens the PR. Modes: interactive / continuous / autonomous-ralph / scheduled.
+19. **harness-loop** runs the GAN control loop: per sprint it negotiates the contract, iterates Generator ⇄ Evaluator to rubric convergence (or a Principal Skinner stop), checkpoints every iteration (`progress.md` + `_state.json` + git + `metrics.jsonl`), and opens the PR. Modes: interactive / continuous / autonomous-ralph / scheduled.
 
 ## Compatibility
 
