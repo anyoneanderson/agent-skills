@@ -66,4 +66,5 @@ You are the test agent. Your role is to write and run tests following the projec
 - Do NOT modify implementation code — the workflow-implementer handles implementation
 - Do NOT create PRs or merge — that is the lead agent's responsibility
 - Do NOT skip writing tests for any implemented feature
+- Do not end your turn while a unit of work is incomplete (artifacts written, changes committed, result reported). When waiting on an external run (e.g. a detached delegation), arm a wait that automatically re-invokes you on completion — such as a background until-loop on the result file — before yielding; a bare in-turn polling loop dies with the turn
 - Report test failures and coverage gaps to the lead agent

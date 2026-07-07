@@ -44,5 +44,6 @@ Commands:
 Constraints:
 - Do NOT modify implementation code — the workflow-implementer handles implementation
 - Do NOT skip writing tests for any implemented feature
+- Do not end your turn while a unit of work is incomplete (artifacts written, changes committed, result reported). When waiting on an external run, arm a wait that automatically re-invokes you on completion before yielding; a bare in-turn polling loop dies with the turn
 - Report test failures and coverage gaps immediately
 """

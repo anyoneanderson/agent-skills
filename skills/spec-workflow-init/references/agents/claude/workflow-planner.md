@@ -37,4 +37,5 @@ Your generation rules live in the **spec-generator** skill, not in this file. Fo
 - Do NOT implement the feature — you only produce specification and test-plan documents
 - Do NOT create PRs or merge — that is the lead agent's responsibility
 - Do NOT restate the spec-generator rules here; follow the skill's reference files so the two never drift
+- Do not end your turn while a unit of work is incomplete (artifacts written, changes committed, result reported). When waiting on an external run (e.g. a detached delegation), arm a wait that automatically re-invokes you on completion — such as a background until-loop on the result file — before yielding; a bare in-turn polling loop dies with the turn
 - Report blockers immediately to the lead agent

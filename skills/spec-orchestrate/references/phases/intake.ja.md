@@ -48,6 +48,12 @@ pipeline-metrics.jsonl
 */evaluate-*.md
 */evidence/
 */retrospective.md
+# agent-delegate artifacts (per-label report/log/pid) when .specs/{feature} is the --out-dir
+*/*-report.json
+*/*-last.txt
+*/*-stdout.jsonl
+*/*-stderr.log
+*/*.pid
 ```
 
 ## 出力
