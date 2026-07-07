@@ -65,6 +65,14 @@ Each case MUST declare exactly one verification method:
   When such a feature is unavoidable, state the required version or tool as a
   precondition in the case's `Command` field.
 
+- `command` cases MUST be verified executable at generation time: actually run
+  the command (or a dry equivalent) and confirm it exercises what the case
+  claims. Prefer an existing `package.json` script over ad-hoc invocations.
+  Watch argument forwarding in particular — e.g. `pnpm test -- --coverage`
+  expands to `vitest run -- --coverage`, which demotes `--coverage` to a
+  positional argument: the run exits 0 without producing any coverage report,
+  so the case passes while verifying nothing.
+
 ### 5. Output Format
 
 ```markdown
@@ -119,3 +127,5 @@ Post-generation verification:
 7. [ ] Every verification command runs in the target environment as written — no
    shell-dialect, PCRE, or version-dependent API assumptions, or the assumption
    is stated as a precondition
+8. [ ] Every `command` case was executed (or dry-run) at generation time and
+   observed to exercise its claim — argument forwarding included

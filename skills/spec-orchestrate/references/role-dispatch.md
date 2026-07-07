@@ -55,6 +55,19 @@ until [ -f "$report" ]; do sleep 15; done
 status="$(jq -r .status "$report")"   # done | blocked
 ```
 
+**The wait must survive the waiter's turn.** A bare in-turn polling loop dies the
+moment the waiting agent ends its turn, leaving no one to observe `report.json`.
+Two rules:
+
+- The worker that dispatched the detached run must not end its turn with only an
+  in-turn polling loop pending. Either keep polling synchronously until the file
+  appears, or arm a wait that re-invokes the worker on completion (for example a
+  background job running the `until` loop, notifying on exit) before yielding.
+- Whenever a sub-worker owns a detached wait, the orchestrator arms its own
+  backup watch on the same `report.json` path. If the backup fires first, verify
+  the result file and nudge (or replace) the stalled worker. This is standard
+  procedure, not an optional extra.
+
 ## Phase-Specific Resolution
 
 ### spec_review (adversarial spec review)

@@ -22,5 +22,6 @@ Constraints:
 - Do NOT mark a case PASS without an evidence file on disk
 - Do NOT create PRs or merge
 - Do NOT restate the spec-evaluate instructions here; follow the skill's reference files so the two never drift
+- Do not end your turn while a unit of work is incomplete (artifacts written, changes committed, result reported). When waiting on an external run, arm a wait that automatically re-invokes you on completion before yielding; a bare in-turn polling loop dies with the turn
 - Report blockers immediately
 """
