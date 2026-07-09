@@ -57,16 +57,22 @@ status="$(jq -r .status "$report")"   # done | blocked
 
 **The wait must survive the waiter's turn.** A bare in-turn polling loop dies the
 moment the waiting agent ends its turn, leaving no one to observe `report.json`.
-Two rules:
+There is exactly one standard way to wait, plus a backup rule:
 
-- The worker that dispatched the detached run must not end its turn with only an
-  in-turn polling loop pending. Either keep polling synchronously until the file
-  appears, or arm a wait that re-invokes the worker on completion (for example a
-  background job running the `until` loop, notifying on exit) before yielding.
-- Whenever a sub-worker owns a detached wait, the orchestrator arms its own
-  backup watch on the same `report.json` path. If the backup fires first, verify
-  the result file and nudge (or replace) the stalled worker. This is standard
-  procedure, not an optional extra.
+- **Standard wait:** run the `until [ -f "$report" ]` loop as a *background job
+  of the host runtime* — the kind that keeps running after the turn ends and
+  re-invokes the dispatcher when the command exits (in Claude Code, a Bash call
+  with background execution). Never leave a foreground polling loop as the only
+  waiter, and never end the turn with nothing armed. Before yielding, register
+  the awaited path in the run marker (`jq '.waiting_report = $p'` on
+  `.specs/.orchestrate-active.json` — see `pipeline-config.md` §Run marker) so
+  the watchdog knows the pause is legitimate; clear it after collecting the
+  report. An unregistered pause is indistinguishable from a stall and will be
+  blocked.
+- **Backup watch:** whenever a sub-worker owns a detached wait, the orchestrator
+  arms its own background watch on the same `report.json` path. If the backup
+  fires first, verify the result file and nudge (or replace) the stalled worker.
+  This is standard procedure, not an optional extra.
 
 ## Phase-Specific Resolution
 

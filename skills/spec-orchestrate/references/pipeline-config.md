@@ -90,6 +90,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 | `threads` | Peer session ids for resume (e.g. `spec_reviewer`) |
 | `role_overrides` | Roles reassigned this run (capability fallback or arbitration swap) |
 | `arbitrations` | Stall adjudication records (see `stall-detection.md`) |
+| `repairs` | Optional. State-drift repairs applied on resume or after a failed integrity check (see §State Integrity Check) |
 | `ts_updated` | Last write timestamp |
 
 ### Ownership: orchestrator writes, workers do not even read
@@ -126,6 +127,79 @@ flat `roles:` block):
 awk '/^roles:/{f=1;next} f&&/^[a-z]/{exit} f&&/spec_reviewer:/{print $2}' "$pipeline"
 ```
 
+## Run Marker and Watchdog
+
+`.specs/.orchestrate-active.json` (one per repository) marks a run as mid-flight
+so the watchdog Stop hook (`references/scripts/pipeline-watchdog.sh`) can tell a
+stalled orchestrator from a finished one. It is a run record — never committed.
+
+```json
+{
+  "feature": "user-auth",
+  "waiting_report": null,
+  "paused": false,
+  "blocks": 0,
+  "fingerprint": "",
+  "ts": "2026-07-09T00:00:00Z"
+}
+```
+
+Lifecycle (orchestrator-owned, like state):
+
+- **Create** at intake (and on resume if missing):
+  ```bash
+  jq -n --arg f "$feature" '{feature:$f, waiting_report:null, ts:(now|todate)}' \
+    > .specs/.orchestrate-active.json
+  ```
+- **Refresh `ts`** with every state write (same `jq ... > tmp && mv` idiom). The
+  watchdog treats a marker untouched for 4 hours as abandoned and stops blocking.
+- **Register a wait** before yielding on a detached run, and clear it after
+  collecting (see `role-dispatch.md` Step 3):
+  ```bash
+  jq --arg p "$report" '.waiting_report = $p | .ts = (now|todate)' \
+    .specs/.orchestrate-active.json > t && mv t .specs/.orchestrate-active.json
+  ```
+- **Delete** as the final step of the retrospective phase. A deleted marker is
+  the pipeline's terminal signal to the watchdog.
+
+The `paused` / `blocks` / `fingerprint` fields belong to the watchdog (a human
+sets `paused: true` to silence it; the hook counts consecutive no-progress
+blocks and gives up after 3, so it can never trap a stuck session forever).
+
+The hook is registered per-repository as a Claude Code Stop hook
+(spec-workflow-init Step 6d does this; manual snippet for `.claude/settings.json`):
+
+```json
+{"hooks": {"Stop": [{"hooks": [{"type": "command",
+  "command": "bash .claude/skills/spec-orchestrate/references/scripts/pipeline-watchdog.sh"}]}]}}
+```
+
+## State Integrity Check
+
+`references/scripts/pipeline-state-check.sh <spec-dir>` cross-checks the state
+file against evidence it cannot fake: the canonical phase order vs
+`completed_phases` (a later phase with unrecorded predecessors means a phase ran
+without its state update), `tasks.md` checkboxes vs `implement.tasks_done` (both
+directions), run-record files (`retrospective.md`, `evaluate-*`) vs the recorded
+phase, and — when `gh` is available — an existing PR for the current branch vs a
+state that has not reached `pr`. Exit 0 is consistent; exit 1 prints one `DRIFT:`
+line per finding.
+
+**When to run (mandatory):** after every state write, and as step 0 of a resume.
+
+**On drift, evidence wins.** Reconcile the state to what actually happened —
+append the missing `completed_phases`, add the missing `tasks_done` entries, set
+`phase` to where the evidence says the run is — then record the repair:
+
+```bash
+jq --arg d "$drift_summary" \
+   '.repairs = ((.repairs // []) + [{ts:(now|todate), drift:$d}])' \
+   "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+```
+
+Re-run the check after the repair; only a clean exit lets the loop continue. Do
+not re-run phases whose outputs verifiably exist just because state forgot them.
+
 ## Artifact Classification
 
 The pipeline writes two kinds of files under `.specs/`, and they have different
@@ -137,8 +211,8 @@ behavior). They are human-readable and belong to the feature's design record.
 
 **Run records** — `pipeline-state.json`, `inspection-report.md`,
 `.inspection_result.json`, `review-*.md`, `evaluate-*.md`, `evidence/`,
-`retrospective.md`, `pipeline-metrics.jsonl`. These are **not committed by
-default**. The reasons:
+`retrospective.md`, `pipeline-metrics.jsonl`, `.orchestrate-active.json`.
+These are **not committed by default**. The reasons:
 
 - Binary evidence (screenshots) cannot be reviewed in a diff.
 - Evidence captured from a running system can carry personally identifiable
@@ -161,10 +235,14 @@ steps (implement / pr) is the first guard; `.specs/.gitignore` is the backstop.
 Resume is the default: on startup, if `pipeline-state.json` exists for the target
 feature, the orchestrator does not start over.
 
-1. Read the state file.
-2. Print a one-block summary: mode, feature, `completed_phases`, the current
+1. **Run the state integrity check first** (§State Integrity Check). On drift,
+   reconcile state to the evidence and record the repair before anything else —
+   a resume that trusts a stale state re-runs finished work or skips pending
+   work. Recreate `.specs/.orchestrate-active.json` if it is missing.
+2. Read the state file.
+3. Print a one-block summary: mode, feature, `completed_phases`, the current
    `phase`, and the next action (what running `phase` will do).
-3. Continue the loop from `phase`. Completed phases are not re-run; a phase left
+4. Continue the loop from `phase`. Completed phases are not re-run; a phase left
    mid-flight (its completion not recorded) is re-entered from its start, which
    is safe because every phase verifies its own output before advancing.
 

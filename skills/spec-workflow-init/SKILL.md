@@ -390,6 +390,37 @@ Japanese output):
    overwrite it.
 2. Otherwise, create `.specs/` if missing and write the template verbatim.
 
+### Step 6d: Watchdog Hook Registration (spec-orchestrate)
+
+Register spec-orchestrate's watchdog Stop hook so a mid-flight pipeline run
+cannot silently stall at a phase boundary (see spec-orchestrate
+`references/pipeline-config.md` §Run Marker and Watchdog).
+
+1. Skip with a note if the script is not installed in this project:
+   ```bash
+   ls .claude/skills/spec-orchestrate/references/scripts/pipeline-watchdog.sh 2>/dev/null
+   ```
+2. Skip (already registered) if `.claude/settings.json` mentions
+   `pipeline-watchdog.sh`.
+3. Otherwise ask for confirmation:
+   ```
+   question: "Register the spec-orchestrate watchdog Stop hook in .claude/settings.json?" / ".claude/settings.json に spec-orchestrate の watchdog Stop hook を登録しますか？"
+   header: "Watchdog"
+   options:
+     - "Yes, register (Recommended)" / "はい、登録する（推奨）"
+     - "No, skip" / "いいえ、スキップ"
+   ```
+4. If approved, merge this entry into the `hooks.Stop` array of
+   `.claude/settings.json` (create the file or the array as needed, preserving
+   every existing entry):
+   ```json
+   {"hooks": {"Stop": [{"hooks": [{"type": "command",
+     "command": "bash .claude/skills/spec-orchestrate/references/scripts/pipeline-watchdog.sh"}]}]}}
+   ```
+
+The hook is inert outside pipeline runs: without a fresh
+`.specs/.orchestrate-active.json` marker it always allows the stop.
+
 ### Step 7: AGENTS.md / CLAUDE.md Reference Update
 
 1. Check for convention files:
