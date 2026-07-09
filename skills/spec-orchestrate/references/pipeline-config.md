@@ -179,11 +179,12 @@ The hook is registered per-repository as a Claude Code Stop hook
 `references/scripts/pipeline-state-check.sh <spec-dir>` cross-checks the state
 file against evidence it cannot fake: the canonical phase order vs
 `completed_phases` (a later phase with unrecorded predecessors means a phase ran
-without its state update), `tasks.md` checkboxes vs `implement.tasks_done` (both
-directions), run-record files (`retrospective.md`, `evaluate-*`) vs the recorded
-phase, and — when `gh` is available — an existing PR for the current branch vs a
-state that has not reached `pr`. Exit 0 is consistent; exit 1 prints one `DRIFT:`
-line per finding.
+without its state update; a draft-PR landing recorded in `arbitrations` with
+`decision: "draft"` exempts the approval/implement/evaluate legs), `tasks.md`
+checkboxes vs `implement.tasks_done` (both directions), run-record files
+(`retrospective.md`, `evaluate-*`) vs the recorded phase, and — when `gh` is
+available — an existing PR for the current branch vs a state that has not
+reached `pr`. Exit 0 is consistent; exit 1 prints one `DRIFT:` line per finding.
 
 **When to run (mandatory):** after every state write, and as step 0 of a resume.
 

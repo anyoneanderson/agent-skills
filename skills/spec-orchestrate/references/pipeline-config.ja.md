@@ -179,9 +179,11 @@ hook はリポジトリごとに Claude Code の Stop hook として登録する
 
 `references/scripts/pipeline-state-check.sh <spec-dir>` は、state ファイルの主張を
 偽装できない証拠と突き合わせる: 正準フェーズ順序と `completed_phases`（先のフェーズに
-居るのに前段が未記録 = state 更新なしでフェーズが走った）、`tasks.md` のチェックボックスと
-`implement.tasks_done`（両方向）、運転記録ファイル（`retrospective.md`・`evaluate-*`）と
-記録上のフェーズ、そして `gh` があれば現在ブランチの PR 実在と `pr` 未到達の state。
+居るのに前段が未記録 = state 更新なしでフェーズが走った。ただし `arbitrations` に
+`decision: "draft"` が記録された draft PR 着地は approval / implement / evaluate を
+免除する）、`tasks.md` のチェックボックスと `implement.tasks_done`（両方向）、
+運転記録ファイル（`retrospective.md`・`evaluate-*`）と記録上のフェーズ、そして
+`gh` があれば現在ブランチの PR 実在と `pr` 未到達の state。
 exit 0 = 整合、exit 1 = 乖離1件につき `DRIFT:` 行を1つ出力する。
 
 **実行タイミング（必須）:** state を書くたびに1回、および resume の最初の手順として。

@@ -40,11 +40,20 @@ esac
 # recorded in completed_phases. A gap means a phase ran without its state update
 # (the exact failure the #184 dogfood exhibited: phase=retrospective while
 # implement/evaluate/pr were never recorded).
+#
+# Exception: an arbitration draft-PR landing (stall-detection.md —
+# arbitration → pr) legitimately reaches pr/retrospective without
+# approval/implement/evaluate. It is always recorded as an arbitrations[] entry
+# with decision "draft", so that record exempts those three legs.
 CANONICAL="intake spec_generate inspect spec_review approval implement evaluate pr retrospective"
+draft_landed="$(jq -r '[(.arbitrations // [])[] | select(.decision == "draft")] | length > 0' "$STATE")"
 if [ "$phase" != "arbitration" ]; then
   missing=""
   for p in $CANONICAL; do
     [ "$p" = "$phase" ] && break
+    if [ "$draft_landed" = "true" ]; then
+      case "$p" in approval|implement|evaluate) continue;; esac
+    fi
     has_completed "$p" || missing="$missing $p"
   done
   [ -n "${missing// /}" ] && report "phases preceding '$phase' missing from completed_phases:$missing"
@@ -67,7 +76,9 @@ if [ -f "$SPEC_DIR/retrospective.md" ] && [ "$phase" != "retrospective" ] && ! h
   report "retrospective.md exists but state is at phase '$phase' (retrospective not recorded)"
 fi
 
-if ls "$SPEC_DIR"/evaluate-*.md "$SPEC_DIR"/evaluation-report.md >/dev/null 2>&1; then
+# "Either kind of evaluate output exists" — ls over both patterns would fail
+# whenever one of them has no match, silently skipping the check.
+if compgen -G "$SPEC_DIR/evaluate-*.md" >/dev/null 2>&1 || [ -f "$SPEC_DIR/evaluation-report.md" ]; then
   case "$phase" in evaluate|pr|retrospective) ;; *)
     if ! has_completed evaluate; then
       report "evaluate results exist on disk but state is at phase '$phase' (evaluate not recorded)"

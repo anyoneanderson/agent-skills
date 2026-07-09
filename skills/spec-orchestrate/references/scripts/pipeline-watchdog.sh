@@ -14,8 +14,15 @@
 # The hook is scoped by the run marker `.specs/.orchestrate-active.json`, which
 # the orchestrator maintains (see pipeline-config.md §Run marker). No marker, a
 # paused/stale marker, a terminal state, or a registered pending wait all mean
-# "allow the stop". The hook never blocks more than MAX_BLOCKS consecutive times
-# without observing state progress, so it cannot loop a stuck session forever.
+# "allow the stop".
+#
+# Recursion safety is progress-gated rather than a blanket allow on
+# stop_hook_active: a hook-driven continuation that produced NO state progress
+# is allowed to stop immediately (no nagging loop), while a continuation that
+# advanced the state may be blocked again — each further block is paid for by
+# observable progress, so unbounded recursion is structurally impossible.
+# MAX_BLOCKS (consecutive, no progress) and MAX_TOTAL_BLOCKS (per run) cap the
+# rest.
 #
 # Escape hatch (for a human, or a session that is not the orchestrator):
 #   jq '.paused = true' .specs/.orchestrate-active.json > t && mv t .specs/.orchestrate-active.json
@@ -24,6 +31,7 @@ set -euo pipefail
 
 MARKER=".specs/.orchestrate-active.json"
 MAX_BLOCKS=3
+MAX_TOTAL_BLOCKS=25
 TTL_MINUTES=240
 
 allow() { exit 0; }
@@ -33,6 +41,7 @@ command -v jq >/dev/null 2>&1 || allow
 
 # Consume stdin (present under the hook contract; absent when run by hand).
 stdin_json="$(cat 2>/dev/null || true)"
+stop_hook_active="$(jq -r '.stop_hook_active // false' <<<"$stdin_json" 2>/dev/null || echo false)"
 
 paused="$(jq -r '.paused // false' "$MARKER" 2>/dev/null)" || allow
 [ "$paused" = "true" ] && allow
@@ -71,20 +80,40 @@ if [ -n "$waiting" ] && [ ! -f "$waiting" ]; then
   allow
 fi
 
-# Loop safety: count consecutive blocks against an unchanged state fingerprint.
-# If blocking has not produced progress MAX_BLOCKS times, give up and allow.
+# Loop safety — blocking is progress-gated, so it cannot recurse forever:
+# - stop_hook_active=true (this stop follows a hook-driven continuation) with an
+#   UNCHANGED state fingerprint means the continuation produced no progress:
+#   allow immediately rather than nag again. A CHANGED fingerprint means a phase
+#   advanced during the continuation — block again to keep the loop driving;
+#   every such block is paid for by observable progress.
+# - Without stop_hook_active, an unchanged fingerprint may still block up to
+#   MAX_BLOCKS consecutive times (separate stops across turns).
+# - MAX_TOTAL_BLOCKS caps blocks over the marker's whole lifetime as a backstop.
 fingerprint="${phase}|$(jq -r '.ts_updated // empty' "$state")|${waiting}"
 prev_fp="$(jq -r '.fingerprint // empty' "$MARKER")"
 blocks="$(jq -r '.blocks // 0' "$MARKER")"
+total_blocks="$(jq -r '.total_blocks // 0' "$MARKER")"
+
+if [ "$stop_hook_active" = "true" ] && [ "$fingerprint" = "$prev_fp" ]; then
+  echo "pipeline-watchdog: continuation made no progress (phase=$phase); allowing stop." >&2
+  allow
+fi
+
 if [ "$fingerprint" = "$prev_fp" ]; then
   blocks=$((blocks + 1))
 else
   blocks=1
 fi
-jq --arg fp "$fingerprint" --argjson b "$blocks" '.fingerprint = $fp | .blocks = $b' \
+total_blocks=$((total_blocks + 1))
+jq --arg fp "$fingerprint" --argjson b "$blocks" --argjson t "$total_blocks" \
+  '.fingerprint = $fp | .blocks = $b | .total_blocks = $t' \
   "$MARKER" > "$MARKER.tmp" && mv "$MARKER.tmp" "$MARKER"
 if [ "$blocks" -gt "$MAX_BLOCKS" ]; then
   echo "pipeline-watchdog: no progress after $MAX_BLOCKS blocks (phase=$phase); allowing stop." >&2
+  allow
+fi
+if [ "$total_blocks" -gt "$MAX_TOTAL_BLOCKS" ]; then
+  echo "pipeline-watchdog: $MAX_TOTAL_BLOCKS total blocks reached for this run; allowing stop." >&2
   allow
 fi
 
