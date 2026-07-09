@@ -41,6 +41,7 @@
 # spec-orchestrate run records — local only (see spec-orchestrate references/pipeline-config.md)
 # Delete lines here if your project intentionally commits run records.
 pipeline-metrics.jsonl
+.orchestrate-active.json
 */pipeline-state.json
 */inspection-report.md
 */.inspection_result.json

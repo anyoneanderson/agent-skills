@@ -77,8 +77,11 @@ edits skill files directly.
 ## State Update
 
 - Record the retrospective outcome (report path, metrics line, applied
-  improvements or filed Issues) in `state`.
-- This is the terminal phase: mark the run complete.
+  improvements or filed Issues) in `state`, and add `retrospective` to
+  `completed_phases`.
+- This is the terminal phase: mark the run complete and **delete
+  `.specs/.orchestrate-active.json`** — removing the run marker is the terminal
+  signal to the watchdog (`../pipeline-config.md` §Run Marker and Watchdog).
 
 ## Transitions
 

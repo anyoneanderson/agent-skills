@@ -79,18 +79,69 @@ The orchestrator runs one loop until the pipeline reaches a terminal state:
    agent-delegate).
 4. Verify the worker's result. If it fails machine verification, do not advance.
 5. Update pipeline-state.json (completed phase, round counts, fingerprints,
-   thread ids) and select the next phase per the Transition Table.
+   thread ids), run the state integrity check
+   (references/scripts/pipeline-state-check.sh — must exit clean), and refresh
+   the run marker (pipeline-config.md §Run Marker and Watchdog).
+6. Select the next phase per the Transition Table and dispatch it in this same
+   turn. A progress report to the user rides along with that dispatch — state
+   first, report second, never a report alone at a phase boundary.
 ```
 
-The config file (`pipeline.yml`) and the state file (`pipeline-state.json`) —
-their schemas, the jq/awk read/write idiom, and the orchestrator-only write rule
-— are specified in `references/pipeline-config.md`.
+The config file (`pipeline.yml`), the state file (`pipeline-state.json`), the
+run marker, and the integrity check — schemas, the jq/awk read/write idiom, and
+the orchestrator-only write rule — are specified in
+`references/pipeline-config.md`.
 
-**Resume is the default.** On startup, if `pipeline-state.json` exists, read it,
-summarize the completed phases and the next action in one short block, and
-continue from there. A full run spanning several hours and surviving a crash or
-restart is the normal case, not an exception. See the Resume Behavior
-section of `references/pipeline-config.md`.
+**Resume is the default.** On startup, if `pipeline-state.json` exists, run the
+state integrity check first (reconcile any drift to the evidence before trusting
+the file), then summarize the completed phases and the next action in one short
+block, and continue from there. A full run spanning several hours and surviving
+a crash, restart, or deliberate session split is the normal case, not an
+exception. See the Resume Behavior section of `references/pipeline-config.md`.
+
+## Turn Discipline and the Watchdog
+
+> **🚨 BLOCKING — a report is not an exit.**
+
+The loop above ends at a terminal state, not at a phase boundary. The failure
+mode this section kills: finishing a phase, writing a tidy summary, and ending
+the turn without dispatching the next phase.
+
+- Worker dispatch and its completion wait live in the same turn. For detached
+  runs the only valid way to yield is the registered background wait of
+  `role-dispatch.md` Step 3 (background `until` loop that re-invokes the
+  dispatcher, plus `waiting_report` set in the run marker). An unregistered
+  pause is indistinguishable from a stall.
+- Phase results are reported in the same turn as the next phase's dispatch,
+  after the state write — never as a standalone turn-ending message.
+- State writes precede user-facing reports, so a turn that dies right after
+  reporting leaves the state already correct.
+
+The watchdog Stop hook (`references/scripts/pipeline-watchdog.sh`, registered
+per repository — spec-workflow-init Step 6d, manual snippet in
+`pipeline-config.md`) enforces this mechanically: it blocks a turn from ending
+while the run marker shows a mid-flight run with no registered wait, and echoes
+the next action back. Treat a watchdog block as the loop reporting its own
+stall: run the state check, then dispatch the current phase — and if the block
+says a registered wait has completed, collect that report first. The rules
+above bind even where the hook is not installed.
+
+## Orchestrator Context Economy
+
+A full run spans dozens of worker dispatches, and the orchestrator's context is
+the scarcest resource in the pipeline. Three rules:
+
+- **Delegate verification work.** Mutation tests, "does my own correction
+  hold" checks, and read-the-implementation investigations go to a verifier
+  worker whose return is a verdict plus at most three lines of evidence.
+  Verification must happen; it must not happen in the orchestrator's context.
+- **Never read a result file in full.** Judge from structured fields (`jq` on
+  `report.json` and state) and the summary section of review / evaluate files.
+  A judgment that genuinely needs full file contents belongs to a worker.
+- **Split sessions at phase boundaries.** With the integrity check clean and
+  the marker in place, ending the session after a phase and resuming in a fresh
+  one is the normal path for long runs — do not plan around finishing a
+  30-task run in a single context window.
 
 ## State Machine — Transition Table
 
@@ -174,6 +225,8 @@ In every case, state is preserved so the run is resumable.
 | App fails to start during evaluate | Mark dependent cases blocked; show the recipe and `ready_pattern`. Blocked ≠ failed |
 | Worker result file is malformed | Re-run that worker once; if it recurs, mark blocked and route to arbitration |
 | Uncommitted git changes appear mid-run | Compare against the phase-start snapshot; on drift, warn and open a human gate (auto: post an Issue comment) |
+| State integrity check reports DRIFT | Evidence wins: reconcile state to it, record the repair (`pipeline-config.md` §State Integrity Check), re-run the check; continue only on a clean exit |
+| Watchdog blocked the stop | The loop stalled: run the state check, then dispatch the current phase in this turn. If the block names a completed wait, collect that report first |
 
 ## Usage Examples
 
