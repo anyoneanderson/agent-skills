@@ -7,7 +7,7 @@
 #   2. maps a sandbox stage onto the peer CLI's permission flags
 #   3. runs the peer via codex exec / claude -p (prompt over stdin)
 #   4. measures touched files from git snapshots (never trusts self-report)
-#   5. emits an atomic report.json whose appearance is the sole completion signal
+#   5. emits an authoritative atomic terminal report plus detach liveness records
 #
 # Modes: delegate (task hand-off) and review (adversarial, read-only).
 # Directions: claude->codex (primary) and codex->claude (smoke).
@@ -24,6 +24,10 @@ set -euo pipefail
 
 GLOBAL_CODEX_CONFIG="${HOME}/.codex/config.toml"
 DEFAULT_SANDBOX="full-access"
+HEARTBEAT_INTERVAL=30
+HEARTBEAT_FRESHNESS=90
+HANDOFF_TIMEOUT=10
+OWNER_LOCK_TIMEOUT=5
 
 # Absolute path to this script, so re-invocation for --detach works regardless
 # of the caller's cwd.
@@ -62,6 +66,20 @@ STDOUT_FILE=""
 STDERR_FILE=""
 PID_FILE=""
 REVIEW_FILE=""
+HEARTBEAT_FILE=""
+HEARTBEAT_TMP=""
+OWNER_FILE=""
+OWNER_TMP=""
+OWNER_LOCK=""
+CANDIDATE_FILE=""
+CANDIDATE_TMP=""
+HANDOFF_DIR=""
+HANDOFF_ROOT=""
+LAUNCHER_PID=""
+MONITOR_PID=""
+REPORT_IS_CANDIDATE=0
+REPORT_PUBLISH_ONLY_IF_ABSENT=0
+RUN_CLI_APPEND_STDERR=0
 
 # Sandbox flag outputs (resolve_sandbox_flags()).
 CODEX_SANDBOX_VALUE=""
@@ -193,16 +211,618 @@ compute_paths() {
   local stdout_ext="jsonl"
   [ "$TARGET" = "claude" ] && stdout_ext="json"
   REPORT_FILE="${OUT_DIR}/${LABEL}-report.json"
-  REPORT_TMP="${OUT_DIR}/${LABEL}-report.json.tmp"
+  REPORT_TMP="${OUT_DIR}/${LABEL}-report.json.tmp.${RUN_ID:-pending}"
   LAST_MSG_FILE="${OUT_DIR}/${LABEL}-last.txt"
   STDOUT_FILE="${OUT_DIR}/${LABEL}-stdout.${stdout_ext}"
   STDERR_FILE="${OUT_DIR}/${LABEL}-stderr.log"
   PID_FILE="${OUT_DIR}/${LABEL}.pid"
+  HEARTBEAT_FILE="${OUT_DIR}/${LABEL}-heartbeat.json"
+  HEARTBEAT_TMP="${HEARTBEAT_FILE}.tmp.${RUN_ID:-pending}"
+  OWNER_FILE="${OUT_DIR}/${LABEL}-owner.json"
+  OWNER_TMP="${OWNER_FILE}.tmp.${RUN_ID:-pending}"
+  OWNER_LOCK="${OUT_DIR}/${LABEL}-owner.lock"
+  CANDIDATE_FILE="${OUT_DIR}/${LABEL}-report.candidate.${RUN_ID:-pending}.json"
+  CANDIDATE_TMP="${CANDIDATE_FILE}.tmp"
   if [ -z "$REVIEW_OUTPUT" ]; then
     REVIEW_FILE="${OUT_DIR}/${LABEL}-review.md"
   else
     REVIEW_FILE="$REVIEW_OUTPUT"
   fi
+}
+
+utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+file_hash_or_absent() {
+  local path="$1"
+  if [ -e "$path" ]; then
+    shasum -a 256 "$path" | awk '{print $1}'
+  else
+    printf '__absent__'
+  fi
+}
+
+stat_mode() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+stat_uid() { stat -f '%u' "$1" 2>/dev/null || stat -c '%u' "$1"; }
+stat_dev() { stat -f '%d' "$1" 2>/dev/null || stat -c '%d' "$1"; }
+stat_ino() { stat -f '%i' "$1" 2>/dev/null || stat -c '%i' "$1"; }
+
+process_probe() {
+  local pid="$1" probe
+  case "$pid" in ''|*[!0-9]*|0) printf 'absent'; return ;; esac
+  probe="$(kill -0 "$pid" 2>&1)" && { printf 'alive'; return; }
+  if printf '%s' "$probe" | grep -qi 'not permitted'; then
+    printf 'unknown'
+  else
+    printf 'absent'
+  fi
+}
+
+OWNER_LOCK_HELD=0
+acquire_owner_lock() {
+  local deadline=$((SECONDS + OWNER_LOCK_TIMEOUT)) holder_pid="" quarantine holder_hash remaining
+  while ! mkdir "$OWNER_LOCK" 2>/dev/null; do
+    if [ "$FORCE" -eq 1 ] && [ -r "$OWNER_LOCK/holder" ]; then
+      holder_pid="$(awk -F': ' '$1=="pid"{print $2; exit}' "$OWNER_LOCK/holder" 2>/dev/null || true)"
+      if [ "$(process_probe "$holder_pid")" = "absent" ]; then
+        quarantine="${OWNER_LOCK}.quarantine.${RUN_ID:-${BASHPID:-$$}}"
+        holder_hash="$(file_hash_or_absent "$OWNER_LOCK/holder")"
+        if mv "$OWNER_LOCK" "$quarantine" 2>/dev/null; then
+          remaining="$(find "$quarantine" -mindepth 1 -maxdepth 1 ! -name holder -print -quit 2>/dev/null || true)"
+          if [ -z "$remaining" ] && [ "$(file_hash_or_absent "$quarantine/holder")" = "$holder_hash" ]; then
+            rm -f "$quarantine/holder"
+            rmdir "$quarantine" 2>/dev/null || true
+            continue
+          fi
+          [ -e "$OWNER_LOCK" ] || mv "$quarantine" "$OWNER_LOCK" 2>/dev/null || true
+        fi
+      fi
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || { err "timed out acquiring owner lock: $OWNER_LOCK"; return 1; }
+    sleep 0.05
+  done
+  OWNER_LOCK_HELD=1
+  {
+    printf 'pid: %s\n' "${BASHPID:-$$}"
+    printf 'run_id: %s\n' "${RUN_ID:-unknown}"
+  } > "$OWNER_LOCK/holder"
+}
+
+release_owner_lock() {
+  [ "$OWNER_LOCK_HELD" -eq 1 ] || return 0
+  rm -f "$OWNER_LOCK/holder"
+  rmdir "$OWNER_LOCK" 2>/dev/null || true
+  OWNER_LOCK_HELD=0
+}
+
+owner_is_valid() {
+  local file="$1"
+  jq -e '
+    (.run_id|type)=="string" and (.run_id|length)>0 and
+    (.run_kind=="sync" or .run_kind=="detach") and
+    (.runner_pid|type)=="number" and .runner_pid>0 and
+    (.launcher_pid|type)=="number" and .launcher_pid>0 and
+    ((.monitor_pid==null) or ((.monitor_pid|type)=="number" and .monitor_pid>0)) and
+    ((.worker_pid==null) or ((.worker_pid|type)=="number" and .worker_pid>0)) and
+    (.started_at|type)=="string" and (.lease_at|type)=="string" and
+    ((.handoff_dir==null) or ((.handoff_dir|type)=="string" and (.handoff_dir|startswith("/")))) and
+    (.handoff_phase=="not_applicable" or .handoff_phase=="not_started" or
+     .handoff_phase=="committed" or .handoff_phase=="verified")
+  ' "$file" >/dev/null 2>&1
+}
+
+owner_matches_run() {
+  local run_id="$1"
+  owner_is_valid "$OWNER_FILE" &&
+    jq -e --arg run_id "$run_id" '.run_id==$run_id' "$OWNER_FILE" >/dev/null 2>&1
+}
+
+pid_matches_run() {
+  local run_id="$1" monitor_pid="${2:-}"
+  [ -r "$PID_FILE" ] || return 1
+  [ "$(awk -F': ' '$1=="run_id"{print $2; exit}' "$PID_FILE")" = "$run_id" ] || return 1
+  if [ -n "$monitor_pid" ]; then
+    [ "$(awk -F': ' '$1=="pid"{print $2; exit}' "$PID_FILE")" = "$monitor_pid" ] || return 1
+  fi
+}
+
+report_is_terminal_for_run() {
+  local file="$1" run_id="$2"
+  jq -e --arg run_id "$run_id" '
+    (.status=="done" or .status=="blocked") and .meta.run_id==$run_id
+  ' "$file" >/dev/null 2>&1
+}
+
+owner_publish_path() {
+  local run_id="$1" source="$2" target="$3" require_pid="${4:-0}" monitor_pid="${5:-}"
+  acquire_owner_lock || { rm -f "$source"; return 1; }
+  if ! owner_matches_run "$run_id" || { [ "$require_pid" -eq 1 ] && ! pid_matches_run "$run_id" "$monitor_pid"; }; then
+    release_owner_lock
+    rm -f "$source"
+    return 3
+  fi
+  if [ "$REPORT_PUBLISH_ONLY_IF_ABSENT" -eq 1 ] && report_is_terminal_for_run "$target" "$run_id"; then
+    release_owner_lock
+    rm -f "$source"
+    return 0
+  fi
+  if ! mv -f "$source" "$target"; then
+    release_owner_lock
+    return 1
+  fi
+  release_owner_lock
+}
+
+owner_remove_runtime() {
+  local run_id="$1" require_pid="${2:-0}" monitor_pid="${3:-}"
+  acquire_owner_lock || return 1
+  if owner_matches_run "$run_id"; then
+    if [ "$require_pid" -eq 0 ] || pid_matches_run "$run_id" "$monitor_pid"; then
+      [ "$require_pid" -eq 0 ] || rm -f "$PID_FILE"
+      rm -f "$OWNER_FILE"
+    fi
+  fi
+  release_owner_lock
+}
+
+update_owner_field() {
+  local run_id="$1" filter="$2" value="$3" require_pid="${4:-0}" monitor_pid="${5:-}"
+  local tmp="${OWNER_FILE}.tmp.${run_id}.update"
+  acquire_owner_lock || return 1
+  if ! owner_matches_run "$run_id" || { [ "$require_pid" -eq 1 ] && ! pid_matches_run "$run_id" "$monitor_pid"; }; then
+    release_owner_lock
+    rm -f "$tmp"
+    return 3
+  fi
+  if ! jq --arg value "$value" "$filter" "$OWNER_FILE" > "$tmp" || ! mv -f "$tmp" "$OWNER_FILE"; then
+    rm -f "$tmp"
+    release_owner_lock
+    return 1
+  fi
+  release_owner_lock
+}
+
+move_with_fault_hook() {
+  local stage="$1" source="$2" target="$3"
+  [ "${AGENT_DELEGATE_TEST_FAIL_STAGE:-}" != "$stage" ] || return 1
+  mv -f "$source" "$target"
+}
+
+restore_matches_snapshot() {
+  local owner_hash="$1" pid_hash="$2" report_hash="$3" heartbeat_hash="$4"
+  [ "$(file_hash_or_absent "$OWNER_FILE")" = "$owner_hash" ] &&
+    [ "$(file_hash_or_absent "$PID_FILE")" = "$pid_hash" ] &&
+    [ "$(file_hash_or_absent "$REPORT_FILE")" = "$report_hash" ] &&
+    [ "$(file_hash_or_absent "$HEARTBEAT_FILE")" = "$heartbeat_hash" ]
+}
+
+terminate_confirmed_old_process() {
+  local pid="$1" role="$2" command i
+  case "$pid" in ''|*[!0-9]*|0) return 0 ;; esac
+  [ "$pid" != "${BASHPID:-$$}" ] || return 0
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  case "$role" in
+    monitor) [[ "$command" == *"$(basename "$SELF")"*"--_monitor"* ]] || return 0 ;;
+    worker) [[ "$command" == *"$(basename "$SELF")"*"--_worker"* ]] || return 0 ;;
+    runner) [[ "$command" == *"$(basename "$SELF")"* ]] || return 0 ;;
+    *) return 0 ;;
+  esac
+  kill -TERM "$pid" 2>/dev/null || return 0
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    [ "$(process_probe "$pid")" = absent ] && return 0
+    sleep 0.1
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
+publish_detach_owner() {
+  local monitor_pid="$1" started_at="$2" pid_tmp="${PID_FILE}.tmp.${RUN_ID}"
+  local pid_backup="${PID_FILE}.backup.${RUN_ID}"
+  local old_owner_hash old_pid_hash old_report_hash old_heartbeat_hash old_pid_ino=""
+  local old_runner_pid="" old_monitor_pid="" old_worker_pid=""
+
+  jq -n \
+    --arg run_id "$RUN_ID" --argjson runner_pid "$monitor_pid" \
+    --argjson launcher_pid "$LAUNCHER_PID" --argjson monitor_pid "$monitor_pid" \
+    --arg started_at "$started_at" --arg handoff_dir "$HANDOFF_DIR" \
+    '{run_id:$run_id,run_kind:"detach",runner_pid:$runner_pid,
+      launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,worker_pid:null,
+      started_at:$started_at,lease_at:$started_at,handoff_dir:$handoff_dir,
+      handoff_phase:"not_started"}' > "$OWNER_TMP"
+  {
+    printf 'pid: %s\n' "$monitor_pid"
+    printf 'run_id: %s\n' "$RUN_ID"
+    printf 'started: %s\n' "$started_at"
+    printf 'command: %s exec/%s %s (%s)\n' "$TARGET" "$MODE" "$LABEL" "$DIRECTION"
+  } > "$pid_tmp"
+  chmod 600 "$OWNER_TMP" "$pid_tmp"
+
+  acquire_owner_lock || { rm -f "$OWNER_TMP" "$pid_tmp"; return 1; }
+  if { [ -e "$OWNER_FILE" ] || [ -e "$PID_FILE" ] || [ -e "$REPORT_FILE" ]; } &&
+     [ "$FORCE" -ne 1 ] && [ -z "$RESUME" ]; then
+    err "a run for label '$LABEL' is already active (use --force to override)"
+    release_owner_lock
+    rm -f "$OWNER_TMP" "$pid_tmp"
+    return 1
+  fi
+
+  old_owner_hash="$(file_hash_or_absent "$OWNER_FILE")"
+  old_pid_hash="$(file_hash_or_absent "$PID_FILE")"
+  old_report_hash="$(file_hash_or_absent "$REPORT_FILE")"
+  old_heartbeat_hash="$(file_hash_or_absent "$HEARTBEAT_FILE")"
+  [ ! -e "$PID_FILE" ] || old_pid_ino="$(stat_ino "$PID_FILE")"
+  if owner_is_valid "$OWNER_FILE"; then
+    old_runner_pid="$(jq -r '.runner_pid // empty' "$OWNER_FILE")"
+    old_monitor_pid="$(jq -r '.monitor_pid // empty' "$OWNER_FILE")"
+    old_worker_pid="$(jq -r '.worker_pid // empty' "$OWNER_FILE")"
+  fi
+  if jq -e '.pid|type=="number"' "$HEARTBEAT_FILE" >/dev/null 2>&1; then
+    old_worker_pid="$(jq -r '.pid' "$HEARTBEAT_FILE")"
+  fi
+
+  rm -f "$pid_backup"
+  if [ -e "$PID_FILE" ] && ! mv "$PID_FILE" "$pid_backup"; then
+    release_owner_lock
+    rm -f "$OWNER_TMP" "$pid_tmp"
+    return 1
+  fi
+  if ! move_with_fault_hook new_pid "$pid_tmp" "$PID_FILE"; then
+    [ ! -e "$pid_backup" ] || mv "$pid_backup" "$PID_FILE" || true
+    rm -f "$OWNER_TMP" "$pid_tmp"
+    if ! restore_matches_snapshot "$old_owner_hash" "$old_pid_hash" "$old_report_hash" "$old_heartbeat_hash"; then
+      err "owner publication rollback verification failed after pid publish failure"
+    fi
+    if [ -n "$old_pid_ino" ] && [ "$(stat_ino "$PID_FILE" 2>/dev/null || true)" != "$old_pid_ino" ]; then
+      err "owner publication rollback changed the prior pid inode"
+    fi
+    release_owner_lock
+    return 1
+  fi
+  if ! move_with_fault_hook owner "$OWNER_TMP" "$OWNER_FILE"; then
+    rm -f "$PID_FILE"
+    [ ! -e "$pid_backup" ] || mv "$pid_backup" "$PID_FILE" || true
+    rm -f "$OWNER_TMP" "$pid_tmp"
+    if ! restore_matches_snapshot "$old_owner_hash" "$old_pid_hash" "$old_report_hash" "$old_heartbeat_hash"; then
+      err "owner publication rollback verification failed after owner commit failure"
+    fi
+    if [ -n "$old_pid_ino" ] && [ "$(stat_ino "$PID_FILE" 2>/dev/null || true)" != "$old_pid_ino" ]; then
+      err "owner publication rollback changed the prior pid inode"
+    fi
+    release_owner_lock
+    return 1
+  fi
+
+  rm -f "$pid_backup" "$REPORT_FILE" "$HEARTBEAT_FILE"
+  release_owner_lock
+  if [ "$FORCE" -eq 1 ]; then
+    terminate_confirmed_old_process "$old_worker_pid" worker
+    terminate_confirmed_old_process "$old_monitor_pid" monitor
+    [ "$old_runner_pid" = "$old_monitor_pid" ] || terminate_confirmed_old_process "$old_runner_pid" runner
+  fi
+}
+
+publish_sync_owner() {
+  local started_at="$1" runner_pid="${BASHPID:-$$}"
+  local old_runner_pid="" old_monitor_pid="" old_worker_pid=""
+  jq -n \
+    --arg run_id "$RUN_ID" --argjson runner_pid "$runner_pid" --arg started_at "$started_at" \
+    '{run_id:$run_id,run_kind:"sync",runner_pid:$runner_pid,
+      launcher_pid:$runner_pid,monitor_pid:null,worker_pid:$runner_pid,
+      started_at:$started_at,lease_at:$started_at,handoff_dir:null,
+      handoff_phase:"not_applicable"}' > "$OWNER_TMP"
+  chmod 600 "$OWNER_TMP"
+  acquire_owner_lock || { rm -f "$OWNER_TMP"; return 1; }
+  if { [ -e "$OWNER_FILE" ] || [ -e "$PID_FILE" ] || [ -e "$REPORT_FILE" ]; } &&
+     [ "$FORCE" -ne 1 ] && [ -z "$RESUME" ]; then
+    release_owner_lock
+    rm -f "$OWNER_TMP"
+    err "a run for label '$LABEL' is already active (use --force to override)"
+    return 1
+  fi
+  if owner_is_valid "$OWNER_FILE"; then
+    old_runner_pid="$(jq -r '.runner_pid // empty' "$OWNER_FILE")"
+    old_monitor_pid="$(jq -r '.monitor_pid // empty' "$OWNER_FILE")"
+    old_worker_pid="$(jq -r '.worker_pid // empty' "$OWNER_FILE")"
+  fi
+  if jq -e '.pid|type=="number"' "$HEARTBEAT_FILE" >/dev/null 2>&1; then
+    old_worker_pid="$(jq -r '.pid' "$HEARTBEAT_FILE")"
+  fi
+  if ! mv -f "$OWNER_TMP" "$OWNER_FILE"; then
+    release_owner_lock
+    rm -f "$OWNER_TMP"
+    return 1
+  fi
+  rm -f "$PID_FILE" "$REPORT_FILE" "$HEARTBEAT_FILE"
+  release_owner_lock
+  if [ "$FORCE" -eq 1 ]; then
+    terminate_confirmed_old_process "$old_worker_pid" worker
+    terminate_confirmed_old_process "$old_monitor_pid" monitor
+    [ "$old_runner_pid" = "$old_monitor_pid" ] || terminate_confirmed_old_process "$old_runner_pid" runner
+  fi
+}
+
+rfc3339_epoch() {
+  local value="$1"
+  date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$value" +%s 2>/dev/null ||
+    date -u -d "$value" +%s 2>/dev/null
+}
+
+classify_handoff_metadata() {
+  local path="$1" root="$2" parent="$3" base="$4" type="$5" symlink="$6"
+  local uid="$7" mode="$8" dev="$9" ino="${10}" expected_uid="${11}"
+  local launcher_pid="${12}" expected_dev="${13:-}" expected_ino="${14:-}"
+  local embedded_pid
+  [ "$parent" = "$root" ] || return 1
+  [[ "$base" =~ ^agent-delegate-handoff\.([0-9]+)\.[A-Za-z0-9_-]+$ ]] || return 1
+  embedded_pid="${BASH_REMATCH[1]}"
+  [ "$embedded_pid" = "$launcher_pid" ] || return 1
+  [ "$type" = "directory" ] && [ "$symlink" = "false" ] || return 1
+  [ "$uid" = "$expected_uid" ] && [ "$mode" = "700" ] || return 1
+  if [ -n "$expected_dev" ]; then [ "$dev" = "$expected_dev" ] || return 1; fi
+  if [ -n "$expected_ino" ]; then [ "$ino" = "$expected_ino" ] || return 1; fi
+  [ -n "$path" ]
+}
+
+production_handoff_path_is_safe() {
+  local path="$1" root="$2" launcher_pid="$3" expected_dev="${4:-}" expected_ino="${5:-}"
+  local type="other" symlink="false"
+  [ -e "$path" ] || [ -L "$path" ] || return 1
+  [ -L "$path" ] && symlink="true"
+  [ -d "$path" ] && type="directory"
+  classify_handoff_metadata "$path" "$root" "$(dirname "$path")" "$(basename "$path")" \
+    "$type" "$symlink" "$(stat_uid "$path")" "$(stat_mode "$path")" \
+    "$(stat_dev "$path")" "$(stat_ino "$path")" "$(id -u)" "$launcher_pid" \
+    "$expected_dev" "$expected_ino"
+}
+
+stale_reap_previous_run() {
+  local handoff run_id launcher_pid monitor_pid lease_at lease_epoch now pid_run pid_monitor
+  local initial_dev initial_ino sentinel child base remaining
+  acquire_owner_lock || return 1
+  if ! owner_is_valid "$OWNER_FILE" || ! jq -e '.run_kind=="detach"' "$OWNER_FILE" >/dev/null 2>&1; then
+    release_owner_lock
+    return 0
+  fi
+  handoff="$(jq -r '.handoff_dir // empty' "$OWNER_FILE")"
+  run_id="$(jq -r '.run_id' "$OWNER_FILE")"
+  launcher_pid="$(jq -r '.launcher_pid' "$OWNER_FILE")"
+  monitor_pid="$(jq -r '.monitor_pid // empty' "$OWNER_FILE")"
+  lease_at="$(jq -r '.lease_at' "$OWNER_FILE")"
+  if [ -z "$handoff" ] || ! production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid"; then
+    err "stale-reaper retained unsafe handoff path for run $run_id"
+    release_owner_lock
+    return 0
+  fi
+  initial_dev="$(stat_dev "$handoff")"; initial_ino="$(stat_ino "$handoff")"
+  pid_run="$(awk -F': ' '$1=="run_id"{print $2; exit}' "$PID_FILE" 2>/dev/null || true)"
+  pid_monitor="$(awk -F': ' '$1=="pid"{print $2; exit}' "$PID_FILE" 2>/dev/null || true)"
+  if [ "$pid_run" != "$run_id" ] || [ "$pid_monitor" != "$monitor_pid" ] ||
+     ! jq -e --argjson monitor "$monitor_pid" '.runner_pid==$monitor and .monitor_pid==$monitor' "$OWNER_FILE" >/dev/null 2>&1; then
+    err "stale-reaper retained run $run_id because owner and pid do not agree"
+    release_owner_lock
+    return 0
+  fi
+  if [ "$(process_probe "$monitor_pid")" != "absent" ]; then
+    release_owner_lock
+    return 0
+  fi
+  lease_epoch="$(rfc3339_epoch "$lease_at" || true)"; now="$(date -u +%s)"
+  if [ -z "$lease_epoch" ] || [ $((now - lease_epoch)) -le "$HEARTBEAT_FRESHNESS" ]; then
+    release_owner_lock
+    return 0
+  fi
+
+  sentinel="$handoff/handoff-sentinel.json"
+  if [ -e "$sentinel" ]; then
+    if [ -L "$sentinel" ] || [ ! -f "$sentinel" ] || ! jq -e --arg run_id "$run_id" --argjson launcher "$launcher_pid" \
+      --argjson monitor "$monitor_pid" --arg handoff "$handoff" '
+        .run_id==$run_id and .launcher_pid==$launcher and .monitor_pid==$monitor and
+        .handoff_dir==$handoff and (.created_fifos|type)=="array"
+      ' "$sentinel" >/dev/null 2>&1; then
+      err "stale-reaper retained invalid_sentinel for run $run_id"
+      release_owner_lock
+      return 0
+    fi
+    while IFS= read -r base; do
+      case "$base" in launcher-to-monitor.fifo|monitor-to-launcher.fifo) : ;; *)
+        err "stale-reaper retained invalid_sentinel FIFO name for run $run_id"
+        release_owner_lock
+        return 0 ;;
+      esac
+      child="$handoff/$base"
+      production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid" "$initial_dev" "$initial_ino" || { release_owner_lock; return 0; }
+      [ ! -L "$child" ] && [ -p "$child" ] || { err "stale-reaper retained invalid_sentinel FIFO type for run $run_id"; release_owner_lock; return 0; }
+      rm -f "$child"
+    done < <(jq -r '.created_fifos[]' "$sentinel")
+    production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid" "$initial_dev" "$initial_ino" || { release_owner_lock; return 0; }
+    child="$handoff/handoff-sentinel.json.tmp.$run_id"
+    if [ -e "$child" ]; then
+      production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid" "$initial_dev" "$initial_ino" || { release_owner_lock; return 0; }
+      [ ! -L "$child" ] && [ -f "$child" ] || { err "stale-reaper retained unsafe sentinel temp for run $run_id"; release_owner_lock; return 0; }
+      rm -f "$child"
+    fi
+    production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid" "$initial_dev" "$initial_ino" || { release_owner_lock; return 0; }
+    [ ! -L "$sentinel" ] && [ -f "$sentinel" ] || { err "stale-reaper retained unsafe sentinel for run $run_id"; release_owner_lock; return 0; }
+    rm -f "$sentinel"
+  else
+    for base in launcher-to-monitor.fifo monitor-to-launcher.fifo; do
+      child="$handoff/$base"
+      [ -e "$child" ] || continue
+      production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid" "$initial_dev" "$initial_ino" || { release_owner_lock; return 0; }
+      [ ! -L "$child" ] && [ -p "$child" ] || continue
+      rm -f "$child"
+    done
+  fi
+
+  remaining="$(find "$handoff" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)"
+  if [ -n "$remaining" ]; then
+    err "stale-reaper retained handoff directory with unknown entry: $(basename "$remaining")"
+    release_owner_lock
+    return 0
+  fi
+  production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid" "$initial_dev" "$initial_ino" || { release_owner_lock; return 0; }
+  rmdir "$handoff" || { release_owner_lock; return 0; }
+  if owner_matches_run "$run_id" && pid_matches_run "$run_id" "$monitor_pid"; then
+    rm -f "$PID_FILE" "$OWNER_FILE"
+  fi
+  release_owner_lock
+}
+
+sentinel_path() { printf '%s/handoff-sentinel.json' "$HANDOFF_DIR"; }
+
+write_handoff_sentinel() {
+  local state="$1" phase="$2" failure_stage="${3:-}" created="$4"
+  local sentinel tmp failure_json="null"
+  sentinel="$(sentinel_path)"; tmp="${sentinel}.tmp.${RUN_ID}"
+  [ -z "$failure_stage" ] || failure_json="$(printf '%s' "$failure_stage" | jq -R '.')"
+  jq -n --arg run_id "$RUN_ID" --argjson launcher_pid "$LAUNCHER_PID" \
+    --argjson monitor_pid "$MONITOR_PID" --arg state "$state" --arg phase "$phase" \
+    --arg handoff_dir "$HANDOFF_DIR" --argjson failure_stage "$failure_json" \
+    --arg created "$created" --arg created_at "$(utc_now)" '
+      {version:1,run_id:$run_id,launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,
+       state:$state,handoff_phase:$phase,handoff_dir:$handoff_dir,
+       handoff_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"],
+       control_fifos:[],created_fifos:($created|split(",")|map(select(length>0))),
+       failure_stage:$failure_stage,created_at:$created_at}
+    ' > "$tmp"
+  chmod 600 "$tmp"
+  mv -f "$tmp" "$sentinel"
+}
+
+update_sentinel_phase() {
+  local phase="$1" stage="$2" sentinel tmp
+  sentinel="$(sentinel_path)"; tmp="${sentinel}.tmp.${RUN_ID}"
+  jq --arg phase "$phase" '.handoff_phase=$phase' "$sentinel" > "$tmp"
+  chmod 600 "$tmp"
+  if ! move_with_fault_hook "$stage" "$tmp" "$sentinel"; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+update_owner_phase_best_effort() {
+  local phase="$1" stage="$2"
+  if [ "${AGENT_DELEGATE_TEST_FAIL_STAGE:-}" = "$stage" ] ||
+     ! update_owner_field "$RUN_ID" '.handoff_phase=$value' "$phase" 1 "$MONITOR_PID"; then
+    err "owner_phase_mirror_failed $phase"
+    rm -f "${OWNER_FILE}.tmp.${RUN_ID}.update"
+    return 0
+  fi
+}
+
+close_monitor_handoff_fds() {
+  exec 10>&- 2>/dev/null || true
+  exec 9<&- 2>/dev/null || true
+  exec 8>&- 2>/dev/null || true
+  exec 7>&- 2>/dev/null || true
+}
+
+close_launcher_handoff_fds() {
+  exec 8<&- 2>/dev/null || true
+  exec 7>&- 2>/dev/null || true
+}
+
+setup_monitor_handoff() {
+  local l2m="$HANDOFF_DIR/launcher-to-monitor.fifo" m2l="$HANDOFF_DIR/monitor-to-launcher.fifo"
+  local created=""
+  if ! mkfifo "$l2m"; then write_handoff_sentinel setup_failed not_started fifo_launcher_to_monitor "$created" || true; return 1; fi
+  chmod 600 "$l2m"; created="launcher-to-monitor.fifo"
+  if ! mkfifo "$m2l"; then write_handoff_sentinel setup_failed not_started fifo_monitor_to_launcher "$created" || true; return 1; fi
+  chmod 600 "$m2l"; created="$created,monitor-to-launcher.fifo"
+  if ! exec 7<>"$l2m"; then write_handoff_sentinel setup_failed not_started anchor_launcher_to_monitor "$created" || true; return 1; fi
+  if ! exec 8<>"$m2l"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started anchor_monitor_to_launcher "$created" || true; return 1; fi
+  if ! exec 9<"$l2m"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started reader_launcher_to_monitor "$created" || true; return 1; fi
+  if ! exec 10>"$m2l"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started writer_monitor_to_launcher "$created" || true; return 1; fi
+  write_handoff_sentinel fifo_ready not_started "" "$created"
+}
+
+remaining_handoff_seconds() {
+  local now remaining
+  now="$(date -u +%s)"; remaining=$((HANDOFF_DEADLINE - now))
+  [ "$remaining" -gt 0 ] || remaining=0
+  printf '%s' "$remaining"
+}
+
+monitor_handoff() {
+  local line="" remaining expected
+  remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+  IFS= read -r -t "$remaining" line <&9 || return 1
+  expected="handoff-ready $RUN_ID $LAUNCHER_PID $MONITOR_PID"
+  [ "$line" = "$expected" ] && owner_matches_run "$RUN_ID" && pid_matches_run "$RUN_ID" "$MONITOR_PID" || return 1
+  printf 'monitor-ready %s %s\n' "$RUN_ID" "$MONITOR_PID" >&10
+
+  remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+  IFS= read -r -t "$remaining" line <&9 || return 1
+  [ "$line" = "handoff-commit $RUN_ID" ] && owner_matches_run "$RUN_ID" || return 1
+  update_sentinel_phase committed sentinel_committed || return 1
+  update_owner_phase_best_effort committed owner_committed
+  printf 'handoff-committed %s %s\n' "$RUN_ID" "$MONITOR_PID" >&10
+
+  remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+  IFS= read -r -t "$remaining" line <&9 || return 1
+  [ "$line" = "handoff-verified $RUN_ID $MONITOR_PID verification=ok" ] &&
+    owner_matches_run "$RUN_ID" && pid_matches_run "$RUN_ID" "$MONITOR_PID" &&
+    jq -e '.handoff_phase=="committed"' "$(sentinel_path)" >/dev/null 2>&1 || return 1
+  update_sentinel_phase verified sentinel_verified || return 1
+  update_owner_phase_best_effort verified owner_verified
+  printf 'handoff-verified-ack %s %s\n' "$RUN_ID" "$MONITOR_PID" >&10
+}
+
+launcher_wait_for_readiness() {
+  local sentinel monitor_pid="$1" owner_run="" owner_monitor="" remaining
+  sentinel="$(sentinel_path)"
+  while :; do
+    remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+    if owner_is_valid "$OWNER_FILE" &&
+       jq -e --argjson launcher "${BASHPID:-$$}" --argjson monitor "$monitor_pid" --arg handoff "$HANDOFF_DIR" '
+         .run_kind=="detach" and .launcher_pid==$launcher and
+         .runner_pid==$monitor and .monitor_pid==$monitor and .worker_pid==null and
+         .handoff_dir==$handoff and .handoff_phase=="not_started"
+       ' "$OWNER_FILE" >/dev/null 2>&1; then
+      owner_run="$(jq -r '.run_id' "$OWNER_FILE")"; owner_monitor="$(jq -r '.monitor_pid' "$OWNER_FILE")"
+      if pid_matches_run "$owner_run" "$owner_monitor"; then RUN_ID="$owner_run"; compute_paths; break; fi
+    fi
+    [ "$(process_probe "$monitor_pid")" != "absent" ] || return 1
+    sleep 0.05
+  done
+  while :; do
+    remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+    if jq -e --arg run_id "$RUN_ID" --argjson launcher "${BASHPID:-$$}" --argjson monitor "$monitor_pid" --arg handoff "$HANDOFF_DIR" '
+      .run_id==$run_id and .launcher_pid==$launcher and .monitor_pid==$monitor and
+      .handoff_dir==$handoff and .state=="fifo_ready" and .handoff_phase=="not_started" and
+      .handoff_fifos==["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]
+    ' "$sentinel" >/dev/null 2>&1 &&
+      [ -p "$HANDOFF_DIR/launcher-to-monitor.fifo" ] &&
+      [ -p "$HANDOFF_DIR/monitor-to-launcher.fifo" ] &&
+      [ "$(stat_mode "$HANDOFF_DIR/launcher-to-monitor.fifo")" = 600 ] &&
+      [ "$(stat_mode "$HANDOFF_DIR/monitor-to-launcher.fifo")" = 600 ]; then
+      return 0
+    fi
+    if jq -e '.state=="setup_failed"' "$sentinel" >/dev/null 2>&1; then return 1; fi
+    [ "$(process_probe "$monitor_pid")" != "absent" ] || return 1
+    sleep 0.05
+  done
+}
+
+launcher_complete_handoff() {
+  local monitor_pid="$1" line="" remaining sentinel_phase
+  exec 7>"$HANDOFF_DIR/launcher-to-monitor.fifo"
+  exec 8<"$HANDOFF_DIR/monitor-to-launcher.fifo"
+  printf 'handoff-ready %s %s %s\n' "$RUN_ID" "${BASHPID:-$$}" "$monitor_pid" >&7
+  remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+  IFS= read -r -t "$remaining" line <&8 || return 1
+  [ "$line" = "monitor-ready $RUN_ID $monitor_pid" ] || return 1
+  printf 'handoff-commit %s\n' "$RUN_ID" >&7
+  remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+  IFS= read -r -t "$remaining" line <&8 || return 1
+  [ "$line" = "handoff-committed $RUN_ID $monitor_pid" ] || return 1
+  printf 'handoff-verified %s %s verification=ok\n' "$RUN_ID" "$monitor_pid" >&7
+  remaining="$(remaining_handoff_seconds)"
+  if [ "$remaining" -gt 0 ] && IFS= read -r -t "$remaining" line <&8 &&
+     [ "$line" = "handoff-verified-ack $RUN_ID $monitor_pid" ]; then
+    return 0
+  fi
+  sentinel_phase="$(jq -r '.handoff_phase // empty' "$(sentinel_path)" 2>/dev/null || true)"
+  [ "$sentinel_phase" = verified ]
 }
 
 # --- command assembly (§4.3 / §4.5) ----------------------------------------
@@ -337,7 +957,11 @@ write_report() {
         ts: $ts
       }
     }' > "$REPORT_TMP"
-  mv -f "$REPORT_TMP" "$REPORT_FILE"
+  if [ "$REPORT_IS_CANDIDATE" -eq 1 ]; then
+    mv -f "$REPORT_TMP" "$REPORT_FILE"
+  else
+    owner_publish_path "$RUN_ID" "$REPORT_TMP" "$REPORT_FILE" "${REPORT_REQUIRE_PID:-0}" "${REPORT_MONITOR_PID:-}"
+  fi
 }
 
 # --- touched-files measurement ---------------------------------------------
@@ -386,7 +1010,11 @@ run_cli() {
   snapshot_changed_files > "$pre"
 
   RUN_RC=0
-  "${CLI_CMD[@]}" < "$prompt_used" > "$STDOUT_FILE" 2> "$STDERR_FILE" || RUN_RC=$?
+  if [ "$RUN_CLI_APPEND_STDERR" -eq 1 ]; then
+    "${CLI_CMD[@]}" < "$prompt_used" > "$STDOUT_FILE" 2>> "$STDERR_FILE" || RUN_RC=$?
+  else
+    "${CLI_CMD[@]}" < "$prompt_used" > "$STDOUT_FILE" 2> "$STDERR_FILE" || RUN_RC=$?
+  fi
 
   snapshot_changed_files > "$post"
   compute_touched "$pre" "$post" > "$TOUCHED_LIST_FILE"
@@ -528,6 +1156,140 @@ synthesize_blocked_report() {
   write_report
 }
 
+publish_handoff_failure_once() {
+  local stage="$1" monitor_pid="$2"
+  local publish_rc=0
+  if report_is_terminal_for_run "$REPORT_FILE" "$RUN_ID"; then return 0; fi
+  REPORT_STATUS="blocked"
+  BLOCKER_CATEGORY="env_error"
+  BLOCKER="detach handoff failed before worker start: $stage"
+  SUMMARY="detach handoff failed before worker start"
+  THREAD_ID="${RESUME:-unknown}"
+  TOUCHED_LIST_FILE="$(mktemp -t agent-delegate.XXXXXX)"; : > "$TOUCHED_LIST_FILE"
+  REPORT_PUBLISH_ONLY_IF_ABSENT=1
+  REPORT_REQUIRE_PID=1
+  REPORT_MONITOR_PID="$monitor_pid"
+  write_report || publish_rc=$?
+  REPORT_PUBLISH_ONLY_IF_ABSENT=0
+  rm -f "$TOUCHED_LIST_FILE"
+  [ "$publish_rc" -eq 0 ] && report_is_terminal_for_run "$REPORT_FILE" "$RUN_ID"
+}
+
+write_heartbeat() {
+  local state="$1" worker_pid="$2" started_at="$3" last_beat="$4"
+  local owner_update="${OWNER_FILE}.tmp.${RUN_ID}.lease"
+  jq -n --arg run_id "$RUN_ID" --arg state "$state" --argjson pid "$worker_pid" \
+    --argjson monitor_pid "$MONITOR_PID" --arg started_at "$started_at" \
+    --arg last_beat "$last_beat" --arg target "$TARGET" --arg mode "$MODE" \
+    --arg report_path "$REPORT_FILE" '
+      {run_id:$run_id,state:$state,pid:$pid,monitor_pid:$monitor_pid,
+       started_at:$started_at,last_beat:$last_beat,target:$target,mode:$mode,
+       report_path:$report_path}
+    ' > "$HEARTBEAT_TMP"
+  chmod 600 "$HEARTBEAT_TMP"
+  acquire_owner_lock || { rm -f "$HEARTBEAT_TMP"; return 1; }
+  if ! owner_matches_run "$RUN_ID" || ! pid_matches_run "$RUN_ID" "$MONITOR_PID"; then
+    release_owner_lock
+    rm -f "$HEARTBEAT_TMP"
+    return 3
+  fi
+  if [ "$state" != running ] && ! report_is_terminal_for_run "$REPORT_FILE" "$RUN_ID"; then
+    release_owner_lock
+    rm -f "$HEARTBEAT_TMP"
+    return 1
+  fi
+  if ! jq --arg last_beat "$last_beat" --argjson worker_pid "$worker_pid" \
+    '.lease_at=$last_beat | .worker_pid=$worker_pid' "$OWNER_FILE" > "$owner_update"; then
+    rm -f "$HEARTBEAT_TMP" "$owner_update"
+    release_owner_lock
+    return 1
+  fi
+  if ! mv -f "$owner_update" "$OWNER_FILE"; then
+    rm -f "$owner_update" "$HEARTBEAT_TMP"
+    release_owner_lock
+    return 1
+  fi
+  if ! mv -f "$HEARTBEAT_TMP" "$HEARTBEAT_FILE"; then
+    rm -f "$HEARTBEAT_TMP"
+    release_owner_lock
+    return 1
+  fi
+  release_owner_lock
+}
+
+heartbeat_loop() {
+  local worker_pid="$1" started_at="$2"
+  while :; do
+    sleep "$HEARTBEAT_INTERVAL" &
+    wait $! || return 0
+    [ "$(process_probe "$worker_pid")" != absent ] || return 0
+    write_heartbeat running "$worker_pid" "$started_at" "$(utc_now)" || return 0
+  done
+}
+
+make_blocked_candidate() {
+  local reason="$1" saved_report="$REPORT_FILE" saved_tmp="$REPORT_TMP"
+  local saved_candidate="$REPORT_IS_CANDIDATE"
+  REPORT_FILE="$CANDIDATE_FILE"; REPORT_TMP="$CANDIDATE_TMP"; REPORT_IS_CANDIDATE=1
+  REPORT_STATUS="blocked"; BLOCKER_CATEGORY="env_error"; BLOCKER="$reason"
+  SUMMARY="run terminated before completion"; THREAD_ID="${RESUME:-unknown}"
+  TOUCHED_LIST_FILE="$(mktemp -t agent-delegate.XXXXXX)"; : > "$TOUCHED_LIST_FILE"
+  write_report
+  rm -f "$TOUCHED_LIST_FILE"
+  REPORT_FILE="$saved_report"; REPORT_TMP="$saved_tmp"; REPORT_IS_CANDIDATE="$saved_candidate"
+}
+
+publish_worker_candidate() {
+  local reason="" status
+  if [ ! -e "$CANDIDATE_FILE" ]; then
+    reason="worker exited without producing a report candidate"
+  elif ! jq -e . "$CANDIDATE_FILE" >/dev/null 2>&1; then
+    reason="run exited with an invalid terminal report: invalid JSON"
+  elif ! jq -e '(.status=="done" or .status=="blocked")' "$CANDIDATE_FILE" >/dev/null 2>&1; then
+    reason="run exited with an invalid terminal report: unknown status"
+  elif ! jq -e --arg run_id "$RUN_ID" '.meta.run_id==$run_id' "$CANDIDATE_FILE" >/dev/null 2>&1; then
+    reason="run exited with an invalid terminal report: run_id mismatch"
+  fi
+  if [ -n "$reason" ]; then
+    if [ -e "$CANDIDATE_FILE" ]; then
+      err "$reason; candidate head: $(head -c 200 "$CANDIDATE_FILE" | tr '\n' ' ')"
+    else
+      err "$reason"
+    fi
+    rm -f "$CANDIDATE_FILE"
+    make_blocked_candidate "$reason"
+  fi
+  report_is_terminal_for_run "$CANDIDATE_FILE" "$RUN_ID" || return 1
+  status="$(jq -r '.status' "$CANDIDATE_FILE")"
+  owner_publish_path "$RUN_ID" "$CANDIDATE_FILE" "$REPORT_FILE" 1 "$MONITOR_PID" || return $?
+  printf '%s' "$status"
+}
+
+cleanup_handoff_dir_owned() {
+  local monitor_pid="$1" sentinel base child remaining
+  sentinel="$(sentinel_path)"
+  if [ -e "$sentinel" ] && jq -e --arg run_id "$RUN_ID" --argjson launcher "$LAUNCHER_PID" \
+    --argjson monitor "$monitor_pid" --arg handoff "$HANDOFF_DIR" '
+      .run_id==$run_id and .launcher_pid==$launcher and .monitor_pid==$monitor and
+      .handoff_dir==$handoff and (.created_fifos|type)=="array"
+    ' "$sentinel" >/dev/null 2>&1; then
+    jq '.state="cleanup_pending"' "$sentinel" > "${sentinel}.tmp.${RUN_ID}" &&
+      chmod 600 "${sentinel}.tmp.${RUN_ID}" && mv -f "${sentinel}.tmp.${RUN_ID}" "$sentinel" || true
+    while IFS= read -r base; do
+      case "$base" in launcher-to-monitor.fifo|monitor-to-launcher.fifo) : ;; *) continue ;; esac
+      child="$HANDOFF_DIR/$base"
+      [ -p "$child" ] && rm -f "$child"
+    done < <(jq -r '.created_fifos[]' "$sentinel")
+    rm -f "${sentinel}.tmp.${RUN_ID}" "$sentinel"
+  else
+    for base in launcher-to-monitor.fifo monitor-to-launcher.fifo; do
+      child="$HANDOFF_DIR/$base"; [ -p "$child" ] && rm -f "$child"
+    done
+  fi
+  remaining="$(find "$HANDOFF_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)"
+  [ -n "$remaining" ] || rmdir "$HANDOFF_DIR" 2>/dev/null || true
+}
+
 # EXIT trap for the synchronous and worker paths: if we are leaving without a
 # report (an unexpected failure inside run_job under set -e), synthesize a
 # blocked one. A clean run has already written REPORT_FILE, so this is a no-op.
@@ -558,7 +1320,10 @@ export_resolved_env() {
          _AD_LABEL="$LABEL" _AD_SANDBOX="$SANDBOX" _AD_PROMPT_FILE="$PROMPT_FILE" \
          _AD_OUT_DIR="$OUT_DIR" _AD_RESUME="$RESUME" _AD_MODEL="$MODEL" \
          _AD_EFFORT="$EFFORT" _AD_REVIEW_OUTPUT="$REVIEW_OUTPUT" \
-         _AD_RUN_ID="$RUN_ID" _AD_RESUMED="$RESUMED"
+         _AD_RUN_ID="$RUN_ID" _AD_RESUMED="$RESUMED" _AD_FORCE="$FORCE" \
+         _AD_HANDOFF_DIR="$HANDOFF_DIR" _AD_HANDOFF_ROOT="$HANDOFF_ROOT" \
+         _AD_LAUNCHER_PID="$LAUNCHER_PID" _AD_MONITOR_PID="$MONITOR_PID" \
+         _AD_HANDOFF_DEADLINE="${HANDOFF_DEADLINE:-0}"
 }
 
 import_resolved_env() {
@@ -566,28 +1331,83 @@ import_resolved_env() {
   LABEL="${_AD_LABEL}"; SANDBOX="${_AD_SANDBOX}"; PROMPT_FILE="${_AD_PROMPT_FILE}"
   OUT_DIR="${_AD_OUT_DIR}"; RESUME="${_AD_RESUME}"; MODEL="${_AD_MODEL}"
   EFFORT="${_AD_EFFORT}"; REVIEW_OUTPUT="${_AD_REVIEW_OUTPUT}"
-  RUN_ID="${_AD_RUN_ID}"; RESUMED="${_AD_RESUMED}"
+  RUN_ID="${_AD_RUN_ID:-}"; RESUMED="${_AD_RESUMED}"; FORCE="${_AD_FORCE:-0}"
+  HANDOFF_DIR="${_AD_HANDOFF_DIR:-}"; HANDOFF_ROOT="${_AD_HANDOFF_ROOT:-}"
+  LAUNCHER_PID="${_AD_LAUNCHER_PID:-}"; MONITOR_PID="${_AD_MONITOR_PID:-}"
+  HANDOFF_DEADLINE="${_AD_HANDOFF_DEADLINE:-0}"
   resolve_sandbox_flags "$SANDBOX"
   compute_paths
 }
 
 run_worker() {
   import_resolved_env
+  REPORT_FILE="$CANDIDATE_FILE"
+  REPORT_TMP="$CANDIDATE_TMP"
+  REPORT_IS_CANDIDATE=1
+  RUN_CLI_APPEND_STDERR=1
   run_job_guarded
 }
 
 run_monitor() {
   import_resolved_env
-  # Spawn the actual worker and wait. If it dies without a report, synthesize one.
-  bash "$SELF" --_worker &
-  local worker_pid=$!
-  local wrc=0
-  wait "$worker_pid" || wrc=$?
-  if [ ! -f "$REPORT_FILE" ]; then
-    err "worker (pid $worker_pid) exited rc=$wrc without report.json; synthesizing blocked report"
-    synthesize_blocked_report
+  if command -v uuidgen >/dev/null 2>&1; then RUN_ID="$(uuidgen)"; else RUN_ID="$(date +%s%N)"; fi
+  compute_paths
+  local started_at monitor_pid worker_pid worker_rc=0 heartbeat_pid terminal_status phase
+  started_at="$(utc_now)"; monitor_pid="${BASHPID:-$$}"; MONITOR_PID="$monitor_pid"
+  if ! publish_detach_owner "$monitor_pid" "$started_at"; then
+    err "failed to publish detach owner and pid"
+    return 2
   fi
-  rm -f "$PID_FILE"
+  : > "$STDERR_FILE"
+  if ! setup_monitor_handoff; then
+    phase="setup_failed"
+    if [ "$(process_probe "$LAUNCHER_PID")" = absent ]; then
+      publish_handoff_failure_once "$phase" "$monitor_pid" || err "failed to publish setup failure report"
+      owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
+      cleanup_handoff_dir_owned "$monitor_pid"
+    fi
+    return 2
+  fi
+  if ! monitor_handoff; then
+    printf 'handoff-failed %s protocol\n' "$RUN_ID" >&10 2>/dev/null || true
+    close_monitor_handoff_fds
+    if [ "$(process_probe "$LAUNCHER_PID")" = absent ]; then
+      publish_handoff_failure_once protocol "$monitor_pid" || err "failed to publish protocol failure report"
+      owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
+      cleanup_handoff_dir_owned "$monitor_pid"
+    fi
+    return 2
+  fi
+  close_monitor_handoff_fds
+
+  # The monitor generated RUN_ID after the launcher exported its initial state.
+  # Refresh the environment so the worker writes the matching run candidate.
+  export_resolved_env
+  bash "$SELF" --_worker &
+  worker_pid=$!
+  update_owner_field "$RUN_ID" '.worker_pid=($value|tonumber)' "$worker_pid" 1 "$monitor_pid" || true
+  write_heartbeat running "$worker_pid" "$started_at" "$(utc_now)" || {
+    kill "$worker_pid" 2>/dev/null || true
+    wait "$worker_pid" 2>/dev/null || true
+    make_blocked_candidate "failed to publish initial heartbeat"
+  }
+  heartbeat_loop "$worker_pid" "$started_at" &
+  heartbeat_pid=$!
+  wait "$worker_pid" || worker_rc=$?
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
+  if [ ! -e "$CANDIDATE_FILE" ]; then
+    err "worker (pid $worker_pid) exited rc=$worker_rc without report candidate"
+  fi
+  terminal_status="$(publish_worker_candidate)" || {
+    err "failed to publish worker report candidate"
+    owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
+    cleanup_handoff_dir_owned "$monitor_pid"
+    return 2
+  }
+  write_heartbeat "$terminal_status" "$worker_pid" "$started_at" "$(utc_now)" || true
+  owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
+  cleanup_handoff_dir_owned "$monitor_pid"
 }
 
 # --- argument parsing ------------------------------------------------------
@@ -685,6 +1505,13 @@ if [ -n "$RESUME" ]; then
   # caller wants different permissions and must start a fresh session.
   PRIOR_REPORT="${OUT_DIR}/${LABEL}-report.json"
   if [ -f "$PRIOR_REPORT" ]; then
+    if ! jq -e --arg thread "$RESUME" '
+      (.status=="done" or .status=="blocked") and .thread_id==$thread and
+      (.meta.sandbox|type)=="string"
+    ' "$PRIOR_REPORT" >/dev/null 2>&1; then
+      err "cannot resume: prior report is invalid, non-terminal, or belongs to another thread_id"
+      exit 2
+    fi
     PRIOR_SANDBOX="$(jq -r '.meta.sandbox // empty' "$PRIOR_REPORT" 2>/dev/null || true)"
     if [ -n "$PRIOR_SANDBOX" ] && [ "$PRIOR_SANDBOX" != "$SANDBOX" ]; then
       err "resume sandbox mismatch: session was created with '$PRIOR_SANDBOX' but '$SANDBOX' was requested; start a new session to change permissions"
@@ -704,15 +1531,23 @@ OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 PROMPT_FILE="$(cd "$(dirname "$PROMPT_FILE")" && pwd)/$(basename "$PROMPT_FILE")"
 [ -n "$REVIEW_OUTPUT" ] && REVIEW_OUTPUT="$(cd "$(dirname "$REVIEW_OUTPUT")" 2>/dev/null && pwd || printf '%s' "$(dirname "$REVIEW_OUTPUT")")/$(basename "$REVIEW_OUTPUT")"
 
-# Fresh run_id every invocation: prevents twin launches / same-second collisions
-# / retries from mistaking a stale artifact for the current run.
-if command -v uuidgen >/dev/null 2>&1; then RUN_ID="$(uuidgen)"; else RUN_ID="$(date +%s%N)"; fi
+# Runtime metadata injection is reserved for the dedicated heartbeat harness.
+# Reject it before creating any owner, pid, FIFO, heartbeat, or blocked report.
+if [ -n "${AGENT_DELEGATE_TEST_LSTAT_METADATA:-}" ] && [ "${AGENT_DELEGATE_TEST_MODE:-0}" != heartbeat ]; then
+  err "AGENT_DELEGATE_TEST_LSTAT_METADATA is only valid in heartbeat test mode"
+  exit 2
+fi
 
+HANDOFF_ROOT="$(cd "${TMPDIR:-/tmp}" && pwd)"
 compute_paths
+
+# A prior launcher may have died after its parent returned. Reap only a stale,
+# fully validated run; ambiguous or live state remains a collision.
+stale_reap_previous_run
 
 # Collision guard: a live pid file, or a prior report we are not resuming, is a
 # refuse-by-default (override with --force).
-if [ -f "$PID_FILE" ] && [ "$FORCE" -ne 1 ]; then
+if { [ -f "$PID_FILE" ] || [ -f "$OWNER_FILE" ]; } && [ "$FORCE" -ne 1 ]; then
   err "a run for label '$LABEL' is already tracked at $PID_FILE (use --force to override)"
   exit 2
 fi
@@ -724,24 +1559,71 @@ fi
 # --- detach: launch monitor wrapper, return immediately (§4.7) -------------
 
 if [ "$DETACH" -eq 1 ]; then
+  LAUNCHER_PID="${BASHPID:-$$}"
+  HANDOFF_DEADLINE=$(( $(date -u +%s) + HANDOFF_TIMEOUT ))
+  HANDOFF_DIR="$(mktemp -d "${HANDOFF_ROOT}/agent-delegate-handoff.${LAUNCHER_PID}.XXXXXX")"
+  chmod 700 "$HANDOFF_DIR"
+  # The monitor, not the launcher, creates the detach run_id and publishes it
+  # in owner.json before any FIFO. The launcher discovers that committed value.
+  RUN_ID=""
+  compute_paths
   export_resolved_env
-  # nohup + disown detaches the supervisor from this shell so it survives the
-  # caller's 10-minute Bash-tool ceiling. The monitor writes the report; here we
-  # only announce where it will appear.
   nohup bash "$SELF" --_monitor >/dev/null 2>>"$STDERR_FILE" &
   MON_PID=$!
-  disown "$MON_PID" 2>/dev/null || true
-  {
-    printf 'pid: %s\n' "$MON_PID"
+
+  if ! launcher_wait_for_readiness "$MON_PID"; then
+    kill "$MON_PID" 2>/dev/null || true
+    wait "$MON_PID" 2>/dev/null || true
+    if [ -n "$RUN_ID" ] && owner_matches_run "$RUN_ID"; then
+      if ! publish_handoff_failure_once readiness "$MON_PID"; then
+        owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
+        cleanup_handoff_dir_owned "$MON_PID"
+        err "failed to publish readiness failure report"
+        exit 2
+      fi
+      owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
+      cleanup_handoff_dir_owned "$MON_PID"
+      printf 'run_id: %s\n' "$RUN_ID"
+      printf '%s\n' "$REPORT_FILE"
+      exit 0
+    fi
+    cleanup_handoff_dir_owned "$MON_PID"
+    err "detach monitor failed before owner and pid publication"
+    exit 2
+  fi
+
+  if ! launcher_complete_handoff "$MON_PID"; then
+    close_launcher_handoff_fds
+    kill "$MON_PID" 2>/dev/null || true
+    wait "$MON_PID" 2>/dev/null || true
+    if ! publish_handoff_failure_once handoff "$MON_PID"; then
+      owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
+      cleanup_handoff_dir_owned "$MON_PID"
+      err "failed to publish handoff failure report"
+      exit 2
+    fi
+    owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
+    cleanup_handoff_dir_owned "$MON_PID"
     printf 'run_id: %s\n' "$RUN_ID"
-    printf 'started: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf 'command: %s exec/%s %s (%s)\n' "$TARGET" "$MODE" "$LABEL" "$DIRECTION"
-  } > "$PID_FILE"
+    printf '%s\n' "$REPORT_FILE"
+    exit 0
+  fi
+  close_launcher_handoff_fds
+  disown "$MON_PID" 2>/dev/null || true
+  printf 'run_id: %s\n' "$RUN_ID"
   printf '%s\n' "$REPORT_FILE"
   exit 0
 fi
 
 # --- synchronous run -------------------------------------------------------
 
+# Fresh run_id prevents retries from accepting stale shared artifacts. Sync
+# publishes a complete owner token while it is executing but never a pid or
+# heartbeat file.
+if command -v uuidgen >/dev/null 2>&1; then RUN_ID="$(uuidgen)"; else RUN_ID="$(date +%s%N)"; fi
+compute_paths
+publish_sync_owner "$(utc_now)" || exit 2
 run_job_guarded
+owner_remove_runtime "$RUN_ID" 0 || true
+printf 'run_id: %s\n' "$RUN_ID"
 printf '%s\n' "$REPORT_FILE"
