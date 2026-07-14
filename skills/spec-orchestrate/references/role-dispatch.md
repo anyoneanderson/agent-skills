@@ -41,44 +41,54 @@ contract forbids relying on environment self-detection in a nested chain.
 
 ## Step 3: Choose Sync vs Detached Execution
 
-The right execution form depends on how long the phase runs:
+The caller chooses the form from mutation risk and a concrete time basis:
 
 | Phase kind | Form | Why |
 |------------|------|-----|
-| spec_review, artifact review | synchronous | Short read-only reviews; the caller waits |
-| implement (code), evaluate (E2E) | `--detach` + poll `report.json` | Routinely exceed the ~10-minute synchronous ceiling |
+| spec generation or repair, implement (code), evaluate (E2E), evidence recording | explicit `--detach` | These delegates write files |
+| read-only spec_review, investigation, or artifact review with a concrete basis for completion within 5 minutes | synchronous | Read-only and demonstrably short |
+| any role without that concrete 5-minute basis | `--detach` | An unbounded caller wait is not allowed |
 
-Polling pattern for detached runs (per the contract):
+Detached launch capture (per the contract):
 ```bash
-report="$(agent-delegate.sh --mode <delegate|review> --target codex ... --detach | tail -1)"
-until [ -f "$report" ]; do sleep 15; done
-status="$(jq -r .status "$report")"   # done | blocked
+launch="$(agent-delegate.sh --mode <delegate|review> --target codex ... --detach)"
+expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+report="$(printf '%s\n' "$launch" | tail -1)"
 ```
 
 **The wait must survive the waiter's turn.** A bare in-turn polling loop dies the
-moment the waiting agent ends its turn, leaving no one to observe `report.json`.
+moment the waiting agent ends its turn, leaving no one to observe the expected run.
 There is exactly one standard way to wait, plus a backup rule:
 
-- **Standard wait:** run the `until [ -f "$report" ]` loop as a *background job
-  of the host runtime* — the kind that keeps running after the turn ends and
-  re-invokes the dispatcher when the command exits (in Claude Code, a Bash call
-  with background execution). Never leave a foreground polling loop as the only
-  waiter, and never end the turn with nothing armed. Before yielding, register
-  the awaited path in the run marker (`jq '.waiting_report = $p'` on
+- **Standard wait:** run a *background job of the host runtime* that applies
+  agent-delegate's expected-run state machine every 15 seconds and never less
+  often than every 30 seconds. Each poll validates the expected-run report first,
+  then owner, pid, heartbeat, and process state. It keeps waiting through
+  `RUNNING`, every `DEGRADED_*`, `ORPHANED_WORKER`, `FINALIZING`, and
+  `REPORT_INVALID_PENDING`; report absence alone is not failure. The job must
+  survive the turn and re-invoke the dispatcher at a terminal or actionable
+  state. Never leave a foreground poll as the only waiter, and never end the turn
+  with nothing armed. Before yielding, register the awaited path in the run marker (`jq '.waiting_report = $p'` on
   `.specs/.orchestrate-active.json` — see `pipeline-config.md` §Run marker) so
   the watchdog knows the pause is legitimate; clear it after collecting the
-  report. An unregistered pause is indistinguishable from a stall and will be
-  blocked.
+  result. The watcher itself retains `expected_run_id`. An unregistered pause is
+  indistinguishable from a stall and will be blocked.
 - **Backup watch:** whenever a sub-worker owns a detached wait, the orchestrator
-  arms its own background watch on the same `report.json` path. If the backup
-  fires first, verify the result file and nudge (or replace) the stalled worker.
+  arms its own background watch for the same expected run. If the backup reaches
+  an actionable state first, verify the result and nudge (or replace) the stalled worker.
   This is standard procedure, not an optional extra.
+
+Caller-owned timeouts are at least 20 minutes for specification generation or
+repair and at least 30 minutes for implementation or E2E. A timeout triggers a
+fresh state evaluation; it does not convert a missing report into failure.
 
 ## Phase-Specific Resolution
 
 ### spec_review (adversarial spec review)
 
-`spec_reviewer` → agent-delegate `--mode review` (read-only, synchronous).
+`spec_reviewer` → agent-delegate `--mode review` (read-only). Use synchronous
+execution only with a concrete basis for completion within 5 minutes; otherwise
+use `--detach` and the expected-run wait above.
 Round 1 creates the session; rounds ≥ 2 resume it with `--resume <thread_id>`
 from `threads.spec_reviewer` in state (a review session is created read-only, the
 only sandbox a resume can keep).
@@ -113,10 +123,10 @@ not re-implemented by the orchestrator.
 | Task implementer (from `kind`) | Reviewer | Mechanism |
 |--------------------------------|----------|-----------|
 | `codex` | `claude` | spec-review (unchanged) |
-| `claude` | `codex` | agent-delegate `--mode review` (synchronous) |
+| `claude` | `codex` | agent-delegate `--mode review` (sync only with a concrete <=5-minute basis; otherwise detach) |
 
 Fixes route back to the implementer's executor: `spec-code --feedback` for
-claude, agent-delegate `--mode delegate` (resume) for codex. The agent-delegate
+claude, agent-delegate `--mode delegate --detach` (resume) for codex. The agent-delegate
 review file is spec-review-compatible, so the existing fix loop consumes it
 unchanged.
 

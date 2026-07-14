@@ -219,7 +219,10 @@ jq --arg d "$drift_summary" \
 
 **運転記録** — `pipeline-state.json` / `inspection-report.md` /
 `.inspection_result.json` / `review-*.md` / `evaluate-*.md` / `evidence/` /
-`retrospective.md` / `pipeline-metrics.jsonl` / `.orchestrate-active.json`。
+`retrospective.md` / `pipeline-metrics.jsonl` / `.orchestrate-active.json`、
+agent-delegate の `*-report.json` / `*-heartbeat.json` / `*-owner.json` /
+`*-owner.lock/` / `*-report.candidate.*.json` / `*-last.txt` /
+`*-stdout.jsonl` / `*-stderr.log` / `*.pid`。
 これらは**既定でコミットしない**。理由:
 
 - バイナリ証跡（スクリーンショット）は diff でレビューできない。

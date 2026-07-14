@@ -109,8 +109,9 @@ the turn without dispatching the next phase.
 
 - Worker dispatch and its completion wait live in the same turn. For detached
   runs the only valid way to yield is the registered background wait of
-  `role-dispatch.md` Step 3 (background `until` loop that re-invokes the
-  dispatcher, plus `waiting_report` set in the run marker). An unregistered
+  `role-dispatch.md` Step 3 (a 15–30-second expected-run state watcher that
+  validates the report before owner, pid, heartbeat, and process state, then
+  re-invokes the dispatcher, plus `waiting_report` set in the run marker). An unregistered
   pause is indistinguishable from a stall.
 - Phase results are reported in the same turn as the next phase's dispatch,
   after the state write — never as a standalone turn-ending message.

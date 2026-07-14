@@ -221,7 +221,10 @@ behavior). They are human-readable and belong to the feature's design record.
 
 **Run records** — `pipeline-state.json`, `inspection-report.md`,
 `.inspection_result.json`, `review-*.md`, `evaluate-*.md`, `evidence/`,
-`retrospective.md`, `pipeline-metrics.jsonl`, `.orchestrate-active.json`.
+`retrospective.md`, `pipeline-metrics.jsonl`, `.orchestrate-active.json`, and
+agent-delegate runtime records `*-report.json`, `*-heartbeat.json`,
+`*-owner.json`, `*-owner.lock/`, `*-report.candidate.*.json`, `*-last.txt`,
+`*-stdout.jsonl`, `*-stderr.log`, and `*.pid`.
 These are **not committed by default**. The reasons:
 
 - Binary evidence (screenshots) cannot be reviewed in a diff.

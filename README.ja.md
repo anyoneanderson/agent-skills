@@ -286,8 +286,9 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 
 13. **agent-delegate** がもう一方のエージェント（Claude Code ⇄ Codex）へのタスク委譲・敵対的レビューをヘッドレスで実行:
     - `--mode delegate` は peer CLI でタスクを実行、`--mode review` は read-only の敵対的レビュー
-    - 機械可読な `report.json` を返す（stdout の最終行が常にそのパス）
-    - 長時間タスクは `--detach` で切り離し、report ファイルをポーリング
+    - 機械可読な `report.json` を返す（stdout の最終行は従来どおりそのパス。detach 起動では expected run id も出力）
+    - 書き込みを伴う delegate は明示的な `--detach` を既定とし、同期実行は5分以内という具体的根拠がある read-only 作業に限る
+    - detach 実行は15秒間隔（最大30秒）で expected-run report、owner、pid、heartbeat、プロセス状態の順に確認し、実行が生存中なら report の未生成だけで失敗にしない
     - `--resume <thread_id>` でセッション継続 — 多ラウンドのレビューを1つの文脈で回せる
 
 ### cmux スキル（オプション、[cmux](https://cmux.dev/) が必要）

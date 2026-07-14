@@ -789,9 +789,11 @@ script per its contract.
 
 ### Delegating Implementation to the Peer (`owner == codex`)
 
-Follow `agent-delegate/references/contract.md`. Code implementation may exceed the
-~10-minute Bash ceiling, so use `--detach` + `report.json` polling, and
-`--sandbox workspace-write` (the peer must write files). Pass `--target` explicitly.
+Follow `agent-delegate/references/contract.md`. Code implementation writes files,
+so use explicit `--detach` and `--sandbox workspace-write`. Pass `--target`
+explicitly. Retain the expected run id and launch time, poll every 15 seconds
+(never less often than every 30 seconds), and allow at least 30 minutes before a
+caller-owned re-evaluation.
 
 ```bash
 OUT=".specs/{feature}/delegate/{task-id}"; mkdir -p "$OUT"
@@ -804,13 +806,18 @@ Implement {task-id} from the spec.
 Commit nothing; report changed files and any blocker.
 EOF
 
-report="$(agent-delegate.sh --mode delegate --target codex \
+launch="$(agent-delegate.sh --mode delegate --target codex \
   --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}" \
-  --sandbox workspace-write --detach | tail -1)"
-until [ -f "$report" ]; do sleep 15; done
-status="$(jq -r .status "$report")"     # done | blocked
+  --sandbox workspace-write --detach)"
+expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+report="$(printf '%s\n' "$launch" | tail -1)"
+# Arm a durable 15-second watcher that applies the public contract state machine.
+# After it signals a valid terminal report: status="$(jq -r .status "$report")"
 ```
 
+- At each poll, validate the expected-run report first, then owner, pid,
+  heartbeat, and worker/monitor process state. Keep waiting through live and
+  degraded states; report absence alone is not failure.
 - `status == done` → the peer finished. Mark the checkbox and commit (the orchestrator,
   not the peer, owns commits — the peer is told to commit nothing).
 - `status == blocked` → read `blocker` / `blocker_category`; feed into the fix loop
@@ -818,8 +825,9 @@ status="$(jq -r .status "$report")"     # done | blocked
 
 ### Peer Review (`owner == claude`, implementer is claude → reviewer is codex)
 
-Reviews are short, so run synchronously (no `--detach`). Review mode is always read-only
-per the contract.
+Review mode is always read-only per the contract. Run synchronously only when
+there is a concrete basis for completion within 5 minutes. Otherwise add
+`--detach`, retain the expected run id, and use the same 15–30-second state wait.
 
 ```bash
 OUT=".specs/{feature}/review/{task-id}"; mkdir -p "$OUT"
@@ -850,8 +858,8 @@ fix executor follows the task's implementer:
 
 | Implementer | Fix step | Re-review |
 |---|---|---|
-| claude | `spec-code --feedback {findings}` | reviewer re-runs (codex via agent-delegate `--resume {thread_id}`, or claude via spec-review) |
-| codex | agent-delegate `--mode delegate --resume {thread_id}` with findings appended to the prompt | reviewer re-runs (claude via spec-review) |
+| claude | `spec-code --feedback {findings}` | reviewer re-runs (codex via agent-delegate `--resume {thread_id}`, sync only with a concrete <=5-minute basis; otherwise detach; or claude via spec-review) |
+| codex | agent-delegate `--mode delegate --detach --resume {thread_id}` with findings appended to the prompt | reviewer re-runs (claude via spec-review) |
 
 For agent-delegate re-review across rounds, reuse the review session with
 `--resume {thread_id}` (thread_id read from the prior `report.json`) to preserve context

@@ -89,30 +89,40 @@ pass it with `--prompt-file`. Never inline a long prompt as an argument.
 
 | Task | Mode |
 |---|---|
-| Review, investigation, short delegation (< ~10 min) | synchronous |
-| Code implementation, E2E, anything likely > ~10 min | `--detach` |
+| File-writing delegation, specification generation or repair, code implementation, E2E, or test-evidence recording | explicit `--detach` |
+| Read-only review, investigation, or short delegation with a concrete basis for finishing within 5 minutes and no file writes | synchronous |
+| Any task without that concrete 5-minute basis | `--detach` |
 
 A synchronous call blocks until `report.json` is written. `--detach` returns
-immediately and prints the future `report.json` path; poll for the file.
+immediately and prints the run id followed by the future `report.json` path.
+Save both as the expected run. Poll every 15 seconds by default, never less
+often than every 30 seconds, and follow the expected-run state machine in
+`references/contract.md`: validate the report first, then inspect owner, pid,
+heartbeat, and process state. A missing report while the run is alive is not a
+failure. Caller-owned timeouts must be at least 20 minutes for specification
+work and 30 minutes for implementation or E2E.
 
 ### Step 4: Run the script
 
 ```bash
-# Synchronous delegate (Claude Code → Codex, default full-access sandbox)
+# Synchronous read-only delegate with a concrete <=5-minute basis
 report="$(skills/agent-delegate/references/scripts/agent-delegate.sh \
   --mode delegate --prompt-file <prompt> --out-dir <out> --label <slug> | tail -1)"
 
-# Adversarial review (always read-only)
+# Adversarial review with a concrete <=5-minute basis (always read-only)
 report="$(skills/agent-delegate/references/scripts/agent-delegate.sh \
   --mode review --prompt-file <context> --out-dir <out> --label <slug> | tail -1)"
 
-# Long task, detached — poll for the report
-report="$(skills/agent-delegate/references/scripts/agent-delegate.sh \
-  --mode delegate --prompt-file <prompt> --out-dir <out> --label <slug> --detach | tail -1)"
-until [ -f "$report" ]; do sleep 15; done
+# Writing or otherwise unbounded task, detached
+launch="$(skills/agent-delegate/references/scripts/agent-delegate.sh \
+  --mode delegate --prompt-file <prompt> --out-dir <out> --label <slug> --detach)"
+expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+report="$(printf '%s\n' "$launch" | tail -1)"
+# Register a durable 15-second watcher that applies the contract state machine.
 ```
 
-The last line of stdout is always the `report.json` path.
+The last line of stdout is always the `report.json` path. A successful launch
+also prints `run_id: <uuid>` immediately before it.
 
 ### Step 5: Read the report and present the result
 

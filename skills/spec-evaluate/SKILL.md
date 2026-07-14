@@ -132,17 +132,23 @@ read-only and cannot launch or operate the app).
 
 1. Write a prompt file that is `references/evaluator-prompt.md` followed by the
    runtime context block (Step 4).
-2. Invoke the delegate script with an explicit target and detached execution
-   (E2E commonly exceeds the ~10-minute synchronous ceiling):
+2. Invoke the delegate script with an explicit target and detached execution.
+   Capture the expected run id and report path, then arm a durable watcher that
+   polls every 15 seconds and never less often than every 30 seconds:
 
    ```bash
-   report="$(agent-delegate.sh --mode delegate --target codex \
+   launch="$(agent-delegate.sh --mode delegate --target codex \
      --sandbox workspace-write --prompt-file <prompt> \
-     --out-dir {spec}/evidence/{round} --detach | tail -1)"
-   until [ -f "$report" ]; do sleep 15; done
+     --out-dir {spec}/evidence/{round} --detach)"
+   expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+   report="$(printf '%s\n' "$launch" | tail -1)"
    ```
 
-3. Read `status` from `report.json`. On `blocked`, treat the run as an
+   Apply the public contract state machine: validate the expected-run report
+   first, then owner, pid, heartbeat, and process state. Use at least 30 minutes
+   for a caller-owned timeout; report absence while the run is live is not failure.
+
+3. After a valid terminal report, read `status` from `report.json`. On `blocked`, treat the run as an
    evaluation failure with the blocker recorded, not a silent pass.
 
 Depend only on the agent-delegate public contract (arguments and `report.json`

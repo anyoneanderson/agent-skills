@@ -38,21 +38,27 @@ the app and operates a browser, it needs write access:
   read-only and cannot launch or drive the app.
 - Pass `--target codex` explicitly. Per the agent-delegate contract, programmatic
   callers must not rely on environment self-detection.
-- Use `--detach` and poll for `report.json`, since E2E commonly exceeds the
-  ~10-minute synchronous ceiling.
+- Use explicit `--detach`, retain the expected run id and launch time, and poll
+  every 15 seconds (never less often than every 30 seconds). A caller-owned
+  timeout is at least 30 minutes.
 
 ```bash
 # Compose: evaluator-prompt.md + runtime context → one prompt file
-report="$(agent-delegate.sh --mode delegate --target codex \
+launch="$(agent-delegate.sh --mode delegate --target codex \
   --sandbox workspace-write \
   --prompt-file "$prompt" \
   --out-dir ".specs/$feature/evidence/$round" \
-  --detach | tail -1)"
+  --detach)"
 
-until [ -f "$report" ]; do sleep 15; done
-status="$(jq -r .status "$report")"
+expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+report="$(printf '%s\n' "$launch" | tail -1)"
+# Arm a durable 15-second watcher that applies the public contract state machine.
+# After it signals a valid terminal report: status="$(jq -r .status "$report")"
 ```
 
+- Each poll validates the expected-run report first, then owner, pid,
+  heartbeat, and worker/monitor process state. Live or degraded states keep
+  waiting; report absence alone is not failure.
 - `status == done` → read the result file the evaluator wrote; hand it to
   spec-evaluate Step 5 (machine-verify evidence).
 - `status == blocked` → the run did not complete cleanly. Record the

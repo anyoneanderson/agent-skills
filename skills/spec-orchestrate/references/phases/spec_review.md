@@ -50,6 +50,12 @@ otherwise keeps drilling into the same area it explored last round.
 2. Round ≥ 2: resume the same session with `--resume <thread_id>` so context
    carries over. Review sessions start read-only, which is the only
    sandbox that resume can keep, so only resume sessions created read-only.
+3. Use synchronous execution only when there is a concrete basis for this round
+   to finish within 5 minutes. Otherwise use explicit `--detach`, retain the
+   expected run id, and apply the 15–30-second report-first wait from
+   `../role-dispatch.md`. A review gate with a 20-minute-or-longer budget has no
+   5-minute basis and therefore detaches. A caller-owned timeout for specification
+   review or repair is at least 20 minutes.
 
 **claude backend (subagent):**
 1. Round 1: dispatch a review subagent with the spec file list and adversarial
@@ -59,7 +65,8 @@ otherwise keeps drilling into the same area it explored last round.
    findings (from `state.rounds.spec_review`) into a fresh subagent so it does
    not re-raise resolved points. This is the resume-equivalent for claude.
 
-3. Read the review file's Gate line, severity counts, and `fix_before` tags.
+After either backend completes, read the review file's Gate line, severity
+counts, and `fix_before` tags.
 
 ## Output
 

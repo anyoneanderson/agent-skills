@@ -18,8 +18,10 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 1. Dispatch spec-evaluate with `--spec .specs/{feature}/` and the round. It
    launches the app, runs each case by its verification method, saves evidence
    under `evidence/{round}/`, and writes `evaluate-{round}.md`.
-2. Long E2E runs may exceed the synchronous ceiling; the codex backend detaches
-   and the orchestrator polls for the result file.
+2. The codex backend passes explicit `--detach`, retains the expected run id,
+   and applies the 15–30-second report-first wait from `../role-dispatch.md`.
+   Its caller-owned timeout is at least 30 minutes. Report absence while the
+   heartbeat or process state is live is a waiting condition, not failure.
 
 ## Output
 

@@ -37,21 +37,26 @@ evaluator を agent-delegate 経由で走らせる。受け入れ試験はアプ
   モードは read-only でアプリを起動・操作できない。
 - `--target codex` を明示的に渡す。agent-delegate の契約により、プログラムからの
   呼び出しは環境変数による自己判定に頼ってはならない。
-- `--detach` を使い `report.json` をポーリングする。E2E は同期実行の約10分上限を
-  超えるのが通常のため。
+- 明示的な `--detach` を使い、expected run id と起動時刻を保持する。
+  15秒を標準、30秒を上限としてポーリングし、呼び出し側のタイムアウトは30分以上とする。
 
 ```bash
 # 合成: evaluator-prompt.ja.md + 実行時コンテキスト → 1つの prompt ファイル
-report="$(agent-delegate.sh --mode delegate --target codex \
+launch="$(agent-delegate.sh --mode delegate --target codex \
   --sandbox workspace-write \
   --prompt-file "$prompt" \
   --out-dir ".specs/$feature/evidence/$round" \
-  --detach | tail -1)"
+  --detach)"
 
-until [ -f "$report" ]; do sleep 15; done
-status="$(jq -r .status "$report")"
+expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+report="$(printf '%s\n' "$launch" | tail -1)"
+# 公開契約の状態機械を適用する15秒間隔の永続監視を開始する。
+# valid terminal report の通知後: status="$(jq -r .status "$report")"
 ```
 
+- 各周期では expected-run report、owner、pid、heartbeat、worker/monitor の
+  プロセス状態の順に確認する。
+  生存中または劣化状態では待機を続け、report の不在だけで失敗にしない。
 - `status == done` → evaluator が書いた結果ファイルを読み、spec-evaluate の
   Step 5（証跡の機械検証）に渡す。
 - `status == blocked` → 実行が正常に完了していない。`blocker` /

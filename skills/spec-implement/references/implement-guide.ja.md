@@ -785,9 +785,10 @@ owner = claude                   それ以外（kind 不明・欠落、または
 
 ### 相手 LLM への実装委譲（`owner == codex`）
 
-`agent-delegate/references/contract.md` に従います。コード実装は Bash の約10分上限を超えることが
-正常系なので、`--detach` + `report.json` ポーリングを使い、`--sandbox workspace-write` を指定します
-（相手はファイルを書く必要があるため）。`--target` は明示的に渡します。
+`agent-delegate/references/contract.md` に従います。
+コード実装はファイルを書き込むため、明示的な `--detach` と `--sandbox workspace-write` を使います。
+`--target` を明示し、expected run id と起動時刻を保持します。
+15秒を標準、30秒を上限としてポーリングし、呼び出し側が再評価するまで30分以上を確保します。
 
 ```bash
 OUT=".specs/{feature}/delegate/{task-id}"; mkdir -p "$OUT"
@@ -800,20 +801,27 @@ Implement {task-id} from the spec.
 Commit nothing; report changed files and any blocker.
 EOF
 
-report="$(agent-delegate.sh --mode delegate --target codex \
+launch="$(agent-delegate.sh --mode delegate --target codex \
   --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}" \
-  --sandbox workspace-write --detach | tail -1)"
-until [ -f "$report" ]; do sleep 15; done
-status="$(jq -r .status "$report")"     # done | blocked
+  --sandbox workspace-write --detach)"
+expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+report="$(printf '%s\n' "$launch" | tail -1)"
+# 公開契約の状態機械を適用する15秒間隔の永続監視を開始する。
+# valid terminal report の通知後: status="$(jq -r .status "$report")"
 ```
 
+- 各周期では expected-run report、owner、pid、heartbeat、worker/monitor の
+  プロセス状態の順に確認します。
+  生存中と劣化状態では待機を続け、report の不在だけで失敗にしません。
 - `status == done` → 相手が完了。チェックボックスを更新してコミット（コミットは相手ではなく
   オーケストレーターが持つ。相手には「コミットするな」と指示する）。
 - `status == blocked` → `blocker` / `blocker_category` を読み、修正ループ（下記）に回すか呼び出し元に上げる。
 
 ### 相手 LLM によるレビュー（`owner == claude`、実装が claude → レビューは codex）
 
-レビューは短時間なので同期実行（`--detach` なし）。契約上、review モードは常に read-only です。
+契約上、review モードは常に read-only です。
+5分以内に完了する具体的根拠がある場合だけ同期実行します。
+それ以外は `--detach` を追加して expected run id を保持し、同じ15〜30秒の状態待機を使います。
 
 ```bash
 OUT=".specs/{feature}/review/{task-id}"; mkdir -p "$OUT"
@@ -844,8 +852,8 @@ gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
 
 | 実装担当 | 修正ステップ | 再レビュー |
 |---|---|---|
-| claude | `spec-code --feedback {findings}` | レビュアーが再実行（codex は agent-delegate `--resume {thread_id}`、claude は spec-review） |
-| codex | agent-delegate `--mode delegate --resume {thread_id}`（findings をプロンプト末尾に追記） | レビュアーが再実行（claude は spec-review） |
+| claude | `spec-code --feedback {findings}` | レビュアーが再実行（codex は agent-delegate `--resume {thread_id}`。5分以内という具体的根拠がある場合だけ同期し、それ以外は detach。claude は spec-review） |
+| codex | agent-delegate `--mode delegate --detach --resume {thread_id}`（findings をプロンプト末尾に追記） | レビュアーが再実行（claude は spec-review） |
 
 ラウンドをまたぐ agent-delegate 再レビューは `--resume {thread_id}`（thread_id は前ラウンドの
 `report.json` から取得）でレビューセッションを継続し、文脈を保ってトークンを節約します。resume は

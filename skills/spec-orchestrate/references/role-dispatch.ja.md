@@ -40,43 +40,54 @@ English version: [role-dispatch.md](role-dispatch.md)
 
 ## Step 3: 同期 vs detach を選ぶ
 
-適切な実行形態はフェーズの所要時間で決まる:
+呼び出し側は書き込みの有無と具体的な時間根拠から実行形態を決める:
 
 | フェーズ種別 | 形態 | 理由 |
 |------------|------|------|
-| spec_review、成果物レビュー | 同期 | 短い read-only レビュー。呼び出し側が待つ |
-| implement（コード）、evaluate（E2E） | `--detach` + `report.json` ポーリング | 同期の約10分上限を通常超える |
+| 仕様生成・修正、implement（コード）、evaluate（E2E）、証跡保存 | 明示的な `--detach` | ファイルを書き込む delegate |
+| read-only かつ5分以内に完了する具体的根拠がある spec_review、調査、成果物レビュー | 同期 | 読み取り専用かつ所要時間の根拠がある |
+| 5分以内という具体的根拠がないロール | `--detach` | 上限のない同期待機を許可しない |
 
-detach 実行のポーリング（契約どおり）:
+detach 起動時の取得値（契約どおり）:
 ```bash
-report="$(agent-delegate.sh --mode <delegate|review> --target codex ... --detach | tail -1)"
-until [ -f "$report" ]; do sleep 15; done
-status="$(jq -r .status "$report")"   # done | blocked
+launch="$(agent-delegate.sh --mode <delegate|review> --target codex ... --detach)"
+expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
+report="$(printf '%s\n' "$launch" | tail -1)"
 ```
 
 **待ちは待つ側の turn を跨いで生き残らせる。** turn 内の素朴なポーリングは turn
-終了とともに消え、`report.json` を誰も見なくなる。待ち方の標準は1つだけで、
+終了とともに消え、expected run を誰も監視しなくなる。待ち方の標準は1つだけで、
 バックアップ規則がそれに加わる:
 
-- **標準の待ち方:** `until [ -f "$report" ]` ループを**ホストランタイムの
-  バックグラウンドジョブ**として走らせる — turn が終わっても生き続け、コマンド終了時に
-  発行元が自動で再起動される形（Claude Code では Bash のバックグラウンド実行）。
-  フォアグラウンドのポーリングだけを残して turn を終えない。何も仕掛けずに turn を
-  終えない。yield する前に、待っている report パスを run マーカーへ登録する
+- **標準の待ち方:** agent-delegate の expected-run 状態機械を15秒間隔、最大30秒の
+  周期で適用する**ホストランタイムのバックグラウンドジョブ**を走らせる。
+  各周期では expected-run report、owner、pid、heartbeat、プロセス状態の順に確認する。
+  `RUNNING`、すべての `DEGRADED_*`、`ORPHANED_WORKER`、`FINALIZING`、
+  `REPORT_INVALID_PENDING` では待機を続け、report の不在だけで失敗にしない。
+  ジョブは turn を跨ぎ、terminal または対処可能な状態で dispatcher を再開する。
+  フォアグラウンドのポーリングだけを残して turn を終えない。
+  何も仕掛けずに turn を終えない。
+  yield する前に、待っている report パスを run マーカーへ登録する
   （`.specs/.orchestrate-active.json` に `jq '.waiting_report = $p'`。
   `pipeline-config.ja.md` §Run マーカー参照）— watchdog はこれで「正当な待機」と
-  「停滞」を区別する。report を回収したら `.waiting_report` を消す。登録の無い
+  「停滞」を区別する。監視ジョブ自体が `expected_run_id` を保持する。
+  結果を回収したら `.waiting_report` を消す。登録の無い
   待機は停滞と区別できず、ブロックされる。
 - **バックアップ監視:** サブワーカーが detach 待ちを持つ間、オーケストレーターは同じ
-  `report.json` パスに自前のバックグラウンド監視を仕掛ける。バックアップが先に
-  発火したら結果ファイルを検証し、停滞したワーカーを起こす（または交代させる）。
+  expected run に自前のバックグラウンド監視を仕掛ける。バックアップが先に対処可能な
+  状態へ到達したら結果を検証し、停滞したワーカーを起こす（または交代させる）。
   これは任意の保険ではなく標準手順とする。
+
+呼び出し側のタイムアウトは、仕様生成と仕様修正で20分以上、実装と E2E で30分以上とする。
+タイムアウト到達時は状態を再評価し、report の不在を失敗へ変換しない。
 
 ## フェーズ別の解決
 
 ### spec_review（敵対的仕様レビュー）
 
-`spec_reviewer` → agent-delegate `--mode review`（read-only、同期）。ラウンド1で
+`spec_reviewer` → agent-delegate `--mode review`（read-only）。
+5分以内に完了する具体的根拠がある場合だけ同期実行し、それ以外は `--detach` と上記の expected-run 待機を使う。
+ラウンド1で
 セッションを作り、ラウンド2以降は state の `threads.spec_reviewer` の
 `--resume <thread_id>` で継続する（レビューセッションは read-only で作られ、resume
 が保てる sandbox はそれだけ）。
@@ -110,10 +121,10 @@ status="$(jq -r .status "$report")"   # done | blocked
 | タスク実装担当（kind 由来） | レビュアー | 仕組み |
 |--------------------------|-----------|-------|
 | `codex` | `claude` | spec-review（そのまま） |
-| `claude` | `codex` | agent-delegate `--mode review`（同期） |
+| `claude` | `codex` | agent-delegate `--mode review`（5分以内という具体的根拠がある場合だけ同期。それ以外は detach） |
 
 修正は実装担当の実行系に戻る: claude は `spec-code --feedback`、codex は
-agent-delegate `--mode delegate`（resume）。agent-delegate のレビューファイルは
+agent-delegate `--mode delegate --detach`（resume）。agent-delegate のレビューファイルは
 spec-review 互換なので、既存の修正ループがそのまま消費する。
 
 ## peer 利用不能（codex 不在）

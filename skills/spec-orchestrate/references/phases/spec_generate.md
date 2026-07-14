@@ -19,6 +19,10 @@ inspect or spec_review or approval sends findings back for revision.
    - auto: use spec-generator's auto mode (`--auto --issue <N>`), which never
      calls AskUserQuestion and records ambiguities as ASM notes.
    - Re-entry: pass the findings as the revision instruction, not a fresh start.
+   - When the backend is codex via agent-delegate, both initial generation and
+     repair write files: pass explicit `--detach`, retain the expected run id,
+     and use the 15–30-second expected-run wait in `../role-dispatch.md`.
+     Any caller-owned timeout is at least 20 minutes.
 2. The planner writes `requirement.md`, `design.md`, `tasks.md`, and `test.md`
    into `.specs/{feature}/`. The orchestrator does not write these files.
 
