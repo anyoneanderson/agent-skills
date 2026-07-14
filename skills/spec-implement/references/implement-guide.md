@@ -603,19 +603,24 @@ The review gate replaces the simple self-review with a structured process:
 1. **Load criteria**: review_rules.md (if found) + coding-rules.md + CLAUDE.md
 2. **Review**: Check severity-based criteria (security, type safety, patterns, quality)
 3. **Classify findings**:
-   - **Critical**: Security vulnerabilities, bugs → must fix
-   - **Improvement**: Quality, readability → should fix
+   - **Critical**: Security vulnerabilities, bugs → highest human priority
+   - **Improvement**: Quality, readability → worth fixing
    - **Minor**: Style → log only
+   - Every Critical / Improvement finding also carries a `fix_before` tag
+     (`implementation | trial | required_check | follow_up`; definition and
+     escalation burden of proof: spec-review SKILL.md Step 4.5). The gate
+     stops on `fix_before: implementation` alone.
 4. **Fix loop** (max 3 iterations):
-   - Fix issues → re-review only changed code
-   - After 3rd iteration: unresolved improvements downgraded to minor
-   - After 3rd iteration: unresolved critical → ask user
+   - Fix `fix_before: implementation` findings → re-review only changed code
+   - Deferred findings (`trial` / `required_check` / `follow_up`) and Minor
+     are logged and carried to the PR body, not fixed in this loop
+   - After 3rd iteration: unresolved `implementation` findings → ask user
 5. **Second opinion** (if cmux dispatch + second-opinion enabled):
    - After self-review loop passes
    - Use `Skill` tool to invoke `cmux-second-opinion` skill (recommended), or launch reviewer agent manually in cmux workspace as fallback
    - The skill sends diff + review_rules.md to a different AI and collects the structured result
-   - New critical findings → 1 additional fix loop
-6. **Gate passes** when no unresolved critical issues remain
+   - New `fix_before: implementation` findings → 1 additional fix loop
+6. **Gate passes** when no unresolved `fix_before: implementation` finding remains
 
 ### Test Review Gate
 
@@ -744,7 +749,7 @@ task while keeping the Phase 6 loop and its review gates intact.
   resolved per the rules below.
 
 The loop's control flow is identical in both paths: per-phase iteration, the fix loop
-with its 3-iteration cap, gate evaluation (Critical/Improvement re-run, Minor logged),
+with its 3-iteration cap, gate evaluation (`fix_before: implementation` re-run; deferred findings and Minor logged),
 checkbox marking, and commit strategy. Only the *executor* of each step is resolved per
 task.
 

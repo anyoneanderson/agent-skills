@@ -389,6 +389,24 @@ Execute the following checks sequentially. Add detected issues to an issues list
 - **[WARNING]** uncovered requirements: `WARNING-{seq}` "Acceptance coverage: {covered}/{total} requirements have a test case" + list of REQ/NFR IDs with no `T-A` case + "Add a T-A case referencing each."
 - **[WARNING]** empty verification method: `WARNING-{seq}` "Test case {case_id} has no verification method" + "Set Verify (検証方法) to playwright / command / file-check."
 
+#### Check 17: Referenced Path Existence and Mode [CRITICAL]
+
+**Purpose**: A spec is unimplementable when a path it tells the implementation
+to *read* is untracked, or is a symlink that git tree resolution will not follow.
+
+**Procedure**:
+1. Extract repo-relative paths the specs use as a **content source** (a step
+   reads, parses, or diffs the file — not paths cited as examples or outputs).
+2. For each, run `git ls-files -s -- <path>`: no output = untracked (the read
+   fails on a clean checkout); mode `120000` = symlink (`git show HEAD:<path>`
+   yields the link *target string*, not the target's content).
+3. Plain working-tree reads tolerate symlinks; flag mode `120000` when the read
+   goes through git object/tree access or the read side is unspecified.
+
+**Outputs**:
+- **[CRITICAL]** `CRITICAL-{seq}` "Referenced path {path} is not tracked by git" + "Track the file, or point the spec at the real tracked path"
+- **[CRITICAL]** `CRITICAL-{seq}` "Referenced path {path} is a symlink (mode 120000) used as a content source" + "Point the spec at the symlink's target (the real file path)"
+
 ### Step 4: Generate Summary
 
 Aggregate detected issues by severity:
@@ -463,26 +481,20 @@ Write(".specs/{project-name}/.inspection_result.json", json_content)
 
 ## Error Handling
 
-- **File not found**: "Error: Required file not found" + missing filename, path verification guidance
-- **Read error**: "Error: Failed to read file" + filename, error details
+- **File not found / read error**: "Error: Required file not found" or "Error: Failed to read file" + filename and details, with path verification guidance
 - **ID extraction error**: Continue processing and display "Warning: Partial error during requirement ID extraction"
 
 ## Implementation Notes
 
-- **Efficiency**: Minimize Read operations for large files. Use search tools for efficient scanning. Show progress after each check.
-- **Accuracy**: Use partial matching for section names. Consider context for contradiction detection. Flexibly match both Japanese and English content.
-- **UX**: Errors should include concrete, actionable fix suggestions. Use emoji indicators for visual clarity.
+- **Efficiency**: Minimize Read operations for large files; use search tools; show progress after each check.
+- **Accuracy / UX**: Use partial matching for section names, consider context for contradiction detection, match Japanese and English content flexibly; errors carry concrete fix suggestions with emoji indicators.
 
 ## Constraints
 
-- Supports specifications in both Japanese and English (natural language analysis has inherent accuracy limits)
-- Only Markdown-format specifications are supported
-- Depends on spec-generator output format
+- Supports Markdown specifications in Japanese and English only (natural language analysis has inherent accuracy limits); depends on spec-generator output format
 
 ## Success Criteria
 
-- Requirement ID reference error detection rate: 100%
-- Missing required section detection rate: 100%
-- Acceptance coverage gap detection (when test.md present): 100% of uncovered REQ/NFR flagged; test.md absence reported as INFO without failing legacy specs
+- Requirement ID reference errors, missing required sections, and uncovered REQ/NFR (when test.md is present) detected at 100%; test.md absence reported as INFO without failing legacy specs
 - Contradiction detection accuracy: Best effort (depends on LLM reasoning capability)
 - Processing time: Under 30 seconds for combined spec files under 3000 lines

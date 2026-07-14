@@ -158,8 +158,11 @@ re-classify from the `blocker` text.
   4. a `## Summary` section with a `Gate: PASS|FAIL` line.
 - If the read-only run still modified files (after excluding our artifacts):
   `status: blocked`, `blocker_category: sandbox_violation`.
-- The review file format (severity sections + gate) is stable and
-  machine-parsable; downstream tooling can consume it as-is.
+- The review file format (severity sections + per-finding `fix_before` tags +
+  gate) is stable and machine-parsable; downstream tooling can consume it
+  as-is. The Gate is derived from `fix_before` alone — FAIL iff at least one
+  finding is tagged `fix_before: implementation`
+  (see `adversarial-review-prompt.md`).
 
 ## Resume
 

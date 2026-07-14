@@ -113,20 +113,23 @@ Review implementation code based on coding-rules.md.
 
 #### Review Result Actions
 
-| Severity | Action on Detection |
-|----------|-------------------|
-| Critical (security/bugs) | Fix immediately → re-review |
-| Improvement (quality/readability) | Fix → re-review |
+Severity (Critical / Improvement / Minor) is for human priority; the gate acts
+on each finding's `fix_before` tag (`implementation | trial | required_check |
+follow_up`, default `follow_up` — see spec-review SKILL.md Step 4.5).
+
+| Finding | Action on Detection |
+|---------|-------------------|
+| `fix_before: implementation` | Fix immediately → re-review |
+| `fix_before: trial` / `required_check` / `follow_up` | Record; carry to the PR body / a follow-up issue |
 | Minor (style) | Log only, may continue |
 
 #### Fix Loop (max 3 iterations)
 1. Detect issues in review
-2. Fix the issues
+2. Fix the `fix_before: implementation` findings
 3. Re-review only the fixed areas
 4. Repeat (up to 3 times)
-5. After 3rd iteration, unresolved improvements → downgrade to "minor" and continue
-6. After 3rd iteration, unresolved critical issues → ask user to decide (continue or stop)
-7. Review passes → proceed to next Phase
+5. After 3rd iteration, unresolved `fix_before: implementation` findings → ask user to decide (continue or stop)
+6. Review passes (no `fix_before: implementation` finding remains) → proceed to next Phase
 
 {if_second_opinion}
 If a second opinion is needed, use cmux-second-opinion to request review from a different AI.

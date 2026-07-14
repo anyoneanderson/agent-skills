@@ -26,17 +26,24 @@
 
 ### 重大度分類
 
-| 重大度 | 例 | アクション |
+| 重大度 | 例 | 読み方 |
 |---|---|---|
-| Critical | SQL インジェクション、秘密鍵のハードコード、NULL ポインタ、データ損失 | マージ前に必ず修正 |
-| Improvement | エラーハンドリング不足、非効率なアルゴリズム、命名不適切 | 修正すべき、延期可能 |
+| Critical | SQL インジェクション、秘密鍵のハードコード、NULL ポインタ、データ損失 | 人間の優先度は最上位 |
+| Improvement | エラーハンドリング不足、非効率なアルゴリズム、命名不適切 | 修正に値する |
 | Minor | スタイル不一致、余分な空白、コメント品質 | 記録のみ |
+
+severity は人間の読み・優先度づけ用である。Gate で止めるかは `fix_before` タグだけで
+決まる（定義・既定値 `follow_up`・格上げの立証責任は SKILL.md Step 4.5）。修正が後の
+マイルストーンに属する Critical の finding があっても Gate は緑のままで、その finding
+は記録して持ち越される — 黙って捨てられることはない。
 
 ## レビューファイルフォーマット
 
 SKILL.md Step 5 の完全テンプレートを参照。要点：
 - 各指摘にはファイル:行番号の参照を含める
 - 各指摘にはルール ID を参照する
+- Critical / Improvement の各指摘には `fix_before` タグ
+  （`implementation | trial | required_check | follow_up`）を付ける
 - Critical と Improvement はチェックリスト形式（`- [ ]`）（spec-code が修正追跡に使用）
 - Minor はプレーンテキスト（情報のみ）
 

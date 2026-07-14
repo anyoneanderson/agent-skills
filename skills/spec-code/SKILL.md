@@ -88,7 +88,12 @@ Read the design section referenced by the task (e.g., "design.md §4.2"):
 
 The feedback file is auto-detected by its `type:` header line:
 
-- **type: review** → Read `## Findings` section. Fix Critical findings at specified file:line, then Improvements.
+- **type: review** → Read `## Findings` section. Fix only the findings tagged
+  `fix_before: implementation`, at the specified file:line (Critical first,
+  then Improvement). Findings tagged `trial` / `required_check` / `follow_up`
+  are deferred — the caller carries them; do not fix them here. If no finding
+  carries a `fix_before` tag (a legacy review file), fix Critical findings
+  first, then Improvements.
 - **type: test** → Read `## Test Cases` for failures and `## Completion Criteria Coverage` for uncovered criteria. Fix the failing tests by modifying implementation code.
 - **type: evaluate** → Same `## Findings` processing as `type: review` (identical `### Critical` / `### Improvement` structure). Fix Critical findings first, then Improvements. Ignore the `## Blocked` section: blocked cases are setup gaps, not failures, and are not fix targets.
 

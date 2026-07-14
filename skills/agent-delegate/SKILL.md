@@ -121,8 +121,10 @@ Read `report.json` and summarize for the user in their language:
 - `status` — `done` or `blocked`.
 - `summary` — the peer's final message headline.
 - `touchedFiles` — files the peer changed (script-measured, authoritative).
-- For review: read `artifacts.review_file`; report the Gate (PASS/FAIL) and the
-  Critical / Improvement / Minor counts.
+- For review: read `artifacts.review_file`; report the Gate (PASS/FAIL), the
+  Critical / Improvement / Minor counts, and the `fix_before: implementation`
+  count — the Gate stops on that axis alone (see
+  `references/adversarial-review-prompt.md`).
 - If `blocked`: report `blocker` and `blocker_category`, and suggest a next step
   (e.g. resume, fix the trust setting, retry).
 

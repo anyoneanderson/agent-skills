@@ -26,17 +26,25 @@ Not every rule applies to every file. Use category matching to skip irrelevant c
 
 ### Severity Classification
 
-| Severity | Examples | Action |
+| Severity | Examples | Reading |
 |---|---|---|
-| Critical | SQL injection, secrets in code, null pointer, data loss | Must fix before merge |
-| Improvement | Missing error handling, suboptimal algorithm, poor naming | Should fix, can defer |
+| Critical | SQL injection, secrets in code, null pointer, data loss | Highest human priority |
+| Improvement | Missing error handling, suboptimal algorithm, poor naming | Worth fixing |
 | Minor | Style inconsistency, extra whitespace, comment quality | Log only |
+
+Severity is for human reading and prioritization. Whether the Gate stops is
+decided by the `fix_before` tag alone (definition, default `follow_up`, and
+escalation burden of proof: SKILL.md Step 4.5). A Critical finding whose fix
+belongs to a later milestone leaves the Gate green — it is recorded and
+carried forward, not silently dropped.
 
 ## Review File Format
 
 See SKILL.md Step 5 for the full template. Key points:
 - Each finding must include file:line reference
 - Each finding must reference the rule ID
+- Each Critical / Improvement finding carries a `fix_before` tag
+  (`implementation | trial | required_check | follow_up`)
 - Checklist format (`- [ ]`) for Critical and Improvement (so spec-code can track fixes)
 - Plain text for Minor (informational only)
 

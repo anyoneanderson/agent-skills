@@ -24,7 +24,8 @@ unresolved items. A stall landing produces a draft PR instead of a ready one.
    (Adversarial Review History, Acceptance Evidence, Unresolved) is defined in
    `../pr-assembly.md`; this phase supplies the transition and the inputs.
 3. If the run reached pr via an arbitration draft landing, create the PR as a
-   **draft** and list unresolved Critical / Improvement under `## Unresolved`.
+   **draft** and list the unresolved fix-loop findings under `## Unresolved`
+   (see `../pr-assembly.md`).
 
 ## Output
 

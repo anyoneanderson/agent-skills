@@ -156,8 +156,8 @@ Verification / State-Update steps.
 | spec_generate | spec set + test.md written | inspect | `phases/spec_generate.md` |
 | inspect | CRITICAL / WARNING (fix) | spec_generate | `phases/inspect.md` |
 | inspect | INFO-only / PASS | spec_review | `phases/inspect.md` |
-| spec_review | Critical / Improvement (fix) | spec_generate | `phases/spec_review.md` |
-| spec_review | Gate PASS | approval | `phases/spec_review.md` |
+| spec_review | `fix_before: implementation` findings (fix) | spec_generate | `phases/spec_review.md` |
+| spec_review | Gate PASS (no `implementation` finding) | approval | `phases/spec_review.md` |
 | spec_review | stall signal | arbitration | `phases/spec_review.md` |
 | approval | human feedback (manual) | spec_generate | `phases/approval.md` |
 | approval | approved / auto passes through | implement | `phases/approval.md` |
@@ -175,10 +175,11 @@ expensive semantic check (adversarial spec_review), so a peer LLM's tokens are
 never spent on formatting defects.
 
 **Arbitration** is entered only when a stall signal fires in spec_review or
-evaluate. Its detection algorithm (fingerprints and signals S1–S3, evaluated
-from `state.rounds` alone) and adjudication branches (manual asks the human; auto
-swaps the owner up to `limits.role_swap_max`, else lands a draft PR) are defined
-in `references/stall-detection.md`.
+evaluate. Its detection algorithm (fingerprints, class keys, and signals S1–S4,
+evaluated from `state.rounds` alone) and adjudication branches (S4 orders a
+structural redesign from the planner; manual asks the human; auto swaps the
+owner up to `limits.role_swap_max`, else lands a draft PR) are defined in
+`references/stall-detection.md`.
 
 ## Phase Index — Worker and Role
 

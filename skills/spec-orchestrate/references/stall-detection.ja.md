@@ -7,10 +7,23 @@
 
 English version: [stall-detection.md](stall-detection.md)
 
+## 検知器が見る findings
+
+検知器が見るのは、修正ループが実際に対処する findings だけである:
+
+- **spec_review ループ**: `fix_before: implementation` の finding — 修正ループが
+  直すのはこれだけ。先送りの finding（`trial` / `required_check` / `follow_up`）と
+  Minor は記録して持ち越すだけで修正しないため、数えるとラウンドのたびに偽の停滞を
+  発火させてしまう。
+- **evaluate ループ**: Critical + Improvement の findings（失敗した受け入れケースは
+  すべて修正が必要なので、全件がループを駆動する）。
+
+以下、「修正ループ対象の findings」はそれぞれのループにおけるこの集合を指す。
+
 ## findings 指紋
 
 指紋は finding の同一性キーで、「言い換えられた同じ指摘」をラウンドをまたいで同一と
-数えるためのもの。finding ごとに計算する:
+数えるためのもの。修正ループ対象の finding ごとに計算する:
 
 ```
 fingerprint = sha1( req_id + "\x1f" + severity + "\x1f" + norm_path + "\x1f"
@@ -34,6 +47,21 @@ gist_80="$(printf '%s' "$gist" | tr -s '[:space:]' ' ' | tr '[:upper:]' '[:lower
 fp="$(printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' "$req_id" "$severity" "$norm_path" "$section" "$gist_80" | sha1 | cut -c1-40)"
 ```
 
+## クラスキー（S4 用）
+
+指紋は細かすぎて、「文言と行を変えて戻ってくる同じ *クラス* の欠陥」を捉えられない。
+クラスキーは severity と要旨を落とし、finding が着地する場所だけを残す:
+
+```
+class_key = sha1( norm_path + "\x1f" + section_heading )
+```
+
+（指紋と同じ sha1 のシェル形。先頭40字。）
+
+クラスキーは、そのラウンドの **Critical + Improvement 全件** で計算する（修正ループ
+対象に限らない）: 繰り返し浮上するクラスは、個々の instance がどのマイルストーンへ
+先送りされたかに関係なく、設計の匂いである。
+
 ## 各ラウンドが記録するもの
 
 レビュー/評価の各ラウンド終了時に、対応する `state.rounds.<loop>` 配列
@@ -41,13 +69,16 @@ fp="$(printf '%s\x1f%s\x1f%s\x1f%s\x1f%s' "$req_id" "$severity" "$norm_path" "$s
 
 ```json
 {"round": N, "critical": c, "improvement": i, "minor": m,
- "fingerprints": ["<fp>", ...], "gate": "PASS|FAIL"}
+ "fix_required": f, "fingerprints": ["<fp>", ...],
+ "class_keys": ["<ck>", ...], "gate": "PASS|FAIL"}
 ```
 
-`fingerprints` は **Critical と Improvement の findings のみ** を対象とする — 修正
-ループが実際に対処するもの。Minor は除外する: Minor は記録して持ち越すだけ
-なので、未修正の Minor が数件ラウンドをまたいで残るだけで S1 を毎回誤発火させて
-しまう。
+- `fix_required` — このラウンドの修正ループ対象の finding 件数（spec_review:
+  `fix_before: implementation` の件数。evaluate: `critical + improvement`）。
+- `fingerprints` — 修正ループ対象の findings のみ。Minor と先送りの finding は
+  除外する: これらは設計上ラウンドをまたいで残り続けるため、数件残るだけで S1 を
+  毎回誤発火させてしまう。
+- `class_keys` — Critical + Improvement 全件（ソート・重複除去）。
 
 検知器はこの配列 **だけ** を読む — finding 本文も再パースもしない。これがシグナルを
 state だけから再現可能にする。
@@ -55,20 +86,26 @@ state だけから再現可能にする。
 ## シグナル（各ラウンド終了時に評価）
 
 ループのラウンドを順に `r[1..N]`、`set(k)` = ラウンド `k` の指紋集合（ソート・重複
-除去）、`total(k) = critical(k) + improvement(k)` とする。
+除去）、`classes(k)` = ラウンド `k` のクラスキー集合、`total(k) = fix_required(k)`
+とする。
 
 - **S1 — 再発する finding。** ある指紋が直近3ラウンド連続で存在:
   `∃ fp ∈ set(N) ∩ set(N-1) ∩ set(N-2)`。N ≥ 3 が必要。
-- **S2 — severity 非減少。** 修正ループが作業量を減らせていない:
-  `total(N-2) ≤ total(N-1) ≤ total(N)`。N ≥ 3 が必要。Critical **と**
-  Improvement を合算するのは修正ループが両方を対象とするため。Critical だけを見ると
-  減らない Improvement の滞留を見逃す。
+- **S2 — 作業量が非減少。** 修正ループが作業量を減らせていない:
+  `total(N-2) ≤ total(N-1) ≤ total(N)`。N ≥ 3 が必要。`total` が数えるのは
+  修正ループ対象の findings — ループが燃やし切るべき残作業。
 - **S3 — 振動。** 指紋集合が2状態を交互に取る:
   `set(N) == set(N-2)` かつ `set(N) ≠ set(N-1)`（A→B→A→B パターン）。N ≥ 3 が必要。
   4ラウンド目が同パターンなら確証。
+- **S4 — 同型クラスの反復。** あるクラスキーが直近3ラウンド連続で存在:
+  `∃ ck ∈ classes(N) ∩ classes(N-1) ∩ classes(N-2)`。N ≥ 3 が必要。S1 が成立
+  しなかったときだけ評価する（S1 のほうが強い・厳密な形であるため）。S4 は S1 が
+  捉えられないものを捉える: 個々の instance は毎回修正されるので指紋は再発しないが、
+  翌ラウンドに同じ場所で同じクラスの別 instance が現れる — 個別パッチを何度繰り返しても
+  指摘が尽きない状態である。
 
-S1/S2/S3 のいずれかが成立したら `phase = arbitration` にし、どのシグナルが成立したか
-記録する。そうでなければ通常の修正ループを続ける。
+S1/S2/S3/S4 のいずれかが成立したら `phase = arbitration` にし、どのシグナルが成立
+したか記録する。そうでなければ通常の修正ループを続ける。
 
 ## 裁定
 
@@ -77,6 +114,19 @@ S1/S2/S3 のいずれかが成立したら `phase = arbitration` にし、どの
 - ラウンド推移表（`state.rounds` から）、
 - このラウンドで未解決の findings 本文、
 - 直近で試みた修正。
+
+### S4 は裁定が異なる: 構造変更を指令する
+
+S4 の意味は「finding 単位のパッチでは収束しない」— 設計が、ループが直すのと同じ速さで
+同じクラスの新しい instance を生んでいる。レビュアーの入れ替えは効かない（個々の指摘は
+正しい）。変えるべきは設計である。
+
+S4 では、他のどの分岐よりも先に、**planner への構造変更の指令**を出す（1ループにつき
+最大1回）: 停滞したループの修正フェーズ（spec_generate または implement）へ、次の指示と
+ともに差し戻す — 「個別の finding へのパッチをやめよ。このクラスの欠陥が構造的に発生
+しない設計に作り直せ: それを不可能にする不変条件を定義し、実装とテストに守らせよ」。
+`decision: "restructure"` として記録する。入れ替え予算は消費しない。このループで既に
+構造変更の指令を出した後に S4 が再度成立した場合は、下の通常分岐へ進む。
 
 ### manual
 
@@ -87,31 +137,35 @@ question: "The review loop appears stalled ({signal}). How should it proceed?" /
           "レビューループが停滞しています（{signal}）。どう進めますか？"
 options:
   - "Continue the loop" / "ループを続行"
+  - "Order a structural redesign" / "構造の再設計を指令する"
   - "Change approach (I'll give instructions)" / "方針変更（指示を入力する）"
   - "I'll take it over" / "人間が引き取る"
 ```
 
 - 続行 → ループのフェーズに戻る。
+- 構造の再設計 → 上記の planner への指令を出して続行する。
 - 方針変更 → 人の指示を planner/実装者に修正指令として渡し、続行する。
 - 引き取る → state を保持して停止。以降は人が運転する。
 
 ### auto
 
-人がいないので自律的に選ぶ:
+人がいないので自律的に選ぶ（上記の S4 規則を先に適用した後）:
 
 1. **(a) 担当を入れ替える** — 停滞したフェーズ/タスクの担当を反対側 LLM に入れ替えて
    続行する。ただし入れ替え予算がある場合のみ: 最大 `limits.role_swap_max` 回
    （既定1）。新しい担当を `state.role_overrides` に記録する。
-   （例: codex レビュアーが収束させられない spec-review を claude レビュアーで再実行）。
+   （例: codex レビュアーでは指摘件数が減らない spec-review を claude レビュアーで
+   再実行する）。
 2. **(b) draft PR で着地する。** 入れ替え予算を使い切っている（既に1回入れ替え済み）
-   なら (a) は使えず、未解決の Critical / Improvement を記録した **draft PR** で
+   なら (a) は使えず、未解決の修正ループ対象 findings を記録した **draft PR** で
    着地する（PR 組み立ては pr.md）。
 
 つまり auto の最初の停滞は1回入れ替え、（入れ替え後の）2度目の停滞で draft 着地する。
 
 ### 裁定の遷移
 
-- 続行 / 担当入れ替え後 → 停滞した側の **spec_review** または **implement** に戻る。
+- 続行 / 担当入れ替え後 / 構造変更の指令後 → 停滞した側の **spec_review** または
+  **implement** に戻る。
 - draft PR 着地 → **pr**（PR は draft で作成）。
 
 ## 裁定の記録
@@ -120,7 +174,7 @@ options:
 
 1. `state.arbitrations` に追記:
    ```json
-   {"phase": "spec_review", "signal": "S1", "decision": "continue|swap|draft",
+   {"phase": "spec_review", "signal": "S1", "decision": "continue|swap|restructure|draft",
     "note": "...", "ts": "<ISO 8601>"}
    ```
 2. 人が見る場所に転記する:

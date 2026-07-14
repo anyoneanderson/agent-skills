@@ -23,7 +23,8 @@
    History、Acceptance Evidence、Unresolved）は `../pr-assembly.ja.md` が定義する。
    このフェーズは遷移と入力を用意する。
 3. 裁定の draft 着地で pr に来た場合、PR を **draft** で作成し、未解決の
-   Critical / Improvement を `## Unresolved` に列挙する。
+   修正ループ対象 findings を `## Unresolved` に列挙する（`../pr-assembly.ja.md`
+   参照）。
 
 ## 出力
 
