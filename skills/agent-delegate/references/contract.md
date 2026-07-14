@@ -163,6 +163,9 @@ re-classify from the `blocker` text.
   as-is. The Gate is derived from `fix_before` alone — FAIL iff at least one
   finding is tagged `fix_before: implementation`
   (see `adversarial-review-prompt.md`).
+- The structural check verifies **presence** only; it does not validate
+  `fix_before` values or that the `Gate` line matches the findings. Consumers
+  MUST recompute the Gate from the finding tags and fail closed on a mismatch.
 
 ## Resume
 

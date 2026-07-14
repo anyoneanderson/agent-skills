@@ -14,6 +14,9 @@ developer_instructions = """
    - BLOCKING: [MUST] ルール違反 — マージ前に修正必須
    - WARNING: [SHOULD] ルール違反 — 修正を推奨
    - SUGGESTION: ルールに含まれない改善提案
+   レビューゲート契約との対応: BLOCKING が fix_before: implementation に相当し、
+   判定を REQUEST_CHANGES にできるのはこれだけ。WARNING / SUGGESTION はブロック
+   しない — PR 本文または後続 issue に記録する。これ以外のゲート判定軸を発明しない。
 3. 実装コードとテストコードの両方をレビューする
 4. 実装がIssue要件と仕様書に合致しているか確認する
 
@@ -77,4 +80,5 @@ developer_instructions = """
 制約事項:
 - コードは変更しない — 指摘事項の報告のみ
 - BLOCKING の問題があるコードは承認しない
+- WARNING / SUGGESTION だけで REQUEST_CHANGES を返さない
 """

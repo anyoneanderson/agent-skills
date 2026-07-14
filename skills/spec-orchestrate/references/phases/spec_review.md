@@ -31,6 +31,11 @@ prompt) and to set the `Gate` line from that axis alone, mechanically —
 does not decide the Gate. State this in the prompt every round so the Gate
 never diverges from the tally.
 
+**Stage remapping:** when `pipeline.yml` defines `review.fix_before_stages`
+(see `../pipeline-config.md`), pass that list into the review context, and
+read `implementation` throughout this file — the Gate rule, the fix loop,
+`fix_required` — as the **first** stage of that list.
+
 **Review scope per round:** round 1 reads the whole spec set deeply. For
 round ≥ 2, instruct the reviewer to read only the unresolved findings, the
 sections changed by the fixes, and the parts that directly use those sections
@@ -71,6 +76,11 @@ otherwise keeps drilling into the same area it explored last round.
   carry a valid `fix_before` value; a `fix_before: implementation` finding must
   state who triggers it, what breaks, and from which milestone on. A finding
   missing these is treated as malformed (same re-run-once rule).
+- **Recompute the Gate from the `fix_before` tags** — FAIL iff at least one
+  finding carries the gate-blocking stage. Never adopt the reviewer's `Gate`
+  line at face value: the delegation script verifies structure only, not that
+  the line matches the findings. A `Gate` line that contradicts the tally is
+  malformed output (same re-run-once rule).
 - Only `fix_before: implementation` findings drive the fix loop. Findings at
   `trial` / `required_check` / `follow_up`, and Minor findings, are recorded
   and carried forward — transcribed to the PR body (see `../pr-assembly.md`),

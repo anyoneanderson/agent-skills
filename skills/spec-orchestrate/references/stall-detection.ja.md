@@ -19,6 +19,9 @@ English version: [stall-detection.md](stall-detection.md)
   すべて修正が必要なので、全件がループを駆動する）。
 
 以下、「修正ループ対象の findings」はそれぞれのループにおけるこの集合を指す。
+`pipeline.yml` で `review.fix_before_stages` を定義し直しているプロジェクトは、
+本ファイルの `implementation` をその一覧の**先頭**の段階と読み替える
+（`pipeline-config.ja.md` 参照）。
 
 ## findings 指紋
 
@@ -58,9 +61,10 @@ class_key = sha1( norm_path + "\x1f" + section_heading )
 
 （指紋と同じ sha1 のシェル形。先頭40字。）
 
-クラスキーは、そのラウンドの **Critical + Improvement 全件** で計算する（修正ループ
-対象に限らない）: 繰り返し浮上するクラスは、個々の instance がどのマイルストーンへ
-先送りされたかに関係なく、設計の匂いである。
+クラスキーは指紋と同じ集合、つまり**修正ループ対象の findings のみ**で計算する。
+先送りの finding は持ち越され、再レビュー規則により蒸し返されない — そこで再発する
+クラスはノイズになる。S4 が捉えるべきパターンは、修正ループ対象の finding が毎ラウンド
+修正されながら、翌ラウンドに同じ場所へ同じクラスの別 instance が現れることである。
 
 ## 各ラウンドが記録するもの
 
@@ -78,10 +82,15 @@ class_key = sha1( norm_path + "\x1f" + section_heading )
 - `fingerprints` — 修正ループ対象の findings のみ。Minor と先送りの finding は
   除外する: これらは設計上ラウンドをまたいで残り続けるため、数件残るだけで S1 を
   毎回誤発火させてしまう。
-- `class_keys` — Critical + Improvement 全件（ソート・重複除去）。
+- `class_keys` — 修正ループ対象の findings のみ（ソート・重複除去）。
 
 検知器はこの配列 **だけ** を読む — finding 本文も再パースもしない。これがシグナルを
 state だけから再現可能にする。
+
+**旧形式のラウンド。** この契約より前に記録されたエントリには `fix_required` と
+`class_keys` が無い。それを理由に resume を止めないこと: そのラウンドの
+`fix_required` は `critical + improvement` として導出し、`class_keys` の無い
+ラウンドを含む3ラウンド窓では S4 を評価不能として扱う。
 
 ## シグナル（各ラウンド終了時に評価）
 

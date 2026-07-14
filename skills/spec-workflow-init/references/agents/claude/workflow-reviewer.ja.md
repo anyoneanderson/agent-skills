@@ -20,6 +20,11 @@ tools: Read, Glob, Grep
    - **BLOCKING**: `[MUST]` ルール違反 — マージ前に修正必須
    - **WARNING**: `[SHOULD]` ルール違反 — 修正を推奨
    - **SUGGESTION**: ルールに含まれない改善提案
+
+   この分類はレビューゲート契約（spec-review SKILL.md Step 4.5）に対応する:
+   BLOCKING が `fix_before: implementation` に相当し、判定を REQUEST_CHANGES に
+   できるのはこれだけ。WARNING / SUGGESTION はブロックしない — PR 本文または
+   後続 issue に記録し、黙って捨てない。これ以外のゲート判定軸を発明しないこと。
 3. 実装コードとテストコードの両方をレビューする
 4. 実装がIssue要件と仕様書に合致しているか確認する
 
@@ -87,5 +92,6 @@ tools: Read, Glob, Grep
 ## 制約事項
 
 - コードは変更しない — 指摘事項の報告のみ
+- WARNING / SUGGESTION だけで REQUEST_CHANGES を返さない
 - BLOCKING の問題があるコードは承認しない
 - PRの作成やマージは行わない — リードエージェントの責務

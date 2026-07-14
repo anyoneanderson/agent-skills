@@ -13,8 +13,14 @@ The `--feedback` option accepts both review results and test results. The file f
 
 ### Review Result (from spec-review)
 - Contains `## Findings` section with `### Critical` / `### Improvement` / `### Minor`
-- Each finding has `**{rule-id}** {file}:{line} — {description}`
-- Address Critical findings first, then Improvements
+- Each finding has `**{rule-id}** {file}:{line} — {description}`; Critical /
+  Improvement findings also carry a `fix_before` tag
+- When findings carry `fix_before` tags, fix only those tagged
+  `implementation` (Critical first, then Improvement); findings tagged
+  `trial` / `required_check` / `follow_up` are deferred and carried by the
+  caller — do not fix them here
+- Legacy file without `fix_before` tags: address Critical findings first,
+  then Improvements
 
 ### Test Result (from spec-test)
 - Contains `## Test Cases` section with pass/fail status
@@ -22,7 +28,7 @@ The `--feedback` option accepts both review results and test results. The file f
 - Focus on fixing failing tests and uncovered criteria
 
 ### Evaluate Result (from spec-evaluate)
-- Uses the same `## Findings` structure as a review result (`### Critical` / `### Improvement` / `### Minor`), so it is processed identically — address Critical findings first, then Improvements
+- Uses the same `## Findings` structure as a review result (`### Critical` / `### Improvement` / `### Minor`) — address Critical findings first, then Improvements. Evaluate findings carry no `fix_before` tag: every finding is a fix target (a failing acceptance case cannot be deferred)
 - Ignore the `## Blocked` section: blocked cases are setup gaps (e.g., a missing app launch recipe), not implementation failures, and are not fix targets
 
 ## Commit Conventions

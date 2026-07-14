@@ -19,7 +19,10 @@ The detector watches only the findings the fix loop actually acts on:
 - **evaluate loop**: Critical + Improvement findings (every failing acceptance
   case must be fixed, so all of them drive the loop).
 
-Below, "fix-loop findings" means this set for the respective loop.
+Below, "fix-loop findings" means this set for the respective loop. A project
+that redefines `review.fix_before_stages` in `pipeline.yml` reads
+`implementation` here and below as the **first** stage of its list (see
+`pipeline-config.md`).
 
 ## Finding Fingerprint
 
@@ -61,9 +64,11 @@ class_key = sha1( norm_path + "\x1f" + section_heading )
 
 (Same sha1 shell form as the fingerprint, first 40 chars.)
 
-Class keys are computed over **all Critical + Improvement findings** of the
-round, not just fix-loop findings: a class that keeps resurfacing is a design
-smell regardless of which milestone each instance was deferred to.
+Class keys are computed over the **fix-loop findings only**, the same set as
+fingerprints. Deferred findings are carried forward and, by the re-review
+rule, not re-raised — classes recurring among them would be noise, and the
+pattern S4 exists to catch is a fix-loop finding getting fixed each round
+while a sibling of the same class appears in the same spot the next round.
 
 ## What Each Round Records
 
@@ -81,11 +86,15 @@ At the end of every review/evaluate round, append one entry to the matching
 - `fingerprints` — over fix-loop findings only. Minor and deferred findings are
   excluded: they persist across rounds by design, so a couple of them would
   otherwise trip S1 every time and fire a false stall.
-- `class_keys` — over all Critical + Improvement findings (sorted,
-  de-duplicated).
+- `class_keys` — over fix-loop findings only (sorted, de-duplicated).
 
 The detector reads **only** this array — no finding bodies, no re-parsing. That
 is what makes a signal reproducible from state alone.
+
+**Legacy rounds.** Entries recorded before this contract lack `fix_required`
+and `class_keys`. Do not block resume on them: derive `fix_required` for such
+a round as `critical + improvement`, and treat S4 as not evaluable for any
+3-round window that includes a round without `class_keys`.
 
 ## Signals (evaluated at each round end)
 
