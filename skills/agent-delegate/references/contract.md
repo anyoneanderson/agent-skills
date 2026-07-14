@@ -161,7 +161,8 @@ re-classify from the `blocker` text.
 - The review file format (severity sections + per-finding `fix_before` tags +
   gate) is stable and machine-parsable; downstream tooling can consume it
   as-is. The Gate is derived from `fix_before` alone — FAIL iff at least one
-  finding is tagged `fix_before: implementation`
+  finding carries the gate-blocking stage: the first stage of the list in
+  effect, which is `implementation` with the default list
   (see `adversarial-review-prompt.md`).
 - The structural check verifies **presence** only; it does not validate
   `fix_before` values or that the `Gate` line matches the findings. Consumers
