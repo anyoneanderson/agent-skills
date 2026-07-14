@@ -45,6 +45,11 @@ roles:
 limits:
   role_swap_max: 1          # draft 着地までに許す裁定のロール入れ替え上限
 
+# review: レビューゲートの fix_before マイルストーン一覧。先頭の段階がゲートを
+# 止める段階。段階名を変えたいときだけコメントを外す（既定は下記）。
+# review:
+#   fix_before_stages: [implementation, trial, required_check, follow_up]
+
 # improve: retrospective の自動改善。パイプラインに自身の学びを適用させたいときに
 # 有効化する。未設定なら改善は Issue 起票に縮退する。
 # improve:
@@ -62,6 +67,9 @@ limits:
   は最初 UI 項目が無いため全行コメントで出す。spec-orchestrate は `app` 不在を「起動
   レシピなし」として扱う。
 - **limits.role_swap_max** — 裁定のロール入れ替え上限（既定 1）。
+- **review.fix_before_stages** — レビュー findings に付ける `fix_before` の
+  マイルストーン一覧（順序付き）。先頭の段階がゲートを止める段階。既定で足りる
+  プロジェクトが大半なのでコメントで出す。
 - **improve** — retrospective の自己改善ブロック。コメントで出す。未設定なら
   retrospective の改善は Issue 起票に縮退する。
 

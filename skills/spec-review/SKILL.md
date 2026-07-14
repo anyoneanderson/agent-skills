@@ -40,7 +40,15 @@ Review code changes against project rules using a systematic rule × file matrix
 
 Same as spec-code §Step 0, but identify your role as **reviewer**.
 
-Phase B applies when re-reviewing after a fix: load only the updated diff and previous review findings.
+Phase B applies when re-reviewing after a fix: load only the updated diff and
+previous review findings. On a re-review, read only the unresolved findings,
+the parts changed by the fixes, and the code that directly uses those parts —
+do not re-scan the whole diff hunting for fresh ground. Do not re-raise
+findings already recorded with `fix_before: trial` / `required_check` /
+`follow_up`; the caller carries them forward. A **new** finding unrelated to
+the fixes may be tagged `implementation` only for secret leak, data loss, a
+bypass of a merge condition, or an infeasibility; any other new finding is
+`follow_up`.
 
 ### Step 1: Collect Rules
 
@@ -111,6 +119,34 @@ If `--spec` is provided:
    - Are the architecture decisions followed?
 3. Record any deviations as "Improvement" severity
 
+### Step 4.5: Tag Each Finding with `fix_before`
+
+Severity (Critical / Improvement / Minor) is for human reading and
+prioritization. The Gate is decided by a second axis, `fix_before` — the
+milestone before which the defect must be fixed. Tag every Critical and
+Improvement finding with one of, in milestone order:
+
+- **implementation** — must be fixed before this work lands: infeasible as
+  written, or breaks for its users the moment it is used.
+- **trial** — must be fixed before the change is exercised in trial operation;
+  does not block landing.
+- **required_check** — must be fixed before the change becomes an enforced
+  gate or a dependency others rely on.
+- **follow_up** — worth fixing in a follow-up issue.
+
+Rules of evidence:
+
+- **The default is `follow_up`. The burden of proof is on escalation.**
+- To tag `implementation`, the finding description MUST state both:
+  (1) who triggers it, by what operation, and what breaks; and
+  (2) from which milestone on that failure first becomes possible.
+  If (2) cannot be stated, tag the earliest milestone that can be defended.
+- Exception: a defect that makes the change not work at all as written
+  (infeasible) is always `implementation`.
+- Minor findings take no `fix_before` tag (implicitly `follow_up`).
+- Do not add any further gating axis (no `blocking:` flag or similar); whether
+  the Gate stops is derived from `fix_before` alone.
+
 ### Step 5: Write Review File
 
 Output to `--output` path (default: `.specs/{feature}/review-{task-id}.md`):
@@ -129,23 +165,26 @@ type: review
 ## Findings
 
 ### Critical
-- [ ] **{rule-id}** `{file}:{line}` — {what violates and why}
+- [ ] **{rule-id}** `{file}:{line}` — fix_before: {implementation|trial|required_check|follow_up} — {what violates and why}
 
 ### Improvement
-- [ ] **{rule-id}** `{file}:{line}` — {suggestion and reasoning}
+- [ ] **{rule-id}** `{file}:{line}` — fix_before: {implementation|trial|required_check|follow_up} — {suggestion and reasoning}
 
 ### Minor
 - {rule-id} `{file}:{line}` — {note}
 
 ## Summary
 - Critical: {n} | Improvement: {n} | Minor: {n}
+- Fix before implementation: {n}
 - Gate: PASS / FAIL
 ```
 
-**Gate logic:**
-- Any Critical finding → FAIL
-- Only Improvement/Minor → PASS (with warnings)
-- No findings → PASS
+**Gate logic** (mechanical, from `fix_before` alone — severity does not enter
+the decision):
+- Any finding tagged `fix_before: implementation` → FAIL
+- Otherwise (only trial / required_check / follow_up / Minor, or no findings)
+  → PASS (deferred findings are recorded and carried forward, never silently
+  dropped)
 
 ## Error Handling
 

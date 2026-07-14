@@ -158,8 +158,20 @@ re-classify from the `blocker` text.
   4. a `## Summary` section with a `Gate: PASS|FAIL` line.
 - If the read-only run still modified files (after excluding our artifacts):
   `status: blocked`, `blocker_category: sandbox_violation`.
-- The review file format (severity sections + gate) is stable and
-  machine-parsable; downstream tooling can consume it as-is.
+- The review file format (severity sections + per-finding `fix_before` tags +
+  gate) is stable and machine-parsable; downstream tooling can consume it
+  as-is. The Gate is derived from `fix_before` alone — FAIL iff at least one
+  finding carries the gate-blocking stage: the first stage of the list in
+  effect, which is `implementation` with the default list
+  (see `adversarial-review-prompt.md`).
+- The structural check verifies **presence** only; it does not validate
+  `fix_before` values or that the `Gate` line matches the findings. Consumers
+  MUST first verify every Critical / Improvement finding carries a `fix_before`
+  value from the stage list in effect — the four defaults, or the ordered list
+  the caller supplied in the review context (a missing or out-of-list tag is
+  malformed output — never compute a gate from it) — then recompute the Gate
+  from the tags (FAIL iff any finding carries the first, gate-blocking stage)
+  and fail closed on a mismatch.
 
 ## Resume
 

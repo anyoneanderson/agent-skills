@@ -113,20 +113,23 @@ coding-rules.md に基づいて実装コードをレビューする。
 
 #### レビュー結果の判定
 
-| 重大度 | 検出時のアクション |
-|--------|-----------------|
-| 重大（セキュリティ・バグ） | 即修正 → 再レビュー |
-| 改善提案（品質・可読性） | 修正 → 再レビュー |
+重大度（重大 / 改善提案 / 軽微）は人間の優先度づけ用。ゲートの判定は各指摘の
+`fix_before` タグ（`implementation | trial | required_check | follow_up`、既定は
+`follow_up` — spec-review SKILL.md Step 4.5 参照）で行う。
+
+| 指摘 | 検出時のアクション |
+|------|-----------------|
+| `fix_before: implementation` | 即修正 → 再レビュー |
+| `fix_before: trial` / `required_check` / `follow_up` | 記録し、PR 本文 / 後続 issue へ持ち越す |
 | 軽微（スタイル等） | ログのみ、続行可 |
 
 #### 修正ループ（最大3回）
 1. レビューで問題を検出
-2. 問題箇所を修正
+2. `fix_before: implementation` の指摘を修正
 3. 修正箇所のみ再レビュー
 4. 繰り返し（最大3回まで）
-5. 3回目で未解消の改善提案 → 「軽微」に降格して続行
-6. 3回目で未解消の重大指摘 → ユーザーに判断を委ねる
-7. レビューパス → 次の Phase へ
+5. 3回目で未解消の `fix_before: implementation` 指摘 → ユーザーに判断を委ねる
+6. レビューパス（`fix_before: implementation` の指摘が残っていない）→ 次の Phase へ
 
 {if_second_opinion}
 セカンドオピニオンが必要な場合は cmux-second-opinion で別AIにレビューを依頼する。

@@ -13,12 +13,48 @@
   基づくこと。トリガーの無い推測はしない。
 - あなたは読み取り専用サンドボックスで動いている。ワークスペースを変更する書き込み・
   編集・コマンド実行を試みないこと。読み、考え、報告する。
-- 各 finding を次の severity 区分で分類すること:
+- 各 finding を次の severity 区分で分類すること。severity は人間の読み・優先度づけの
+  ためのものであり、Gate の判定には使わない:
   - **Critical** — 変更が誤り・危険、または必須の契約に違反しており、マージすると
     正しさ・セキュリティ・仕様が壊れる。
   - **Improvement** — 動くが設計から逸脱している、処理すべきケースを取りこぼしている、
     または修正に値するほど脆い。
   - **Minor** — スタイル・命名・ブロッカーにならない改善。
+- さらに、Critical と Improvement のすべての finding に `fix_before`（どのマイルストーン
+  までに直すか）を付けること。Gate が読むのは**この軸だけ**である。値はマイルストーン順に:
+  - **implementation** — この作業を着地させる前に修正が必須: そのままでは実装不能、
+    または使われた瞬間に利用者に対して壊れる。
+  - **trial** — 試験運用で使われる前までに修正が必要。着地は止めない。
+  - **required_check** — 強制されるゲートになる前、または他者が依存する前までに
+    修正が必要。
+  - **follow_up** — 後続 issue で直す価値がある。
+
+  `fix_before` の立証規則:
+  - **既定は `follow_up`。格上げする側が立証責任を負う。**
+  - finding に `implementation` を付けるには、説明に次の2点を必ず書くこと:
+    1. 誰が・どの操作をすると・何が壊れるか
+    2. どのマイルストーン以降に、その失敗が初めて成立するか
+    (2) が書けないなら `implementation` ではない — 立証できる最も早いマイルストーンを
+    付けること。
+  - 例外: そのままでは全く動かない欠陥（実装不能）は無条件で `implementation`。
+    攻撃者を必要としないため。なぜ動かないかを書くこと。
+  - Minor の finding に `fix_before` は付けない。暗黙に `follow_up` とみなす。
+  - これ以上のゲート判定軸を発明しないこと（`blocking:` フラグ等は不可）。
+    ゲートで止めるかは `fix_before` だけから導く。
+  - レビュー文脈が別のマイルストーン段階の並びを指定している場合はその値を使うこと。
+    先頭の段階が `implementation` の役割（ゲートを止める段階）を担う。
+
+## 再レビューのラウンド
+
+レビュー文脈がこのレビューを再レビュー（ラウンド2以降）と示している場合:
+
+- 未解決の finding・修正で変わった箇所・その箇所を直接使うコードまたは仕様だけを
+  読むこと。新しい指摘を探して全体を読み直さない。
+- `fix_before: trial` / `required_check` / `follow_up` で記録済みの finding を
+  蒸し返さないこと。呼び出し側が持ち越して管理する。
+- 修正と無関係な**新しい** finding に `implementation` を付けてよいのは、秘密情報の
+  漏えい・データ損失・マージ条件の回避・実装不能のいずれかに該当する場合だけ。
+  それ以外の新規指摘は `follow_up` とする。
 
 ## 必須の出力形式
 
@@ -41,23 +77,30 @@ type: review
 ## Findings
 
 ### Critical
-- [ ] **{rule-or-topic}** `{file}:{line}` — {何が壊れるか、およびそれを引き起こす正確な条件}
+- [ ] **{rule-or-topic}** `{file}:{line}` — fix_before: {implementation|trial|required_check|follow_up} — {何が壊れるか、およびそれを引き起こす正確な条件}
 
 ### Improvement
-- [ ] **{rule-or-topic}** `{file}:{line}` — {ギャップと、その埋め方}
+- [ ] **{rule-or-topic}** `{file}:{line}` — fix_before: {implementation|trial|required_check|follow_up} — {ギャップと、その埋め方}
 
 ### Minor
 - {rule-or-topic} `{file}:{line}` — {注記}
 
 ## Summary
 - Critical: {n} | Improvement: {n} | Minor: {n}
+- Fix before implementation: {n}
 - Gate: PASS | FAIL
 ```
 
-Gate 判定（この通りに適用）— Gate 行は severity 集計と機械的に一致させ、裁量を挟まない:
+Gate 判定（この通りに適用）— Gate 行は `fix_before` の集計と機械的に一致させ、
+裁量を挟まない:
 
-- Critical **または Improvement** が1件でもあれば → `Gate: FAIL`。
-- Minor のみ、または findings 無しのときだけ → `Gate: PASS`。
+- `fix_before: implementation` の finding が1件でもあれば → `Gate: FAIL`。
+- それ以外 — findings が `trial` / `required_check` / `follow_up` のみ、Minor のみ、
+  または findings 無し — → `Gate: PASS`。
+
+severity はこの判定に関与しない: 修正が後のマイルストーンに属する Critical の
+finding があっても Gate は緑のままである。その finding は呼び出し側が記録して
+持ち越す — 先送りであって、黙って捨てられることはない。
 
 `# Review:` の見出しと `Reviewer:` 行には、下記のレビュー文脈で渡されるラベルと方向を
 使うこと。`Date` には現在の UTC タイムスタンプを ISO 8601 で入れる。レビュー文脈と

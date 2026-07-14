@@ -77,7 +77,7 @@ Mode / phases traversed / PR URL / draft or ready.
 | blocker_category | count | phase(s) | example |
 
 ## Stalls and Arbitrations
-Per arbitration: signal (S1/S2/S3) / decision (continue|swap|draft) / result.
+Per arbitration: signal (S1/S2/S3/S4) / decision (continue|swap|restructure|draft) / result.
 
 ## Improvement Proposals
 ### P-01: {target file} (Tier 1)

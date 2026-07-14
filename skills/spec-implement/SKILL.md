@@ -248,6 +248,14 @@ gh pr create \
 - Do NOT force push or push to main/master
 - Verify base branch matches workflow
 
+**Deferred findings**: for each review finding carried with `fix_before:
+trial` / `required_check` / `follow_up`, create a follow-up issue (`gh issue
+create` — finding text, severity, `fix_before` stage, file/section, link back
+to the PR; same-class findings may share one issue) and link it next to the
+finding in the PR body. If issue creation fails or `gh` is unavailable, keep
+the full finding text in the PR body with a warning — a deferred finding must
+never survive only in a run record.
+
 ## Error Handling
 
 | Situation | Response |

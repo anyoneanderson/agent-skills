@@ -8,8 +8,9 @@ inspect or spec_review or approval sends findings back for revision.
 
 - First entry: the intake output (manual request, or the reshaped Issue for auto).
 - Re-entry (fix): the findings that sent us back — inspect findings, spec_review
-  Critical/Improvement findings, or manual approval feedback — plus a short
-  summary of what changed in prior rounds.
+  `fix_before: implementation` findings (or a restructure directive from
+  arbitration), or manual approval feedback — plus a short summary of what
+  changed in prior rounds.
 - `spec_author` role → backend resolution (`../role-dispatch.md`).
 
 ## Action
@@ -20,6 +21,15 @@ inspect or spec_review or approval sends findings back for revision.
    - Re-entry: pass the findings as the revision instruction, not a fresh start.
 2. The planner writes `requirement.md`, `design.md`, `tasks.md`, and `test.md`
    into `.specs/{feature}/`. The orchestrator does not write these files.
+
+**Concurrency/ordering norm (always include in the planner instruction):**
+specify concurrent or order-dependent behavior by **defining a short set of
+invariants to uphold** (e.g. "once a new review starts, no earlier success
+verdict is used as a merge condition") and have the implementation and tests
+enforce them. **Do not enumerate all execution orders in the spec.** When a
+review finds an ordering hole, revise the invariants instead of adding one
+more state or decision table. Every enumerated order grows the spec, and a
+grown spec breeds new inconsistencies — this norm exists to stop that chain.
 
 ## Output
 

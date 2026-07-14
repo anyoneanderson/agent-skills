@@ -45,6 +45,11 @@ roles:
 limits:
   role_swap_max: 1          # max arbitration owner-swaps before landing a draft
 
+# review: fix_before milestone stages for the review gate; the FIRST stage is
+# the gate-blocking one. Uncomment only to rename the stages (defaults below).
+# review:
+#   fix_before_stages: [implementation, trial, required_check, follow_up]
+
 # improve: retrospective auto-improvement. Enable when you want the pipeline to
 # apply its own learnings; leave it unset and improvements degrade to filing an
 # Issue instead.
@@ -64,6 +69,9 @@ limits:
   Shipped fully commented because most projects have no UI cases at first;
   spec-orchestrate treats an absent `app` as "no launch recipe".
 - **limits.role_swap_max** — the arbitration owner-swap cap (default 1).
+- **review.fix_before_stages** — the ordered `fix_before` milestone list for
+  review findings; the first stage is the gate-blocking one. Shipped commented
+  because the defaults fit most projects.
 - **improve** — the retrospective self-improvement block. Shipped commented;
   when unset, retrospective improvements degrade to filing an Issue.
 

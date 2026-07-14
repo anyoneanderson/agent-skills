@@ -13,8 +13,13 @@
 
 ### レビュー結果（spec-review から）
 - `## Findings` セクションに `### Critical` / `### Improvement` / `### Minor` がある
-- 各指摘は `**{rule-id}** {file}:{line} — {description}` 形式
-- Critical を優先的に修正し、次に Improvement に対応
+- 各指摘は `**{rule-id}** {file}:{line} — {description}` 形式。Critical /
+  Improvement の指摘には `fix_before` タグも付く
+- 指摘に `fix_before` タグがある場合、修正するのは `implementation` の指摘だけ
+  （Critical を優先し、次に Improvement）。`trial` / `required_check` /
+  `follow_up` の指摘は先送りで、呼び出し側が持ち越す — ここでは修正しない
+- `fix_before` タグの無い旧形式ファイル: Critical を優先的に修正し、次に
+  Improvement に対応
 
 ### テスト結果（spec-test から）
 - `## Test Cases` セクションにパス/フェイルの状態がある
@@ -22,7 +27,7 @@
 - 失敗テストと未カバーの完了条件の修正に集中
 
 ### 受け入れ試験結果（spec-evaluate から）
-- レビュー結果と同じ `## Findings` 構造（`### Critical` / `### Improvement` / `### Minor`）を使うため、処理はレビューと同一 — Critical を優先的に修正し、次に Improvement に対応
+- レビュー結果と同じ `## Findings` 構造（`### Critical` / `### Improvement` / `### Minor`）を使う — Critical を優先的に修正し、次に Improvement に対応。受け入れ試験の指摘に `fix_before` タグは付かず、全件が修正対象（不合格の受け入れケースは先送りできない）
 - `## Blocked` セクションは無視する。blocked はセットアップ不足（例: アプリ起動レシピの欠落）であり実装の不具合ではないため、修正対象にしない
 
 ## コミット規約

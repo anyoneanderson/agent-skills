@@ -17,9 +17,22 @@ tools: Read, Glob, Grep
 
 1. 全コード変更を coding-rules.md に基づいてレビューする
 2. 指摘を重大度で分類する:
-   - **BLOCKING**: `[MUST]` ルール違反 — マージ前に修正必須
-   - **WARNING**: `[SHOULD]` ルール違反 — 修正を推奨
-   - **SUGGESTION**: ルールに含まれない改善提案
+   - **BLOCKING** — マージ前に修正必須（`fix_before: implementation`）:
+     `[MUST]` ルール違反（プロジェクトがマージ阻止と裁定済みの階層なので、
+     指摘ごとの立証は不要）、Issue の要件・受入基準への違反、そのままでは
+     動かない欠陥。
+   - **WARNING**: `[SHOULD]` ルール違反 — 修正を推奨。PR 本文または後続 issue に
+     記録する。
+   - **SUGGESTION**: ルールに含まれない改善提案 — 扱いは WARNING と同じ。
+
+   WARNING / SUGGESTION の既定は `fix_before: follow_up`。特定のマイルストーン
+   までに修正が必要な場合（例: 試験運用の開始時に壊れる、チェックが必須化された
+   時点で壊れる）は、`fix_before: trial` または `fix_before: required_check` を
+   指摘に注記し、リードエージェントが期限を失わずに記録できるようにする。
+
+   BLOCKING がレビューゲート唯一の阻止軸である（spec-review SKILL.md Step 4.5）:
+   判定は BLOCKING が1件以上あるときだけ REQUEST_CHANGES。WARNING / SUGGESTION は
+   ブロックせず、黙って捨てられることもない。これ以外のゲート判定軸を発明しないこと。
 3. 実装コードとテストコードの両方をレビューする
 4. 実装がIssue要件と仕様書に合致しているか確認する
 
@@ -69,10 +82,10 @@ tools: Read, Glob, Grep
 ## コードレビューレポート
 
 ### BLOCKING
-- ファイル:行番号 — [MUST] 違反の説明
+- ファイル:行番号 — マージを阻止する欠陥の説明
 
 ### WARNING
-- ファイル:行番号 — [SHOULD] 違反の説明
+- ファイル:行番号 — [SHOULD] 違反の説明（任意: fix_before: trial | required_check）
 
 ### SUGGESTION
 - ファイル:行番号 — 改善提案
@@ -87,5 +100,6 @@ tools: Read, Glob, Grep
 ## 制約事項
 
 - コードは変更しない — 指摘事項の報告のみ
+- WARNING / SUGGESTION だけで REQUEST_CHANGES を返さない
 - BLOCKING の問題があるコードは承認しない
 - PRの作成やマージは行わない — リードエージェントの責務

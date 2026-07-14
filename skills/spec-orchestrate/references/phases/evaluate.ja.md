@@ -38,13 +38,14 @@
 ## state 更新
 
 - このラウンドを `rounds.evaluate` に **spec_review と同じフィールド形式** で追加し、
-  同じ検知器が効くようにする: 各 FAIL 項目を `critical` 件数に、各懸念を
-  `improvement` 件数に写像する（blocked はどちらでもない — 不合格ではない。件数は
+  同じ検知器が効くようにする: 各 FAIL 項目を `critical` 件数として、各懸念を
+  `improvement` 件数として数える（blocked はどちらでもない — 不合格ではない。件数は
   独立の `blocked` フィールドに記録し、再開時に未検証分が見えるようにする）。加えて
-  findings 指紋（`../stall-detection.ja.md` に従い、Critical + Improvement のみ）と
-  ゲート結果。生の pass/fail/blocked 件数のまま記録すると、S2（`critical +
-  improvement` を合算）がこのループを評価できなくなる。
-- 停滞シグナル S1〜S3 を評価する（`../stall-detection.ja.md`）。シグナル成立時は
+  `fix_required`（このループでは `critical + improvement` — 不合格ケースはすべて修正
+  ループを駆動する）、findings 指紋とクラスキー（`../stall-detection.ja.md` に従う）、
+  ゲート結果。生の pass/fail/blocked 件数のまま記録すると、S2（`fix_required` を
+  監視）がこのループを評価できなくなる。
+- 停滞シグナル S1〜S4 を評価する（`../stall-detection.ja.md`）。シグナル成立時は
   `phase` を arbitration にする。
 
 ## 遷移

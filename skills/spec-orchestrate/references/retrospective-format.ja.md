@@ -74,7 +74,7 @@ type: retrospective
 | blocker_category | count | phase(s) | example |
 
 ## Stalls and Arbitrations
-裁定ごと: シグナル（S1/S2/S3）/ 裁定（continue|swap|draft）/ 結果。
+裁定ごと: シグナル（S1/S2/S3/S4）/ 裁定（continue|swap|restructure|draft）/ 結果。
 
 ## Improvement Proposals
 ### P-01: {対象ファイル} (Tier 1)

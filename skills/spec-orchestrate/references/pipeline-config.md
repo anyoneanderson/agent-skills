@@ -31,6 +31,8 @@ app:                      # spec-evaluate launch recipe (required only when UI c
   auth: none              # none | a references path describing the auth steps
 limits:
   role_swap_max: 1        # auto arbitration owner-swap cap (see stall-detection.md)
+review:                   # optional — review gate milestones
+  fix_before_stages: [implementation, trial, required_check, follow_up]
 improve:                  # retrospective auto-improvement — see improve-apply.md
   skills_repo: "~/Documents/zenchaine/agent-skills"
   auto_apply: true
@@ -47,6 +49,12 @@ improve:                  # retrospective auto-improvement — see improve-apply
   - In both modes, "config missing (blocked)" is distinct from "test failed".
 - **limits.role_swap_max**: the arbitration owner-swap cap; the detector and
   adjudication that consume it are in `stall-detection.md`.
+- **review.fix_before_stages**: the ordered milestone list review findings are
+  tagged with (`fix_before`); the **first** stage is the gate-blocking one. When
+  absent, the four defaults shown apply. A project whose milestones differ
+  redefines the list; the orchestrator passes it into the review context so the
+  reviewer tags findings with these stage names (see
+  `phases/spec_review.md` and the adversarial review prompt).
 - **improve**: the retrospective self-improvement block. Its fields and behavior
   are in `improve-apply.md`; this file only fixes their place in the schema.
 
@@ -66,7 +74,8 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
   "rounds": {
     "spec_review": [
       {"round": 1, "critical": 3, "improvement": 2, "minor": 1,
-       "fingerprints": ["a1b2..", "c3d4.."], "gate": "FAIL"}
+       "fix_required": 2, "fingerprints": ["a1b2..", "c3d4.."],
+       "class_keys": ["e5f6..", "a7b8.."], "gate": "FAIL"}
     ],
     "evaluate": []
   },
@@ -86,7 +95,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 | `phase` | Current phase; the loop reads this to decide what to run next |
 | `completed_phases` | Phases finished at least once (for the resume summary) |
 | `inspect` | Summary of the last inspect result: CRITICAL / WARNING / INFO counts and the gate (`PASS` when no CRITICAL/WARNING). inspect is a single machine check, not a review loop, so it is one summary object here, not a `rounds` array |
-| `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, finding fingerprints, and the gate. `evaluate` entries also carry a `blocked` count (blocked cases are neither critical nor improvement; see `phases/evaluate.md`). Consumed by stall detection (`stall-detection.md`) |
+| `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, the `fix_required` count (fix-loop findings), finding fingerprints, class keys, and the gate. `evaluate` entries also carry a `blocked` count (blocked cases are neither critical nor improvement; see `phases/evaluate.md`). Consumed by stall detection (`stall-detection.md`) |
 | `threads` | Peer session ids for resume (e.g. `spec_reviewer`) |
 | `role_overrides` | Roles reassigned this run (capability fallback or arbitration swap) |
 | `arbitrations` | Stall adjudication records (see `stall-detection.md`) |
@@ -117,7 +126,7 @@ jq '.phase = "inspect"
 
 Append a review round:
 ```bash
-jq --argjson r '{"round":1,"critical":3,"improvement":2,"minor":1,"fingerprints":[],"gate":"FAIL"}' \
+jq --argjson r '{"round":1,"critical":3,"improvement":2,"minor":1,"fix_required":2,"fingerprints":[],"class_keys":[],"gate":"FAIL"}' \
    '.rounds.spec_review += [$r]' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 ```
 

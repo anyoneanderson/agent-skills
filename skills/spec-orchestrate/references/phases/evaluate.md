@@ -38,14 +38,15 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 ## State Update
 
 - Append this round to `rounds.evaluate` using the **same field shape as
-  spec_review** so the same detector applies: map each FAIL case to a `critical`
-  count and each concern to an `improvement` count (blocked cases are neither —
+  spec_review** so the same detector applies: count each FAIL case as a `critical`
+  and each concern as an `improvement` (blocked cases are neither —
   they are not failures; record their number in a separate `blocked` field so a
-  resumed run can see what is still unverified), plus the finding fingerprints (per
-  `../stall-detection.md`, over the Critical + Improvement findings only) and the
+  resumed run can see what is still unverified), plus `fix_required` (for this
+  loop, `critical + improvement` — every failing case drives the fix loop), the
+  finding fingerprints and class keys (per `../stall-detection.md`), and the
   gate result. Recording raw pass/fail/blocked tallies instead would leave S2
-  (which sums `critical + improvement`) unable to evaluate this loop.
-- Evaluate the stall signals S1–S3 (`../stall-detection.md`). If a signal fires,
+  (which watches `fix_required`) unable to evaluate this loop.
+- Evaluate the stall signals S1–S4 (`../stall-detection.md`). If a signal fires,
   set `phase` to arbitration.
 
 ## Transitions
