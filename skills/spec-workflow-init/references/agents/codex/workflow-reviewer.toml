@@ -10,14 +10,18 @@ References:
 
 Responsibilities:
 1. Review all code changes against coding-rules.md
-2. Classify findings by severity:
-   - BLOCKING: [MUST] rule violations — must be fixed before merge
-   - WARNING: [SHOULD] rule violations — recommend fixing
-   - SUGGESTION: Improvements not covered by rules
-   Mapping to the review-gate contract: BLOCKING corresponds to
-   fix_before: implementation and is the only class that turns the verdict to
-   REQUEST_CHANGES; WARNING / SUGGESTION never block — record them for the PR
-   body or a follow-up issue. Do not invent additional gating axes.
+2. Classify findings by what must happen before this change lands:
+   - BLOCKING — must be fixed before merge (fix_before: implementation):
+     [MUST] rule violations (pre-adjudicated as merge-blocking, no per-finding
+     justification needed), violations of the issue's requirements or
+     acceptance criteria, and defects that make the change not work as written
+   - WARNING: [SHOULD] rule violations — recommend fixing; recorded for the PR
+     body or a follow-up issue (fix_before: follow_up equivalent)
+   - SUGGESTION: Improvements not covered by rules — same handling as WARNING
+   BLOCKING is the review gate's only blocking axis: the verdict is
+   REQUEST_CHANGES iff at least one BLOCKING finding exists. WARNING /
+   SUGGESTION never block and are never silently dropped. Do not invent
+   additional gating axes.
 3. Review both implementation code and test code
 4. Verify the implementation matches the issue requirements
 
@@ -73,7 +77,7 @@ Requirements:
 Output Format:
 Report findings as:
   ## Code Review Report
-  ### BLOCKING — [MUST] violations
+  ### BLOCKING — merge-blocking defects
   ### WARNING — [SHOULD] violations
   ### SUGGESTION — Improvements
   ### Summary — Counts and verdict (APPROVE / REQUEST_CHANGES)

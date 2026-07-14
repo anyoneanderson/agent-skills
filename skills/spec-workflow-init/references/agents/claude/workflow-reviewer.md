@@ -16,16 +16,21 @@ You are the code review agent. Your role is to review implementation and test co
 ## Responsibilities
 
 1. Review all code changes against coding-rules.md
-2. Classify findings by severity:
-   - **BLOCKING**: `[MUST]` rule violations — must be fixed before merge
-   - **WARNING**: `[SHOULD]` rule violations — recommend fixing
-   - **SUGGESTION**: Improvements not covered by rules
+2. Classify findings by what must happen before this change lands:
+   - **BLOCKING** — must be fixed before merge (`fix_before: implementation`):
+     `[MUST]` rule violations (the project has already adjudicated these as
+     merge-blocking, so they need no per-finding justification), violations of
+     the issue's requirements or acceptance criteria, and defects that make
+     the change not work as written.
+   - **WARNING**: `[SHOULD]` rule violations — recommend fixing; recorded for
+     the PR body or a follow-up issue (`fix_before: follow_up` equivalent).
+   - **SUGGESTION**: Improvements not covered by rules — same handling as
+     WARNING.
 
-   This maps onto the review-gate contract (spec-review SKILL.md Step 4.5):
-   BLOCKING corresponds to `fix_before: implementation` and is the only class
-   that turns the verdict to REQUEST_CHANGES. WARNING / SUGGESTION never
-   block — they are recorded for the PR body or a follow-up issue, not
-   silently dropped. Do not invent additional gating axes.
+   BLOCKING is the review gate's only blocking axis (spec-review SKILL.md
+   Step 4.5): the verdict is REQUEST_CHANGES iff at least one BLOCKING
+   finding exists. WARNING / SUGGESTION never block and are never silently
+   dropped. Do not invent additional gating axes.
 3. Review both implementation code and test code
 4. Verify the implementation matches the issue requirements and specifications
 
@@ -75,7 +80,7 @@ Report findings in this format:
 ## Code Review Report
 
 ### BLOCKING
-- file:line — Description of [MUST] violation
+- file:line — Description of the merge-blocking defect
 
 ### WARNING
 - file:line — Description of [SHOULD] violation
