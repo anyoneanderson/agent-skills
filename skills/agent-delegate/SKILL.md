@@ -124,15 +124,19 @@ Read `report.json` and summarize for the user in their language:
 - For review: read `artifacts.review_file` and validate it in this order —
   the script verifies structure only, so never adopt the `Gate` line at face
   value (see `references/adversarial-review-prompt.md`):
-  1. Every Critical / Improvement finding carries a `fix_before` tag with one
-     of the four defined values. A finding with a missing or invalid tag is
-     **malformed output** (treat as blocked; re-run or inspect) — do not
-     compute a gate from it, or an untagged Critical would silently pass.
-  2. Recompute the Gate from the tags — FAIL iff at least one finding is
-     tagged `fix_before: implementation`. A `Gate` line that contradicts this
-     tally is also malformed output.
+  1. Every Critical / Improvement finding carries a `fix_before` tag whose
+     value is in the **stage list in effect** — the four default values, or
+     the ordered list the review context supplied instead (the prompt template
+     tells the reviewer to use that list). A finding with a missing or
+     out-of-list tag is **malformed output** (treat as blocked; re-run or
+     inspect) — do not compute a gate from it, or an untagged Critical would
+     silently pass.
+  2. Recompute the Gate from the tags — FAIL iff at least one finding carries
+     the **gate-blocking stage**: the first stage of the list in effect
+     (`implementation` by default). A `Gate` line that contradicts this tally
+     is also malformed output.
   3. Report the recomputed Gate, the Critical / Improvement / Minor counts,
-     and the `fix_before: implementation` count.
+     and the gate-blocking-stage count.
 - If `blocked`: report `blocker` and `blocker_category`, and suggest a next step
   (e.g. resume, fix the trust setting, retry).
 

@@ -165,10 +165,12 @@ re-classify from the `blocker` text.
   (see `adversarial-review-prompt.md`).
 - The structural check verifies **presence** only; it does not validate
   `fix_before` values or that the `Gate` line matches the findings. Consumers
-  MUST first verify every Critical / Improvement finding carries a valid
-  `fix_before` value (a missing or invalid tag is malformed output — never
-  compute a gate from it), then recompute the Gate from the tags and fail
-  closed on a mismatch.
+  MUST first verify every Critical / Improvement finding carries a `fix_before`
+  value from the stage list in effect — the four defaults, or the ordered list
+  the caller supplied in the review context (a missing or out-of-list tag is
+  malformed output — never compute a gate from it) — then recompute the Gate
+  from the tags (FAIL iff any finding carries the first, gate-blocking stage)
+  and fail closed on a mismatch.
 
 ## Resume
 

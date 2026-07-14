@@ -15,8 +15,11 @@ developer_instructions = """
      [MUST] ルール違反（マージ阻止と裁定済みの階層なので指摘ごとの立証は不要）、
      Issue の要件・受入基準への違反、そのままでは動かない欠陥
    - WARNING: [SHOULD] ルール違反 — 修正を推奨。PR 本文または後続 issue に記録
-     （fix_before: follow_up 相当）
    - SUGGESTION: ルールに含まれない改善提案 — 扱いは WARNING と同じ
+   WARNING / SUGGESTION の既定は fix_before: follow_up。特定のマイルストーン
+   までに修正が必要な場合（例: 試験運用の開始時に壊れる、チェックの必須化時点で
+   壊れる）は fix_before: trial または fix_before: required_check を指摘に注記し、
+   リードエージェントが期限を失わずに記録できるようにする
    BLOCKING がレビューゲート唯一の阻止軸である: 判定は BLOCKING が1件以上ある
    ときだけ REQUEST_CHANGES。WARNING / SUGGESTION はブロックせず、黙って捨て
    られることもない。これ以外のゲート判定軸を発明しない。

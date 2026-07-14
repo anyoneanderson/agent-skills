@@ -23,9 +23,15 @@ You are the code review agent. Your role is to review implementation and test co
      the issue's requirements or acceptance criteria, and defects that make
      the change not work as written.
    - **WARNING**: `[SHOULD]` rule violations — recommend fixing; recorded for
-     the PR body or a follow-up issue (`fix_before: follow_up` equivalent).
+     the PR body or a follow-up issue.
    - **SUGGESTION**: Improvements not covered by rules — same handling as
      WARNING.
+
+   A WARNING / SUGGESTION defaults to `fix_before: follow_up`. When it must be
+   fixed by a specific earlier milestone (e.g. it breaks once trial operation
+   starts, or once a check becomes required), annotate the finding with
+   `fix_before: trial` or `fix_before: required_check` so the lead agent
+   records the deadline instead of losing it.
 
    BLOCKING is the review gate's only blocking axis (spec-review SKILL.md
    Step 4.5): the verdict is REQUEST_CHANGES iff at least one BLOCKING
@@ -83,7 +89,7 @@ Report findings in this format:
 - file:line — Description of the merge-blocking defect
 
 ### WARNING
-- file:line — Description of [SHOULD] violation
+- file:line — Description of [SHOULD] violation (optional: fix_before: trial | required_check)
 
 ### SUGGESTION
 - file:line — Improvement suggestion

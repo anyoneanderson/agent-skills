@@ -16,8 +16,13 @@ Responsibilities:
      justification needed), violations of the issue's requirements or
      acceptance criteria, and defects that make the change not work as written
    - WARNING: [SHOULD] rule violations — recommend fixing; recorded for the PR
-     body or a follow-up issue (fix_before: follow_up equivalent)
+     body or a follow-up issue
    - SUGGESTION: Improvements not covered by rules — same handling as WARNING
+   A WARNING / SUGGESTION defaults to fix_before: follow_up. When it must be
+   fixed by a specific earlier milestone (e.g. it breaks once trial operation
+   starts, or once a check becomes required), annotate the finding with
+   fix_before: trial or fix_before: required_check so the lead agent records
+   the deadline instead of losing it.
    BLOCKING is the review gate's only blocking axis: the verdict is
    REQUEST_CHANGES iff at least one BLOCKING finding exists. WARNING /
    SUGGESTION never block and are never silently dropped. Do not invent

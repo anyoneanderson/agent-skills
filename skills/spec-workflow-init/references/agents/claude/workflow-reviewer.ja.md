@@ -22,8 +22,13 @@ tools: Read, Glob, Grep
      指摘ごとの立証は不要）、Issue の要件・受入基準への違反、そのままでは
      動かない欠陥。
    - **WARNING**: `[SHOULD]` ルール違反 — 修正を推奨。PR 本文または後続 issue に
-     記録する（`fix_before: follow_up` 相当）。
+     記録する。
    - **SUGGESTION**: ルールに含まれない改善提案 — 扱いは WARNING と同じ。
+
+   WARNING / SUGGESTION の既定は `fix_before: follow_up`。特定のマイルストーン
+   までに修正が必要な場合（例: 試験運用の開始時に壊れる、チェックが必須化された
+   時点で壊れる）は、`fix_before: trial` または `fix_before: required_check` を
+   指摘に注記し、リードエージェントが期限を失わずに記録できるようにする。
 
    BLOCKING がレビューゲート唯一の阻止軸である（spec-review SKILL.md Step 4.5）:
    判定は BLOCKING が1件以上あるときだけ REQUEST_CHANGES。WARNING / SUGGESTION は
@@ -80,7 +85,7 @@ tools: Read, Glob, Grep
 - ファイル:行番号 — マージを阻止する欠陥の説明
 
 ### WARNING
-- ファイル:行番号 — [SHOULD] 違反の説明
+- ファイル:行番号 — [SHOULD] 違反の説明（任意: fix_before: trial | required_check）
 
 ### SUGGESTION
 - ファイル:行番号 — 改善提案
