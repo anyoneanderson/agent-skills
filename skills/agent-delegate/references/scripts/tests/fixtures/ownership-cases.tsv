@@ -1,0 +1,7 @@
+case_id	monitor_alive	lease_age	run_ids_match	monitor_pids_match	launcher_basename_matches	expected_action
+stale-removable	no	91	yes	yes	yes	remove
+monitor-alive	yes	91	yes	yes	yes	retain
+fresh-lease	no	89	yes	yes	yes	retain
+run-mismatch	no	91	no	yes	yes	retain
+monitor-pid-mismatch	no	91	yes	no	yes	retain
+launcher-basename-mismatch	no	91	yes	yes	no	retain

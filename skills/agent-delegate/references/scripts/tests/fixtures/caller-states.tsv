@@ -1,0 +1,14 @@
+report	status	heartbeat	monitor	worker	elapsed_seconds	expected_state
+valid	done	any	any	any	0	TERMINAL_DONE
+valid	blocked	any	any	any	0	TERMINAL_BLOCKED
+absent	none	absent	absent	absent	0	STARTING
+absent	none	absent	alive	alive	1	DEGRADED_NO_HEARTBEAT
+absent	none	unreadable	alive	alive	1	DEGRADED_UNREADABLE
+absent	none	fresh	alive	alive	1	RUNNING
+absent	none	stale	alive	alive	1	DEGRADED_STALE
+absent	none	fresh	absent	alive	1	ORPHANED_WORKER
+absent	none	fresh	alive	absent	1	FINALIZING
+absent	none	fresh	absent	absent	0	DEATH_CANDIDATE
+absent	none	fresh	absent	absent	30	DEAD
+invalid	unknown	fresh	alive	alive	1	REPORT_INVALID_PENDING
+wrong-run	wrong-run	fresh	alive	alive	1	REPORT_INVALID_PENDING

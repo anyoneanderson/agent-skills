@@ -1,0 +1,15 @@
+case_id	contract_path	contract_ref	mode	target	sandbox	stub_mode	expected_exit	expected_status	expected_artifact
+argument-validation	skills/agent-delegate/references/contract.md	CLI validation	delegate	claude	workspace-write	done	2	none	stderr
+target-claude	skills/agent-delegate/references/contract.md	Target resolution	delegate	claude	workspace-write	done	0	done	report
+target-codex	skills/agent-delegate/references/contract.md	Target resolution	delegate	codex	workspace-write	done	0	done	report
+sandbox-readonly	skills/agent-delegate/references/contract.md	Sandbox mapping	delegate	codex	read-only	done	0	done	stub-call-log
+report-schema	skills/agent-delegate/references/contract.md	Report contract	delegate	claude	workspace-write	done	0	done	report
+atomic-report	skills/agent-delegate/references/contract.md	Atomic publication	delegate	claude	workspace-write	done	0	done	no-report-temp
+blocked-report	skills/agent-delegate/references/contract.md	Blocker contract	delegate	claude	workspace-write	blocked	0	blocked	report
+touched-files	skills/agent-delegate/references/contract.md	Report contract	delegate	codex	workspace-write	done	0	done	report
+structured-review	skills/agent-delegate/references/contract.md	Review contract	review	claude	read-only	done	0	done	report
+resume	skills/agent-delegate/references/contract.md	Session resume	delegate	claude	workspace-write	done	0	done	report
+detach	skills/agent-delegate/references/contract.md	Detach contract	delegate	claude	workspace-write	done	0	done	report-and-pid
+kill-safety-net	skills/agent-delegate/references/contract.md	Detach cleanup	delegate	claude	workspace-write	done	0	done	no-runtime-residue
+help	skills/agent-delegate/references/contract.md	CLI help	delegate	claude	workspace-write	done	0	none	stdout
+plan-test-mode	skills/agent-delegate/references/contract.md	Legacy test mode	delegate	claude	workspace-write	done	0	none	plan

@@ -1,0 +1,5 @@
+scenario	fail_stage	expected_sentinel_phase	expected_owner_phase	worker_attempts	publisher	report_status	launcher_decision
+sentinel-committed-failure	sentinel_committed	not_started	not_started	0	launcher	blocked	pre-handoff
+owner-committed-failure	owner_committed	verified	verified	1	monitor	done	post-handoff
+sentinel-verified-failure	sentinel_verified	committed	committed	0	launcher	blocked	pre-handoff
+owner-verified-failure	owner_verified	verified	committed	1	monitor	done	post-handoff

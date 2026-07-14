@@ -1,0 +1,6 @@
+artifact	phase	primary_publisher	fallback_publisher
+blocked-report	pre-handoff	launcher	monitor-if-launcher-dead
+shared-report	post-handoff	monitor	none
+running-heartbeat	post-handoff	monitor	none
+terminal-heartbeat	post-handoff	monitor	none
+report-candidate	worker	worker	none

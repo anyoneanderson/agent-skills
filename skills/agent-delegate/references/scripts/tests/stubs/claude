@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+session_id="stub-claude-session"
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = --resume ]; then session_id="$arg"; fi
+  previous="$arg"
+done
+prompt="$(cat)"
+[ -z "${AGENT_DELEGATE_STUB_CALL_LOG:-}" ] || printf 'claude\t%s\n' "$*" >> "$AGENT_DELEGATE_STUB_CALL_LOG"
+if [ -n "${AGENT_DELEGATE_STUB_BARRIER_DIR:-}" ]; then
+  printf 'ready\n' > "$AGENT_DELEGATE_STUB_BARRIER_DIR/claude.ready"
+  IFS= read -r _ < "$AGENT_DELEGATE_STUB_BARRIER_DIR/release.fifo"
+fi
+case "${AGENT_DELEGATE_STUB_MODE:-done}" in
+  blocked) printf 'stub claude failure\n' >&2; exit "${AGENT_DELEGATE_STUB_EXIT:-7}" ;;
+  malformed) printf '{\n'; exit 0 ;;
+esac
+message="stub claude completed"
+if [ "${AGENT_DELEGATE_STUB_REVIEW:-0}" = 1 ]; then
+  message=$'type: review\n## Meta\nbackend: stub\n## Findings\n### Critical\nNone\n### Improvement\nNone\n### Minor\nNone\n## Summary\nGate: PASS'
+fi
+jq -nc --arg session "$session_id" --arg result "$message" --arg prompt "$prompt" \
+  '{session_id:$session,result:$result,prompt_bytes:($prompt|length)}'

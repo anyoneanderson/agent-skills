@@ -77,6 +77,8 @@ HANDOFF_DIR=""
 HANDOFF_ROOT=""
 LAUNCHER_PID=""
 MONITOR_PID=""
+MON_PID=""
+TEST_WORKER_PID=""
 REPORT_IS_CANDIDATE=0
 REPORT_PUBLISH_ONLY_IF_ABSENT=0
 RUN_CLI_APPEND_STDERR=0
@@ -231,6 +233,40 @@ compute_paths() {
 }
 
 utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+heartbeat_test_mode() { [ "${AGENT_DELEGATE_TEST_MODE:-0}" = heartbeat ]; }
+
+heartbeat_test_evidence_json() {
+  local suffix="$1" path tmp
+  shift
+  heartbeat_test_mode || return 0
+  path="${OUT_DIR}/${LABEL}-${suffix}.json"
+  tmp="${path}.tmp.${BASHPID:-$$}"
+  jq -n "$@" > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$path"
+}
+
+heartbeat_test_evidence_text() {
+  local suffix="$1" value="$2" path tmp
+  heartbeat_test_mode || return 0
+  path="${OUT_DIR}/${LABEL}-${suffix}.txt"
+  tmp="${path}.tmp.${BASHPID:-$$}"
+  printf '%s\n' "$value" > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$path"
+}
+
+heartbeat_test_evidence_copy() {
+  local suffix="$1" source="$2" path tmp
+  heartbeat_test_mode || return 0
+  [ -f "$source" ] || return 0
+  path="${OUT_DIR}/${LABEL}-${suffix}.json"
+  tmp="${path}.tmp.${BASHPID:-$$}"
+  cp "$source" "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$path"
+}
+
+retry_pause() {
+  # Heartbeat tests advance only through FIFO messages and injected timestamps.
+  # Production keeps the small polling pause to avoid a busy readiness loop.
+  heartbeat_test_mode || sleep 0.05
+}
 
 file_hash_or_absent() {
   local path="$1"
@@ -564,13 +600,29 @@ classify_handoff_metadata() {
 
 production_handoff_path_is_safe() {
   local path="$1" root="$2" launcher_pid="$3" expected_dev="${4:-}" expected_ino="${5:-}"
-  local type="other" symlink="false"
+  local type="other" symlink="false" uid mode dev ino injected="${AGENT_DELEGATE_TEST_LSTAT_METADATA:-}"
   [ -e "$path" ] || [ -L "$path" ] || return 1
-  [ -L "$path" ] && symlink="true"
-  [ -d "$path" ] && type="directory"
+  if heartbeat_test_mode && [ -n "$injected" ]; then
+    jq -e '
+      .source=="heartbeat_test_injection" and
+      (.type|type)=="string" and (.symlink|type)=="boolean" and
+      (.uid|type)=="number" and (.mode|type)=="number" and
+      (.device|type)=="number" and (.inode|type)=="number"
+    ' <<< "$injected" >/dev/null 2>&1 || return 1
+    type="$(jq -r '.type' <<< "$injected")"
+    symlink="$(jq -r '.symlink' <<< "$injected")"
+    uid="$(jq -r '.uid' <<< "$injected")"
+    mode="$(jq -r '.mode' <<< "$injected")"
+    dev="$(jq -r '.device' <<< "$injected")"
+    ino="$(jq -r '.inode' <<< "$injected")"
+  else
+    [ -L "$path" ] && symlink="true"
+    [ -d "$path" ] && type="directory"
+    uid="$(stat_uid "$path")"; mode="$(stat_mode "$path")"
+    dev="$(stat_dev "$path")"; ino="$(stat_ino "$path")"
+  fi
   classify_handoff_metadata "$path" "$root" "$(dirname "$path")" "$(basename "$path")" \
-    "$type" "$symlink" "$(stat_uid "$path")" "$(stat_mode "$path")" \
-    "$(stat_dev "$path")" "$(stat_ino "$path")" "$(id -u)" "$launcher_pid" \
+    "$type" "$symlink" "$uid" "$mode" "$dev" "$ino" "$(id -u)" "$launcher_pid" \
     "$expected_dev" "$expected_ino"
 }
 
@@ -671,17 +723,20 @@ sentinel_path() { printf '%s/handoff-sentinel.json' "$HANDOFF_DIR"; }
 
 write_handoff_sentinel() {
   local state="$1" phase="$2" failure_stage="${3:-}" created="$4"
-  local sentinel tmp failure_json="null"
+  local sentinel tmp failure_json="null" control_fifos='[]'
   sentinel="$(sentinel_path)"; tmp="${sentinel}.tmp.${RUN_ID}"
   [ -z "$failure_stage" ] || failure_json="$(printf '%s' "$failure_stage" | jq -R '.')"
+  if heartbeat_test_mode; then
+    control_fifos='["harness-to-monitor.fifo","monitor-to-harness.fifo"]'
+  fi
   jq -n --arg run_id "$RUN_ID" --argjson launcher_pid "$LAUNCHER_PID" \
     --argjson monitor_pid "$MONITOR_PID" --arg state "$state" --arg phase "$phase" \
     --arg handoff_dir "$HANDOFF_DIR" --argjson failure_stage "$failure_json" \
-    --arg created "$created" --arg created_at "$(utc_now)" '
+    --argjson control_fifos "$control_fifos" --arg created "$created" --arg created_at "$(utc_now)" '
       {version:1,run_id:$run_id,launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,
        state:$state,handoff_phase:$phase,handoff_dir:$handoff_dir,
        handoff_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"],
-       control_fifos:[],created_fifos:($created|split(",")|map(select(length>0))),
+       control_fifos:$control_fifos,created_fifos:($created|split(",")|map(select(length>0))),
        failure_stage:$failure_stage,created_at:$created_at}
     ' > "$tmp"
   chmod 600 "$tmp"
@@ -710,28 +765,60 @@ update_owner_phase_best_effort() {
 }
 
 close_monitor_handoff_fds() {
-  exec 10>&- 2>/dev/null || true
-  exec 9<&- 2>/dev/null || true
-  exec 8>&- 2>/dev/null || true
-  exec 7>&- 2>/dev/null || true
+  { exec 14>&-; } 2>/dev/null || true
+  { exec 13<&-; } 2>/dev/null || true
+  { exec 12>&-; } 2>/dev/null || true
+  { exec 11>&-; } 2>/dev/null || true
+  close_monitor_launcher_fds
+}
+
+close_monitor_launcher_fds() {
+  { exec 10>&-; } 2>/dev/null || true
+  { exec 9<&-; } 2>/dev/null || true
+  { exec 8>&-; } 2>/dev/null || true
+  { exec 7>&-; } 2>/dev/null || true
+}
+
+close_monitor_control_fds() {
+  { exec 14>&-; } 2>/dev/null || true
+  { exec 13<&-; } 2>/dev/null || true
+  { exec 12>&-; } 2>/dev/null || true
+  { exec 11>&-; } 2>/dev/null || true
 }
 
 close_launcher_handoff_fds() {
-  exec 8<&- 2>/dev/null || true
-  exec 7>&- 2>/dev/null || true
+  { exec 8<&-; } 2>/dev/null || true
+  { exec 7>&-; } 2>/dev/null || true
 }
 
 setup_monitor_handoff() {
   local l2m="$HANDOFF_DIR/launcher-to-monitor.fifo" m2l="$HANDOFF_DIR/monitor-to-launcher.fifo"
+  local h2m="$HANDOFF_DIR/harness-to-monitor.fifo" m2h="$HANDOFF_DIR/monitor-to-harness.fifo"
   local created=""
   if ! mkfifo "$l2m"; then write_handoff_sentinel setup_failed not_started fifo_launcher_to_monitor "$created" || true; return 1; fi
   chmod 600 "$l2m"; created="launcher-to-monitor.fifo"
+  if ! exec 7<>"$l2m"; then write_handoff_sentinel setup_failed not_started anchor_launcher_to_monitor "$created" || true; return 1; fi
+  if heartbeat_test_mode && [ "${AGENT_DELEGATE_TEST_FAIL_STAGE:-}" = fifo_monitor_to_launcher ]; then
+    write_handoff_sentinel setup_failed not_started fifo_monitor_to_launcher "$created" || true
+    return 1
+  fi
   if ! mkfifo "$m2l"; then write_handoff_sentinel setup_failed not_started fifo_monitor_to_launcher "$created" || true; return 1; fi
   chmod 600 "$m2l"; created="$created,monitor-to-launcher.fifo"
-  if ! exec 7<>"$l2m"; then write_handoff_sentinel setup_failed not_started anchor_launcher_to_monitor "$created" || true; return 1; fi
   if ! exec 8<>"$m2l"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started anchor_monitor_to_launcher "$created" || true; return 1; fi
+  if heartbeat_test_mode; then
+    if ! mkfifo "$h2m"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started fifo_harness_to_monitor "$created" || true; return 1; fi
+    chmod 600 "$h2m"; created="$created,harness-to-monitor.fifo"
+    if ! exec 11<>"$h2m"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started anchor_harness_to_monitor "$created" || true; return 1; fi
+    if ! mkfifo "$m2h"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started fifo_monitor_to_harness "$created" || true; return 1; fi
+    chmod 600 "$m2h"; created="$created,monitor-to-harness.fifo"
+    if ! exec 12<>"$m2h"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started anchor_monitor_to_harness "$created" || true; return 1; fi
+  fi
   if ! exec 9<"$l2m"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started reader_launcher_to_monitor "$created" || true; return 1; fi
   if ! exec 10>"$m2l"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started writer_monitor_to_launcher "$created" || true; return 1; fi
+  if heartbeat_test_mode; then
+    if ! exec 13<"$h2m"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started reader_harness_to_monitor "$created" || true; return 1; fi
+    if ! exec 14>"$m2h"; then close_monitor_handoff_fds; write_handoff_sentinel setup_failed not_started writer_monitor_to_harness "$created" || true; return 1; fi
+  fi
   write_handoff_sentinel fifo_ready not_started "" "$created"
 }
 
@@ -744,11 +831,32 @@ remaining_handoff_seconds() {
 
 monitor_handoff() {
   local line="" remaining expected
+  if heartbeat_test_mode; then
+    remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
+    IFS= read -r -t "$remaining" line <&13 || return 1
+    [ "$line" = "harness-ready $RUN_ID" ] && owner_matches_run "$RUN_ID" &&
+      pid_matches_run "$RUN_ID" "$MONITOR_PID" || return 1
+    printf 'harness-observed ready %s %s\n' "$RUN_ID" "$MONITOR_PID" >&14
+    if [ "${AGENT_DELEGATE_TEST_HANDOFF_REQUEST:-}" = owner-pid-mismatch ]; then
+      awk '/^run_id:/{print "run_id: injected-mismatch"; next} {print}' "$PID_FILE" > "${PID_FILE}.tmp.test-mismatch" &&
+        mv -f "${PID_FILE}.tmp.test-mismatch" "$PID_FILE"
+    fi
+  fi
   remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
   IFS= read -r -t "$remaining" line <&9 || return 1
   expected="handoff-ready $RUN_ID $LAUNCHER_PID $MONITOR_PID"
-  [ "$line" = "$expected" ] && owner_matches_run "$RUN_ID" && pid_matches_run "$RUN_ID" "$MONITOR_PID" || return 1
-  printf 'monitor-ready %s %s\n' "$RUN_ID" "$MONITOR_PID" >&10
+  if [ "$line" != "$expected" ] || ! owner_matches_run "$RUN_ID" || ! pid_matches_run "$RUN_ID" "$MONITOR_PID"; then
+    if heartbeat_test_mode && [ "${AGENT_DELEGATE_TEST_HANDOFF_REQUEST:-}" = owner-pid-mismatch ]; then
+      awk -v run_id="$RUN_ID" '/^run_id:/{print "run_id: " run_id; next} {print}' "$PID_FILE" > "${PID_FILE}.tmp.test-restore" &&
+        mv -f "${PID_FILE}.tmp.test-restore" "$PID_FILE"
+    fi
+    return 1
+  fi
+  if heartbeat_test_mode && [ "${AGENT_DELEGATE_TEST_HANDOFF_REQUEST:-}" = acknowledgement-mismatch ]; then
+    printf 'monitor-ready injected-mismatch %s\n' "$MONITOR_PID" >&10
+  else
+    printf 'monitor-ready %s %s\n' "$RUN_ID" "$MONITOR_PID" >&10
+  fi
 
   remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
   IFS= read -r -t "$remaining" line <&9 || return 1
@@ -764,7 +872,33 @@ monitor_handoff() {
     jq -e '.handoff_phase=="committed"' "$(sentinel_path)" >/dev/null 2>&1 || return 1
   update_sentinel_phase verified sentinel_verified || return 1
   update_owner_phase_best_effort verified owner_verified
+  if heartbeat_test_mode && [ "${AGENT_DELEGATE_TEST_HANDOFF_REQUEST:-}" = final-ack-response-lost ]; then
+    printf 'handoff-verified-response-lost %s %s\n' "$RUN_ID" "$MONITOR_PID" >&10
+    return 0
+  fi
   printf 'handoff-verified-ack %s %s\n' "$RUN_ID" "$MONITOR_PID" >&10
+}
+
+sentinel_ready_for_mode() {
+  local sentinel="$1" run_id="$2" launcher="$3" monitor="$4"
+  jq -e --arg run_id "$run_id" --argjson launcher "$launcher" --argjson monitor "$monitor" --arg handoff "$HANDOFF_DIR" '
+    .run_id==$run_id and .launcher_pid==$launcher and .monitor_pid==$monitor and
+    .handoff_dir==$handoff and .state=="fifo_ready" and .handoff_phase=="not_started" and
+    .handoff_fifos==["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]
+  ' "$sentinel" >/dev/null 2>&1 || return 1
+  [ -p "$HANDOFF_DIR/launcher-to-monitor.fifo" ] &&
+    [ -p "$HANDOFF_DIR/monitor-to-launcher.fifo" ] &&
+    [ "$(stat_mode "$HANDOFF_DIR/launcher-to-monitor.fifo")" = 600 ] &&
+    [ "$(stat_mode "$HANDOFF_DIR/monitor-to-launcher.fifo")" = 600 ] || return 1
+  if heartbeat_test_mode; then
+    jq -e '.control_fifos==["harness-to-monitor.fifo","monitor-to-harness.fifo"]' "$sentinel" >/dev/null 2>&1 &&
+      [ -p "$HANDOFF_DIR/harness-to-monitor.fifo" ] &&
+      [ -p "$HANDOFF_DIR/monitor-to-harness.fifo" ] &&
+      [ "$(stat_mode "$HANDOFF_DIR/harness-to-monitor.fifo")" = 600 ] &&
+      [ "$(stat_mode "$HANDOFF_DIR/monitor-to-harness.fifo")" = 600 ]
+  else
+    jq -e '.control_fifos==[]' "$sentinel" >/dev/null 2>&1
+  fi
 }
 
 launcher_wait_for_readiness() {
@@ -782,43 +916,59 @@ launcher_wait_for_readiness() {
       if pid_matches_run "$owner_run" "$owner_monitor"; then RUN_ID="$owner_run"; compute_paths; break; fi
     fi
     [ "$(process_probe "$monitor_pid")" != "absent" ] || return 1
-    sleep 0.05
+    retry_pause
   done
   while :; do
     remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
-    if jq -e --arg run_id "$RUN_ID" --argjson launcher "${BASHPID:-$$}" --argjson monitor "$monitor_pid" --arg handoff "$HANDOFF_DIR" '
-      .run_id==$run_id and .launcher_pid==$launcher and .monitor_pid==$monitor and
-      .handoff_dir==$handoff and .state=="fifo_ready" and .handoff_phase=="not_started" and
-      .handoff_fifos==["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]
-    ' "$sentinel" >/dev/null 2>&1 &&
-      [ -p "$HANDOFF_DIR/launcher-to-monitor.fifo" ] &&
-      [ -p "$HANDOFF_DIR/monitor-to-launcher.fifo" ] &&
-      [ "$(stat_mode "$HANDOFF_DIR/launcher-to-monitor.fifo")" = 600 ] &&
-      [ "$(stat_mode "$HANDOFF_DIR/monitor-to-launcher.fifo")" = 600 ]; then
+    if sentinel_ready_for_mode "$sentinel" "$RUN_ID" "${BASHPID:-$$}" "$monitor_pid"; then
       return 0
     fi
     if jq -e '.state=="setup_failed"' "$sentinel" >/dev/null 2>&1; then return 1; fi
     [ "$(process_probe "$monitor_pid")" != "absent" ] || return 1
-    sleep 0.05
+    retry_pause
   done
 }
 
 launcher_complete_handoff() {
-  local monitor_pid="$1" line="" remaining sentinel_phase
+  local monitor_pid="$1" line="" remaining sentinel_phase request="${AGENT_DELEGATE_TEST_HANDOFF_REQUEST:-normal}"
   exec 7>"$HANDOFF_DIR/launcher-to-monitor.fifo"
   exec 8<"$HANDOFF_DIR/monitor-to-launcher.fifo"
   printf 'handoff-ready %s %s %s\n' "$RUN_ID" "${BASHPID:-$$}" "$monitor_pid" >&7
+  heartbeat_test_evidence_json handoff-request --arg message handoff-ready --arg run "$RUN_ID" \
+    --argjson launcher "${BASHPID:-$$}" --argjson monitor "$monitor_pid" \
+    '{message:$message,run_id:$run,launcher_pid:$launcher,monitor_pid:$monitor}'
   remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
   IFS= read -r -t "$remaining" line <&8 || return 1
-  [ "$line" = "monitor-ready $RUN_ID $monitor_pid" ] || return 1
+  heartbeat_test_evidence_json handoff-acknowledgement --arg raw "$line" '{raw:$raw}'
+  if [ "$line" != "monitor-ready $RUN_ID $monitor_pid" ]; then
+    return 1
+  fi
+  if heartbeat_test_mode && [ "$request" = expire-handoff ]; then
+    heartbeat_test_evidence_json handoff-request --arg message expire-handoff --arg run "$RUN_ID" \
+      '{message:$message,run_id:$run,expired_before_commit:true}'
+    return 1
+  fi
   printf 'handoff-commit %s\n' "$RUN_ID" >&7
+  heartbeat_test_evidence_json handoff-request --arg message handoff-commit --arg run "$RUN_ID" \
+    '{message:$message,run_id:$run}'
   remaining="$(remaining_handoff_seconds)"; [ "$remaining" -gt 0 ] || return 1
   IFS= read -r -t "$remaining" line <&8 || return 1
+  heartbeat_test_evidence_json handoff-acknowledgement --arg raw "$line" '{raw:$raw}'
   [ "$line" = "handoff-committed $RUN_ID $monitor_pid" ] || return 1
+  if heartbeat_test_mode && [ "$request" = final-ack-timeout ]; then
+    heartbeat_test_evidence_json handoff-request --arg message handoff-verified --arg run "$RUN_ID" \
+      --argjson monitor "$monitor_pid" '{message:$message,run_id:$run,monitor_pid:$monitor,verification:"ok",delivery:"timeout"}'
+    return 1
+  fi
   printf 'handoff-verified %s %s verification=ok\n' "$RUN_ID" "$monitor_pid" >&7
+  heartbeat_test_evidence_json handoff-request --arg message handoff-verified --arg run "$RUN_ID" \
+    --argjson monitor "$monitor_pid" '{message:$message,run_id:$run,monitor_pid:$monitor,verification:"ok"}'
   remaining="$(remaining_handoff_seconds)"
   if [ "$remaining" -gt 0 ] && IFS= read -r -t "$remaining" line <&8 &&
-     [ "$line" = "handoff-verified-ack $RUN_ID $monitor_pid" ]; then
+     { [ "$line" = "handoff-verified-ack $RUN_ID $monitor_pid" ] ||
+       { heartbeat_test_mode && [ "$request" = final-ack-response-lost ] &&
+         [ "$line" = "handoff-verified-response-lost $RUN_ID $monitor_pid" ]; }; }; then
+    heartbeat_test_evidence_json handoff-acknowledgement --arg raw "$line" '{raw:$raw}'
     return 0
   fi
   sentinel_phase="$(jq -r '.handoff_phase // empty' "$(sentinel_path)" 2>/dev/null || true)"
@@ -1265,6 +1415,114 @@ publish_worker_candidate() {
   printf '%s' "$status"
 }
 
+make_heartbeat_test_candidate() {
+  local status="$1" variant="${2:-valid}" saved_report="$REPORT_FILE" saved_tmp="$REPORT_TMP"
+  local saved_candidate="$REPORT_IS_CANDIDATE" touched
+  REPORT_FILE="$CANDIDATE_FILE"; REPORT_TMP="$CANDIDATE_TMP"; REPORT_IS_CANDIDATE=1
+  REPORT_STATUS="$status"; SUMMARY="heartbeat test worker completed"
+  BLOCKER=""; BLOCKER_CATEGORY=""; THREAD_ID="heartbeat-test-$TARGET"
+  if [ "$status" = blocked ]; then
+    BLOCKER="heartbeat test worker requested blocked"
+    BLOCKER_CATEGORY="unclassified"
+  fi
+  touched="$(mktemp -t agent-delegate.XXXXXX)"; : > "$touched"; TOUCHED_LIST_FILE="$touched"
+  write_report
+  rm -f "$touched"
+  case "$variant" in
+    valid) : ;;
+    invalid-json) printf '{' > "$CANDIDATE_FILE" ;;
+    invalid-status) jq '.status="unknown"' "$CANDIDATE_FILE" > "$CANDIDATE_TMP" && mv -f "$CANDIDATE_TMP" "$CANDIDATE_FILE" ;;
+    wrong-run) jq '.meta.run_id="unexpected-run"' "$CANDIDATE_FILE" > "$CANDIDATE_TMP" && mv -f "$CANDIDATE_TMP" "$CANDIDATE_FILE" ;;
+    *) return 1 ;;
+  esac
+  REPORT_FILE="$saved_report"; REPORT_TMP="$saved_tmp"; REPORT_IS_CANDIDATE="$saved_candidate"
+}
+
+start_heartbeat_test_worker() {
+  # The worker blocks on the inherited launcher FIFO anchor. It never invokes a
+  # peer CLI and is terminated only after the harness supplies a terminal input.
+  bash -c 'trap "exit 0" TERM INT HUP; IFS= read -r _ <&7' &
+  TEST_WORKER_PID=$!
+}
+
+finish_heartbeat_test_run() {
+  local worker_pid="$1" started_at="$2" monitor_pid="$3" prior_beat="${4:-}" status terminal_at
+  status="$(publish_worker_candidate)" || return 1
+  terminal_at="${prior_beat:-$(utc_now)}"
+  write_heartbeat "$status" "$worker_pid" "$started_at" "$terminal_at" || return 1
+  heartbeat_test_evidence_copy handoff-sentinel-final "$(sentinel_path)"
+  heartbeat_test_evidence_copy owner-final "$OWNER_FILE"
+  heartbeat_test_evidence_text publisher monitor
+  printf 'terminal %s %s %s %s\n' "$status" "$RUN_ID" "$worker_pid" "$terminal_at" >&14
+  close_monitor_control_fds
+  owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
+  cleanup_handoff_dir_owned "$monitor_pid"
+}
+
+run_heartbeat_test_session() {
+  local started_at="$1" monitor_pid="$2" line command value sequence=0 last_beat=""
+  local worker_pid worker_rc=0 beat_epoch last_epoch request="${AGENT_DELEGATE_TEST_HANDOFF_REQUEST:-normal}"
+
+  if [ "$request" = worker-start-failure ]; then
+    bash -c 'exit 127' & worker_pid=$!
+    wait "$worker_pid" || worker_rc=$?
+    heartbeat_test_evidence_json worker-result --argjson attempts 1 --argjson pid "$worker_pid" \
+      --argjson exit_code "$worker_rc" '{attempts:$attempts,started:false,pid:$pid,exit_code:$exit_code}'
+    close_monitor_launcher_fds
+    make_blocked_candidate "heartbeat test worker failed to start (exit $worker_rc)"
+    finish_heartbeat_test_run "$worker_pid" "$started_at" "$monitor_pid"
+    return
+  fi
+
+  start_heartbeat_test_worker
+  worker_pid="$TEST_WORKER_PID"
+  heartbeat_test_evidence_json worker-result --argjson attempts 1 --argjson pid "$worker_pid" \
+    '{attempts:$attempts,started:true,pid:$pid}'
+  update_owner_field "$RUN_ID" '.worker_pid=($value|tonumber)' "$worker_pid" 1 "$monitor_pid" || {
+    kill "$worker_pid" 2>/dev/null || true
+    wait "$worker_pid" 2>/dev/null || true
+    return 1
+  }
+  close_monitor_launcher_fds
+
+  while IFS= read -r line <&13; do
+    command="${line%% *}"
+    if [ "$line" = "$command" ]; then value=""; else value="${line#* }"; fi
+    case "$command" in
+      beat)
+        beat_epoch="$(rfc3339_epoch "$value" 2>/dev/null || true)"
+        [ -n "$beat_epoch" ] || { printf 'rejected beat invalid-time\n' >&14; continue; }
+        last_epoch=""
+        [ -z "$last_beat" ] || last_epoch="$(rfc3339_epoch "$last_beat" 2>/dev/null || true)"
+        if [ -n "$last_epoch" ] && [ "$beat_epoch" -le "$last_epoch" ]; then
+          printf 'rejected beat non-monotonic\n' >&14
+          continue
+        fi
+        write_heartbeat running "$worker_pid" "$started_at" "$value" || return 1
+        sequence=$((sequence + 1)); last_beat="$value"
+        printf 'observed %s running %s\n' "$sequence" "$value" >&14
+        ;;
+      finish-done|finish-blocked|finish-invalid-json|finish-invalid-status|finish-wrong-run|finish-missing|worker-death)
+        case "$command" in
+          finish-done) make_heartbeat_test_candidate done valid ;;
+          finish-blocked) make_heartbeat_test_candidate blocked valid ;;
+          finish-invalid-json) make_heartbeat_test_candidate done invalid-json ;;
+          finish-invalid-status) make_heartbeat_test_candidate done invalid-status ;;
+          finish-wrong-run) make_heartbeat_test_candidate done wrong-run ;;
+          finish-missing) rm -f "$CANDIDATE_FILE" "$CANDIDATE_TMP" ;;
+          worker-death) rm -f "$CANDIDATE_FILE" "$CANDIDATE_TMP" ;;
+        esac
+        kill "$worker_pid" 2>/dev/null || true
+        wait "$worker_pid" 2>/dev/null || true
+        finish_heartbeat_test_run "$worker_pid" "$started_at" "$monitor_pid" "$last_beat"
+        return
+        ;;
+      *) printf 'rejected command unknown\n' >&14 ;;
+    esac
+  done
+  return 1
+}
+
 cleanup_handoff_dir_owned() {
   local monitor_pid="$1" sentinel base child remaining
   sentinel="$(sentinel_path)"
@@ -1275,14 +1533,20 @@ cleanup_handoff_dir_owned() {
     ' "$sentinel" >/dev/null 2>&1; then
     jq '.state="cleanup_pending"' "$sentinel" > "${sentinel}.tmp.${RUN_ID}" &&
       chmod 600 "${sentinel}.tmp.${RUN_ID}" && mv -f "${sentinel}.tmp.${RUN_ID}" "$sentinel" || true
+    heartbeat_test_evidence_copy handoff-sentinel-cleanup "$sentinel"
     while IFS= read -r base; do
-      case "$base" in launcher-to-monitor.fifo|monitor-to-launcher.fifo) : ;; *) continue ;; esac
+      case "$base" in
+        launcher-to-monitor.fifo|monitor-to-launcher.fifo) : ;;
+        harness-to-monitor.fifo|monitor-to-harness.fifo) heartbeat_test_mode || continue ;;
+        *) continue ;;
+      esac
       child="$HANDOFF_DIR/$base"
       [ -p "$child" ] && rm -f "$child"
     done < <(jq -r '.created_fifos[]' "$sentinel")
     rm -f "${sentinel}.tmp.${RUN_ID}" "$sentinel"
   else
-    for base in launcher-to-monitor.fifo monitor-to-launcher.fifo; do
+    for base in launcher-to-monitor.fifo monitor-to-launcher.fifo harness-to-monitor.fifo monitor-to-harness.fifo; do
+      case "$base" in harness-*|monitor-to-harness.fifo) heartbeat_test_mode || continue ;; esac
       child="$HANDOFF_DIR/$base"; [ -p "$child" ] && rm -f "$child"
     done
   fi
@@ -1378,6 +1642,16 @@ run_monitor() {
     fi
     return 2
   fi
+  if heartbeat_test_mode; then
+    run_heartbeat_test_session "$started_at" "$monitor_pid" || {
+      err "heartbeat test session failed"
+      close_monitor_handoff_fds
+      owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
+      cleanup_handoff_dir_owned "$monitor_pid"
+      return 2
+    }
+    return 0
+  fi
   close_monitor_handoff_fds
 
   # The monitor generated RUN_ID after the launcher exported its initial state.
@@ -1470,12 +1744,17 @@ if [ "${AGENT_DELEGATE_TEST_MODE:-0}" = "1" ]; then
   exit 0
 fi
 
+if heartbeat_test_mode && [ "$DETACH" -ne 1 ]; then
+  err "AGENT_DELEGATE_TEST_MODE=heartbeat requires --detach"
+  exit 2
+fi
+
 # --- preconditions (§4.3 steps 1-3) ----------------------------------------
 
 [ -f "$PROMPT_FILE" ] || { err "prompt file not found: $PROMPT_FILE"; exit 2; }
 
-# Peer CLI must exist.
-if ! command -v "$TARGET" >/dev/null 2>&1; then
+# Peer CLI must exist outside the deterministic heartbeat harness.
+if ! heartbeat_test_mode && ! command -v "$TARGET" >/dev/null 2>&1; then
   case "$TARGET" in
     codex)  err "codex CLI not found; install Codex CLI and ensure 'codex' is on PATH" ;;
     claude) err "claude CLI not found; install Claude Code and ensure 'claude' is on PATH" ;;
@@ -1484,7 +1763,7 @@ if ! command -v "$TARGET" >/dev/null 2>&1; then
 fi
 
 # Codex refuses untrusted workspaces; check before doing any work.
-if [ "$TARGET" = "codex" ]; then
+if ! heartbeat_test_mode && [ "$TARGET" = "codex" ]; then
   TRUST_LEVEL="$(find_trust_level "$(pwd)" || true)"
   if [ "$TRUST_LEVEL" != "trusted" ]; then
     err "codex workspace trust_level must be 'trusted' (workspace=$(pwd), found=${TRUST_LEVEL:-missing})"
@@ -1561,8 +1840,21 @@ fi
 if [ "$DETACH" -eq 1 ]; then
   LAUNCHER_PID="${BASHPID:-$$}"
   HANDOFF_DEADLINE=$(( $(date -u +%s) + HANDOFF_TIMEOUT ))
-  HANDOFF_DIR="$(mktemp -d "${HANDOFF_ROOT}/agent-delegate-handoff.${LAUNCHER_PID}.XXXXXX")"
-  chmod 700 "$HANDOFF_DIR"
+  if heartbeat_test_mode; then
+    HANDOFF_DIR="${AGENT_DELEGATE_TEST_HANDOFF_DIR:-}"
+    if [ -z "$HANDOFF_DIR" ] || [ "${HANDOFF_DIR#/}" = "$HANDOFF_DIR" ] ||
+       [ ! -d "$HANDOFF_DIR" ] || [ -L "$HANDOFF_DIR" ] ||
+       [ "$(dirname "$HANDOFF_DIR")" != "$HANDOFF_ROOT" ] ||
+       [ "$(stat_uid "$HANDOFF_DIR")" != "$(id -u)" ] ||
+       [ "$(stat_mode "$HANDOFF_DIR")" != 700 ] ||
+       [ -n "$(find "$HANDOFF_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
+      err "heartbeat test handoff directory must be an empty mode 0700 directory directly under $HANDOFF_ROOT"
+      exit 2
+    fi
+  else
+    HANDOFF_DIR="$(mktemp -d "${HANDOFF_ROOT}/agent-delegate-handoff.${LAUNCHER_PID}.XXXXXX")"
+    chmod 700 "$HANDOFF_DIR"
+  fi
   # The monitor, not the launcher, creates the detach run_id and publishes it
   # in owner.json before any FIFO. The launcher discovers that committed value.
   RUN_ID=""
@@ -1570,17 +1862,23 @@ if [ "$DETACH" -eq 1 ]; then
   export_resolved_env
   nohup bash "$SELF" --_monitor >/dev/null 2>>"$STDERR_FILE" &
   MON_PID=$!
+  trap 'kill "$MON_PID" 2>/dev/null || true; wait "$MON_PID" 2>/dev/null || true' TERM INT HUP
 
   if ! launcher_wait_for_readiness "$MON_PID"; then
     kill "$MON_PID" 2>/dev/null || true
     wait "$MON_PID" 2>/dev/null || true
     if [ -n "$RUN_ID" ] && owner_matches_run "$RUN_ID"; then
+      heartbeat_test_evidence_copy handoff-sentinel-final "$(sentinel_path)"
+      heartbeat_test_evidence_copy owner-final "$OWNER_FILE"
+      heartbeat_test_evidence_json worker-result --argjson attempts 0 '{attempts:$attempts,started:false}'
       if ! publish_handoff_failure_once readiness "$MON_PID"; then
         owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
         cleanup_handoff_dir_owned "$MON_PID"
         err "failed to publish readiness failure report"
         exit 2
       fi
+      heartbeat_test_evidence_text publisher launcher
+      heartbeat_test_evidence_text launcher-decision pre-handoff
       owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
       cleanup_handoff_dir_owned "$MON_PID"
       printf 'run_id: %s\n' "$RUN_ID"
@@ -1596,19 +1894,26 @@ if [ "$DETACH" -eq 1 ]; then
     close_launcher_handoff_fds
     kill "$MON_PID" 2>/dev/null || true
     wait "$MON_PID" 2>/dev/null || true
+    heartbeat_test_evidence_copy handoff-sentinel-final "$(sentinel_path)"
+    heartbeat_test_evidence_copy owner-final "$OWNER_FILE"
+    heartbeat_test_evidence_json worker-result --argjson attempts 0 '{attempts:$attempts,started:false}'
     if ! publish_handoff_failure_once handoff "$MON_PID"; then
       owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
       cleanup_handoff_dir_owned "$MON_PID"
       err "failed to publish handoff failure report"
       exit 2
     fi
+    heartbeat_test_evidence_text publisher launcher
+    heartbeat_test_evidence_text launcher-decision pre-handoff
     owner_remove_runtime "$RUN_ID" 1 "$MON_PID" || true
     cleanup_handoff_dir_owned "$MON_PID"
     printf 'run_id: %s\n' "$RUN_ID"
     printf '%s\n' "$REPORT_FILE"
     exit 0
   fi
+  heartbeat_test_evidence_text launcher-decision post-handoff
   close_launcher_handoff_fds
+  trap - TERM INT HUP
   disown "$MON_PID" 2>/dev/null || true
   printf 'run_id: %s\n' "$RUN_ID"
   printf '%s\n' "$REPORT_FILE"
