@@ -429,6 +429,125 @@ check_compatibility_fixture() {
   [ "$count" -eq 14 ]
 }
 
+process_group_of() {
+  ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'
+}
+
+cleanup_detach_stub_fixture() {
+  local dir="$1" label="$2" owner="$dir/$label-owner.json" monitor="" worker="" pgid="" own_pgid
+  local handoff=""
+  if [ -f "$owner" ] && jq -e . "$owner" >/dev/null 2>&1; then
+    monitor="$(jq -r '.monitor_pid // empty' "$owner")"
+    worker="$(jq -r '.worker_pid // empty' "$owner")"
+    handoff="$(jq -r '.handoff_dir // empty' "$owner")"
+  fi
+  own_pgid="$(process_group_of "${BASHPID:-$$}")"
+  if [ -n "$monitor" ]; then
+    pgid="$(process_group_of "$monitor")"
+    if [ -n "$pgid" ] && [ "$pgid" != "$own_pgid" ]; then
+      kill -TERM -- "-$pgid" 2>/dev/null || true
+    else
+      kill -TERM "$monitor" 2>/dev/null || true
+      [ -z "$worker" ] || kill -TERM "$worker" 2>/dev/null || true
+    fi
+  fi
+  [ -z "$handoff" ] || rm -rf "$handoff"
+  rm -rf "$dir"
+}
+
+launch_detach_review_stub() {
+  local dir="$1" label="$2" barrier="$3" driver driver_pgid monitor_mode=0
+  case $- in *m*) monitor_mode=1 ;; esac
+  set -m
+  (
+    exec env PATH="$STUB_DIR:$PATH" AGENT_DELEGATE_STUB_BARRIER_DIR="$barrier" \
+      AGENT_DELEGATE_STUB_REVIEW=1 bash "$SCRIPT" --mode review --prompt-file "$dir/prompt.md" \
+        --out-dir "$dir" --label "$label" --target claude --detach
+  ) > "$dir/$label-launch.out" 2> "$dir/$label-launch.err" &
+  driver=$!
+  driver_pgid="$(process_group_of "$driver")"
+  [ "$monitor_mode" -eq 1 ] || set +m
+  [ -n "$driver_pgid" ] || return 1
+  printf '%s\n' "$driver" > "$dir/$label-launcher-shell.pid"
+  printf '%s\n' "$driver_pgid" > "$dir/$label-launcher-shell.pgid"
+  wait "$driver"
+}
+
+wait_for_detach_stub_runtime() {
+  local dir="$1" label="$2" barrier="$3" deadline owner heartbeat
+  owner="$dir/$label-owner.json"; heartbeat="$dir/$label-heartbeat.json"
+  deadline=$(( $(date -u +%s) + 10 ))
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    if [ -f "$barrier/claude.ready" ] && [ -f "$owner" ] && [ -f "$heartbeat" ] &&
+       jq -e '.handoff_phase=="verified" and (.monitor_pid|type)=="number" and (.worker_pid|type)=="number"' "$owner" >/dev/null 2>&1 &&
+       jq -e '.state=="running" and (.pid|type)=="number" and (.monitor_pid|type)=="number"' "$heartbeat" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+wait_for_detach_stub_terminal() {
+  local dir="$1" label="$2" expected="$3" handoff="$4" deadline report heartbeat
+  report="$dir/$label-report.json"; heartbeat="$dir/$label-heartbeat.json"
+  deadline=$(( $(date -u +%s) + 10 ))
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    if [ -f "$report" ] && [ -f "$heartbeat" ] &&
+       jq -e --arg expected "$expected" '.status==$expected and (.meta.run_id|type)=="string"' "$report" >/dev/null 2>&1 &&
+       jq -e --arg expected "$expected" --slurpfile report "$report" \
+         '.state==$expected and .run_id==$report[0].meta.run_id' "$heartbeat" >/dev/null 2>&1 &&
+       [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] && [ ! -d "$handoff" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_detach_review_lifecycle_stub() (
+  local scenario="$1" dir label barrier owner monitor worker peer monitor_pgid worker_pgid driver_pgid handoff report
+  dir="$(new_work_dir)"; label="detach-$scenario"; barrier="$dir/barrier"
+  trap 'cleanup_detach_stub_fixture "$dir" "$label"' EXIT TERM INT HUP
+  mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'review prompt\n' > "$dir/prompt.md"
+  launch_detach_review_stub "$dir" "$label" "$barrier" || return 1
+  wait_for_detach_stub_runtime "$dir" "$label" "$barrier" || return 1
+  owner="$dir/$label-owner.json"; monitor="$(jq -r '.monitor_pid' "$owner")"; worker="$(jq -r '.worker_pid' "$owner")"
+  peer="$(cat "$barrier/claude.pid")"
+  handoff="$(jq -r '.handoff_dir' "$owner")"; driver_pgid="$(cat "$dir/$label-launcher-shell.pgid")"
+  monitor_pgid="$(process_group_of "$monitor")"; worker_pgid="$(process_group_of "$worker")"
+  [ -n "$monitor_pgid" ] && [ "$monitor_pgid" = "$worker_pgid" ] && [ "$monitor_pgid" != "$driver_pgid" ] || return 1
+
+  # Model the process-group cleanup performed by a command runner after the
+  # launcher shell exits. The detached monitor group must not be affected.
+  kill -TERM -- "-$driver_pgid" 2>/dev/null || true
+  kill -0 "$monitor" 2>/dev/null && kill -0 "$worker" 2>/dev/null || return 1
+
+  case "$scenario" in
+    survives-launcher-exit)
+      printf 'release\n' > "$barrier/release.fifo"
+      wait_for_detach_stub_terminal "$dir" "$label" done "$handoff" || return 1
+      report="$dir/$label-report.json"
+      jq -e '.status=="done" and .meta.mode=="review"' "$report" >/dev/null || return 1
+      [ -f "$dir/$label-review.md" ] || return 1
+      ! kill -0 "$peer" 2>/dev/null || return 1
+      ;;
+    worker-death)
+      kill -KILL "$worker" 2>/dev/null || return 1
+      wait_for_detach_stub_terminal "$dir" "$label" blocked "$handoff" || return 1
+      jq -e '.blocker_category=="env_error"' "$dir/$label-report.json" >/dev/null || return 1
+      ! kill -0 "$peer" 2>/dev/null || return 1
+      ;;
+    monitor-termination)
+      kill -TERM "$monitor" 2>/dev/null || return 1
+      wait_for_detach_stub_terminal "$dir" "$label" blocked "$handoff" || return 1
+      jq -e '.blocker_category=="env_error"' "$dir/$label-report.json" >/dev/null || return 1
+      ! kill -0 "$peer" 2>/dev/null || return 1
+      ;;
+    *) return 1 ;;
+  esac
+  trap - EXIT TERM INT HUP
+  rm -rf "$dir"
+)
+
 case_clean_checkout_compatibility() {
   local dir rc worktree_parent worktree runner_rel deadline detach_report bad_fixture
   runner_rel="skills/agent-delegate/references/scripts/tests/run_tests.sh"
@@ -476,6 +595,9 @@ case_clean_checkout_compatibility() {
   [ ! -e "$dir/detach-owner.json" ] && [ ! -e "$dir/detach.pid" ]
   ! find "$dir" -maxdepth 1 -name '*.tmp.*' -print -quit | grep -q .
   rm -rf "$dir"
+  run_detach_review_lifecycle_stub survives-launcher-exit || die "detach monitor did not survive launcher process-group cleanup"
+  run_detach_review_lifecycle_stub worker-death || die "detach monitor did not synthesize blocked after worker death"
+  run_detach_review_lifecycle_stub monitor-termination || die "detach monitor did not synthesize blocked after monitor termination"
 }
 
 case_monitor_only_publishers() {

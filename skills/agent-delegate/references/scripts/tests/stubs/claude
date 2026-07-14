@@ -10,6 +10,7 @@ done
 prompt="$(cat)"
 [ -z "${AGENT_DELEGATE_STUB_CALL_LOG:-}" ] || printf 'claude\t%s\n' "$*" >> "$AGENT_DELEGATE_STUB_CALL_LOG"
 if [ -n "${AGENT_DELEGATE_STUB_BARRIER_DIR:-}" ]; then
+  printf '%s\n' "${BASHPID:-$$}" > "$AGENT_DELEGATE_STUB_BARRIER_DIR/claude.pid"
   printf 'ready\n' > "$AGENT_DELEGATE_STUB_BARRIER_DIR/claude.ready"
   IFS= read -r _ < "$AGENT_DELEGATE_STUB_BARRIER_DIR/release.fifo"
 fi

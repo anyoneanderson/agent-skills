@@ -79,6 +79,10 @@ LAUNCHER_PID=""
 MONITOR_PID=""
 MON_PID=""
 TEST_WORKER_PID=""
+MONITOR_GUARD_ARMED=0
+MONITOR_STARTED_AT=""
+MONITOR_WORKER_PID=""
+MONITOR_HEARTBEAT_PID=""
 REPORT_IS_CANDIDATE=0
 REPORT_PUBLISH_ONLY_IF_ABSENT=0
 RUN_CLI_APPEND_STDERR=0
@@ -1612,6 +1616,83 @@ run_worker() {
   run_job_guarded
 }
 
+monitor_finalize_abnormal() {
+  local reason="$1" monitor_pid="$MONITOR_PID" worker_pid="$MONITOR_WORKER_PID"
+  local heartbeat_pid="$MONITOR_HEARTBEAT_PID" pgid="" terminal_status=""
+  [ "$MONITOR_GUARD_ARMED" -eq 1 ] || return 0
+  MONITOR_GUARD_ARMED=0
+  trap - EXIT
+  # Ignore a second delivery while terminating our process group. The worker,
+  # peer CLI, and heartbeat loop share the monitor's isolated group.
+  trap '' TERM INT HUP
+  pgid="$(ps -o pgid= -p "$monitor_pid" 2>/dev/null | tr -d '[:space:]')"
+  if [ -n "$pgid" ] && [ "$pgid" = "$monitor_pid" ]; then
+    kill -TERM -- "-$pgid" 2>/dev/null || true
+  else
+    [ -z "$heartbeat_pid" ] || kill -TERM "$heartbeat_pid" 2>/dev/null || true
+    [ -z "$worker_pid" ] || kill -TERM "$worker_pid" 2>/dev/null || true
+  fi
+  [ -z "$heartbeat_pid" ] || wait "$heartbeat_pid" 2>/dev/null || true
+  [ -z "$worker_pid" ] || [ "$worker_pid" = "$monitor_pid" ] || wait "$worker_pid" 2>/dev/null || true
+  close_monitor_handoff_fds
+
+  # A terminal report may already have won the race with the signal. Preserve
+  # it; otherwise replace any partial candidate with an owned blocked result.
+  if report_is_terminal_for_run "$REPORT_FILE" "$RUN_ID"; then
+    terminal_status="$(jq -r '.status' "$REPORT_FILE")"
+  elif owner_matches_run "$RUN_ID" && pid_matches_run "$RUN_ID" "$monitor_pid"; then
+    rm -f "$CANDIDATE_FILE" "$CANDIDATE_TMP"
+    if make_blocked_candidate "$reason"; then
+      terminal_status="$(publish_worker_candidate)" || terminal_status=""
+    fi
+  fi
+  case "$worker_pid" in ''|*[!0-9]*) worker_pid="$monitor_pid" ;; esac
+  case "$terminal_status" in
+    done|blocked) write_heartbeat "$terminal_status" "$worker_pid" "$MONITOR_STARTED_AT" "$(utc_now)" || true ;;
+  esac
+  owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
+  cleanup_handoff_dir_owned "$monitor_pid"
+}
+
+monitor_signal_guard() {
+  local signal="$1"
+  monitor_finalize_abnormal "detach monitor received $signal before completion"
+  exit 2
+}
+
+monitor_exit_guard() {
+  local exit_code=$?
+  [ "$MONITOR_GUARD_ARMED" -eq 1 ] || return 0
+  monitor_finalize_abnormal "detach monitor exited unexpectedly (exit $exit_code)"
+}
+
+arm_monitor_guard() {
+  MONITOR_STARTED_AT="$1"
+  MONITOR_WORKER_PID="$MONITOR_PID"
+  MONITOR_HEARTBEAT_PID=""
+  MONITOR_GUARD_ARMED=1
+  trap 'monitor_signal_guard TERM' TERM
+  trap 'monitor_signal_guard INT' INT
+  trap 'monitor_signal_guard HUP' HUP
+  trap monitor_exit_guard EXIT
+}
+
+disarm_monitor_guard() {
+  MONITOR_GUARD_ARMED=0
+  trap - EXIT TERM INT HUP
+}
+
+terminate_remaining_monitor_group() {
+  local pgid
+  pgid="$(ps -o pgid= -p "$MONITOR_PID" 2>/dev/null | tr -d '[:space:]')"
+  [ -n "$pgid" ] && [ "$pgid" = "$MONITOR_PID" ] || return 0
+  # A killed worker can orphan the peer CLI in this process group. Keep the
+  # monitor alive while terminating every remaining group member.
+  trap '' TERM
+  kill -TERM -- "-$pgid" 2>/dev/null || true
+  trap 'monitor_signal_guard TERM' TERM
+}
+
 run_monitor() {
   import_resolved_env
   if command -v uuidgen >/dev/null 2>&1; then RUN_ID="$(uuidgen)"; else RUN_ID="$(date +%s%N)"; fi
@@ -1656,22 +1737,26 @@ run_monitor() {
 
   # The monitor generated RUN_ID after the launcher exported its initial state.
   # Refresh the environment so the worker writes the matching run candidate.
+  arm_monitor_guard "$started_at"
   export_resolved_env
   bash "$SELF" --_worker &
   worker_pid=$!
+  MONITOR_WORKER_PID="$worker_pid"
   update_owner_field "$RUN_ID" '.worker_pid=($value|tonumber)' "$worker_pid" 1 "$monitor_pid" || true
-  write_heartbeat running "$worker_pid" "$started_at" "$(utc_now)" || {
-    kill "$worker_pid" 2>/dev/null || true
-    wait "$worker_pid" 2>/dev/null || true
-    make_blocked_candidate "failed to publish initial heartbeat"
-  }
+  if ! write_heartbeat running "$worker_pid" "$started_at" "$(utc_now)"; then
+    monitor_finalize_abnormal "failed to publish initial heartbeat"
+    return 2
+  fi
   heartbeat_loop "$worker_pid" "$started_at" &
   heartbeat_pid=$!
+  MONITOR_HEARTBEAT_PID="$heartbeat_pid"
   wait "$worker_pid" || worker_rc=$?
   kill "$heartbeat_pid" 2>/dev/null || true
   wait "$heartbeat_pid" 2>/dev/null || true
+  MONITOR_HEARTBEAT_PID=""
   if [ ! -e "$CANDIDATE_FILE" ]; then
     err "worker (pid $worker_pid) exited rc=$worker_rc without report candidate"
+    terminate_remaining_monitor_group
   fi
   terminal_status="$(publish_worker_candidate)" || {
     err "failed to publish worker report candidate"
@@ -1682,6 +1767,20 @@ run_monitor() {
   write_heartbeat "$terminal_status" "$worker_pid" "$started_at" "$(utc_now)" || true
   owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true
   cleanup_handoff_dir_owned "$monitor_pid"
+  disarm_monitor_guard
+}
+
+launch_detach_monitor() {
+  local monitor_mode=0
+  case $- in *m*) monitor_mode=1 ;; esac
+  # nohup only ignores HUP; command runners may terminate the launcher's whole
+  # process group after its shell exits. Bash job control gives the monitor a
+  # separate process group without relying on non-standard macOS utilities.
+  set -m
+  nohup bash "$SELF" --_monitor >/dev/null 2>>"$STDERR_FILE" &
+  MON_PID=$!
+  disown "$MON_PID" 2>/dev/null || true
+  [ "$monitor_mode" -eq 1 ] || set +m
 }
 
 # --- argument parsing ------------------------------------------------------
@@ -1860,8 +1959,7 @@ if [ "$DETACH" -eq 1 ]; then
   RUN_ID=""
   compute_paths
   export_resolved_env
-  nohup bash "$SELF" --_monitor >/dev/null 2>>"$STDERR_FILE" &
-  MON_PID=$!
+  launch_detach_monitor
   trap 'kill "$MON_PID" 2>/dev/null || true; wait "$MON_PID" 2>/dev/null || true' TERM INT HUP
 
   if ! launcher_wait_for_readiness "$MON_PID"; then
@@ -1914,7 +2012,6 @@ if [ "$DETACH" -eq 1 ]; then
   heartbeat_test_evidence_text launcher-decision post-handoff
   close_launcher_handoff_fds
   trap - TERM INT HUP
-  disown "$MON_PID" 2>/dev/null || true
   printf 'run_id: %s\n' "$RUN_ID"
   printf '%s\n' "$REPORT_FILE"
   exit 0
