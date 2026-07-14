@@ -76,6 +76,9 @@ It acts as an execution engine that:
    ├── Follow workflow's PR template
    ├── --base {base_branch} (dynamically determined from workflow)
    ├── Link to issue (Closes #{N})
+   ├── File follow-up issues for deferred findings (fix_before: trial /
+   │   required_check / follow_up) and link them in the PR body; on failure
+   │   keep the finding text in the body with a warning
    └── Monitor CI (if specified in workflow)
 ```
 
