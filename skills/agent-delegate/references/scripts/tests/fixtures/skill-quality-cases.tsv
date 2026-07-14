@@ -1,0 +1,13 @@
+check_id	expected
+frontmatter-name	pass
+description-length	pass
+bilingual-triggers	pass
+license-mit	pass
+english-body	pass
+title-format	pass
+language-rules	pass
+interactive-question	pass
+no-hardcoded-mcp	pass
+line-limit	pass
+references-exist	pass
+bilingual-references	pass

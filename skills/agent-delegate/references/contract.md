@@ -44,9 +44,18 @@ command-line argument, to avoid escaping and length limits.
 
 ### stdout contract
 
-The **last line of stdout** is the absolute path of `report.json`. Callers only
-need that line; everything else on stdout/stderr is diagnostic. In `--detach`
-mode the same path is printed immediately, before the file exists.
+Every successful launch prints the resolved run id before the report path:
+
+```text
+run_id: 19235118-80D0-4DCD-94E0-2E38C42AB5F2
+/absolute/out/label-report.json
+```
+
+The **last line of stdout remains the absolute path of `report.json`**. Existing
+callers that use only the last line remain compatible. Detached callers must
+also save the `run_id:` value as the expected run and record the local time at
+which the launcher returns. The report path can refer to a file that does not
+exist yet.
 
 ## Target resolution
 
@@ -90,8 +99,10 @@ guarantee and claude `read-only` as best-effort policy.
 
 ## report.json schema
 
-Written atomically (to a `.tmp`, then `mv`). Its existence — on success **and**
-failure — is the sole completion signal.
+Written atomically (to a `.tmp`, then `mv`). A valid terminal report for the
+expected run is the authoritative completion result. During a detached run,
+the absence of `report.json` is not a failure signal; use the heartbeat and
+process state described below while waiting.
 
 ```json
 {
@@ -140,6 +151,80 @@ re-classify from the `blocker` text.
 | `sandbox_violation` | A `read-only` review modified files after excluding our own artifacts |
 | `env_error` | The run exited without producing a report; synthesized by the synchronous/worker safety net or the detach monitor |
 | `unclassified` | Non-zero exit with no matching pattern |
+
+## Detached runtime records
+
+Detached runs publish local runtime records next to the report. These records
+are diagnostic and ownership data; they do not add fields to `report.json`.
+
+### Heartbeat
+
+The monitor atomically replaces `<out-dir>/<label>-heartbeat.json` every 30
+seconds while the worker runs. A heartbeat is fresh when its `last_beat` is no
+more than 90 seconds old.
+
+```json
+{
+  "run_id": "19235118-80D0-4DCD-94E0-2E38C42AB5F2",
+  "state": "running | done | blocked",
+  "pid": 303,
+  "monitor_pid": 202,
+  "started_at": "2026-07-14T00:00:00Z",
+  "last_beat": "2026-07-14T00:00:30Z",
+  "target": "codex | claude",
+  "mode": "delegate | review",
+  "report_path": "/absolute/out/label-report.json"
+}
+```
+
+`pid` is the Bash worker PID. `monitor_pid` is the detached monitor PID and
+matches the leading `pid:` in `<out-dir>/<label>.pid`. `started_at` and
+`last_beat` are UTC RFC 3339 values. The monitor publishes `done` or `blocked`
+only after it has published a valid terminal report with the same run id, then
+stops updating the heartbeat. A terminal heartbeat is retained until the next
+run with the same label takes ownership.
+
+### Owner and handoff
+
+`<out-dir>/<label>-owner.json` is the ownership token for the shared report,
+heartbeat, and pid paths. `<out-dir>/<label>-owner.lock/` serializes ownership
+changes and lease updates:
+
+```json
+{
+  "run_id": "19235118-80D0-4DCD-94E0-2E38C42AB5F2",
+  "run_kind": "detach",
+  "runner_pid": 202,
+  "launcher_pid": 101,
+  "monitor_pid": 202,
+  "worker_pid": 303,
+  "started_at": "2026-07-14T00:00:00Z",
+  "lease_at": "2026-07-14T00:00:30Z",
+  "handoff_dir": "/tmp/agent-delegate-handoff.101.random",
+  "handoff_phase": "verified"
+}
+```
+
+`run_kind` is `sync` or `detach`; the PID and handoff fields are nullable where
+the corresponding process or handoff does not exist. `handoff_phase` is one of
+`not_applicable`, `not_started`, `committed`, or `verified`. For detached runs,
+the owner value is a diagnostic mirror: the durable `handoff_phase` in
+`<handoff_dir>/handoff-sentinel.json` decides whether the worker may start.
+The monitor publishes the complete owner and pid before creating the handoff
+FIFOs. Each heartbeat publication updates `lease_at` under the same owner lock.
+The launcher accepts the owner's `run_id` as the expected run only after owner
+and pid contain that same run id and monitor PID. It prints that value; callers
+must not derive the expected run from the sentinel.
+
+On the next launch for the same label, the preflight stale reaper removes an
+abandoned handoff only when the owner and pid identify the same absent monitor,
+the lease is more than 90 seconds old, and the handoff path is a non-symlink
+mode-0700 directory owned by the current user directly below the configured
+root with the expected launcher-PID basename and unchanged device/inode.
+When a sentinel exists, its JSON identity must also match. Only enumerated
+FIFOs, matching temporary files, and the sentinel may be removed; unknown or
+mismatched content is retained and diagnosed rather than removed. The terminal
+report and terminal heartbeat are retained.
 
 ## Review mode
 
@@ -193,34 +278,69 @@ re-classify from the `blocker` text.
 ## Detach
 
 `--detach` runs the peer under an OS-detached supervisor so the caller is not
-bound by the ~10-minute Bash-tool ceiling.
+bound by the host command's execution limit.
 
 - Preconditions (arguments, peer CLI presence, codex trust) are checked
   synchronously; failures still exit 2 before detaching.
-- On success the script launches a monitor wrapper via `nohup ... & disown`,
-  writes a pid file `<out-dir>/<label>.pid` (pid, run_id, start time, command
-  summary), prints the future `report.json` path, and exits 0 immediately.
+- On success the script launches a monitor in an isolated process group. The
+  monitor publishes owner and pid records, completes the durable handoff, and
+  only then may start one worker. The launcher prints the run id and future
+  report path and exits 0.
 - The monitor writes `report.json` atomically when the peer finishes. If the
   peer is killed and never writes one, the monitor synthesizes a `blocked`
   report (`blocker_category: env_error`) itself, so callers never re-implement
   the schema.
 
-### Polling (recommended for callers)
+### Polling and expected-run state
 
-Wait only for `report.json` to appear; do not parse the pid file or logs.
+Save `expected_run_id`, `report_path`, and `launched_at` from the detached
+launch. Poll every 15 seconds by default and never less often than every 30
+seconds. At each poll, inspect the expected run in this order:
 
-```bash
-report="$(agent-delegate.sh --mode delegate ... --detach | tail -1)"
-until [ -f "$report" ]; do sleep 15; done
-status="$(jq -r .status "$report")"
-```
+1. Read the report. Finish only for valid JSON whose `status` is `done` or
+   `blocked` and whose `meta.run_id` equals `expected_run_id`.
+2. Read owner and pid. If the owner has moved to another run, return
+   `SUPERSEDED`.
+3. Read the heartbeat. Keep the last valid heartbeat if a replacement is
+   temporarily unreadable.
+4. Probe the worker and monitor PIDs. A permission error is unknown, not absent.
+5. For `DEATH_CANDIDATE`, wait 30 seconds and begin the next poll by checking
+   the report again.
+
+| Observation | Caller state |
+|---|---|
+| expected-run report is valid `done` / `blocked` | `TERMINAL_DONE` / `TERMINAL_BLOCKED` |
+| owner belongs to another run | `SUPERSEDED` |
+| monitor absent, worker alive or unknown | `ORPHANED_WORKER` |
+| worker absent, monitor alive or unknown | `FINALIZING` |
+| worker and monitor absent | `DEATH_CANDIDATE`; after 30 seconds, `DEAD` |
+| report exists but JSON, status, or run id is invalid while processes remain | `REPORT_INVALID_PENDING` |
+| heartbeat not generated, monitor alive, launch age at most 90 seconds | `STARTING` |
+| heartbeat not generated after 90 seconds, monitor alive | `DEGRADED_NO_HEARTBEAT` |
+| heartbeat temporarily unreadable, processes alive or unknown | `DEGRADED_UNREADABLE` |
+| fresh heartbeat, processes alive or unknown | `RUNNING` |
+| heartbeat older than 90 seconds, processes alive or unknown | `DEGRADED_STALE` |
+
+Terminal report validation has priority over every heartbeat and PID state.
+A terminal heartbeat never substitutes for an invalid or missing report.
+`RUNNING`, every `DEGRADED_*` state, `ORPHANED_WORKER`, `FINALIZING`, and
+`REPORT_INVALID_PENDING` are waiting states, not failures.
 
 ### Sync vs detach
 
-- Short tasks (review, investigation) → synchronous (no `--detach`).
-- Long tasks (code implementation, E2E) that may exceed ~10 minutes → `--detach`.
-- A Claude Code caller may instead wrap the synchronous form in its own
-  background-execution feature.
+- A delegate that writes files, generates or repairs specifications, implements
+  code, or records test evidence uses explicit `--detach` by default.
+- Synchronous execution is limited to a review, investigation, or short
+  delegate that is read-only and has a concrete basis for completing within
+  5 minutes.
+- If a task writes anything or lacks that time basis, use `--detach`.
+- A caller-owned timeout is at least 20 minutes for specification generation or
+  repair, and at least 30 minutes for implementation or E2E. Reaching it starts
+  a state re-evaluation; report absence alone still does not mean failure.
+
+The script preserves CLI compatibility: omitting `--detach` still selects
+synchronous execution. The defaults above are caller policy, not an automatic
+mode switch inside the script.
 
 ## Environment variables
 
@@ -229,7 +349,7 @@ status="$(jq -r .status "$report")"
 | `AGENT_DELEGATE_SANDBOX` | Default sandbox stage when `--sandbox` is omitted |
 | `AGENT_DELEGATE_HOST` | Force host side (`claude`/`codex`) for target resolution |
 | `AGENT_DELEGATE_REVIEW_LANG` | `ja` selects the Japanese review template |
-| `AGENT_DELEGATE_TEST_MODE` | `1` = resolve arguments, print the plan line, and exit 0 without launching any CLI (for CI) |
+| `AGENT_DELEGATE_TEST_MODE` | `1` = resolve arguments, print the plan line, and exit 0 without launching any CLI; `heartbeat` = exercise detached handoff, owner, heartbeat, and terminal publication with the tracked harness and no peer CLI |
 
 ## Error messages
 

@@ -18,8 +18,10 @@
 1. spec-evaluate を `--spec .specs/{feature}/` とラウンドで起動する。アプリを起動し、
    各項目を検証方法別に実行し、証跡を `evidence/{round}/` に保存し、
    `evaluate-{round}.md` を書く。
-2. 長い E2E は同期上限を超えうる。codex バックエンドは detach し、オーケストレーター
-   は結果ファイルをポーリングする。
+2. codex バックエンドは明示的な `--detach` を渡して expected run id を保持し、
+   `../role-dispatch.ja.md` の report-first な15〜30秒待機を適用する。
+   呼び出し側のタイムアウトは30分以上とする。
+   heartbeat またはプロセス状態が生存を示す間、report の不在は失敗ではなく待機状態である。
 
 ## 出力
 

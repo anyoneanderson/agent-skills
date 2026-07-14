@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+last_message=""
+resume_id="stub-codex-thread"
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = --output-last-message ]; then last_message="$arg"; fi
+  previous="$arg"
+done
+if [ "${1:-}" = exec ] && [ "${2:-}" = resume ]; then resume_id="${3:-stub-codex-thread}"; fi
+prompt="$(cat)"
+[ -z "${AGENT_DELEGATE_STUB_CALL_LOG:-}" ] || printf 'codex\t%s\n' "$*" >> "$AGENT_DELEGATE_STUB_CALL_LOG"
+if [ -n "${AGENT_DELEGATE_STUB_BARRIER_DIR:-}" ]; then
+  printf 'ready\n' > "$AGENT_DELEGATE_STUB_BARRIER_DIR/codex.ready"
+  IFS= read -r _ < "$AGENT_DELEGATE_STUB_BARRIER_DIR/release.fifo"
+fi
+case "${AGENT_DELEGATE_STUB_MODE:-done}" in
+  blocked) printf 'stub codex failure\n' >&2; exit "${AGENT_DELEGATE_STUB_EXIT:-7}" ;;
+  malformed) printf '{\n'; exit 0 ;;
+esac
+message="stub codex completed"
+if [ "${AGENT_DELEGATE_STUB_REVIEW:-0}" = 1 ]; then
+  message=$'type: review\n## Meta\nbackend: stub\n## Findings\n### Critical\nNone\n### Improvement\nNone\n### Minor\nNone\n## Summary\nGate: PASS'
+fi
+[ -z "$last_message" ] || printf '%s\n' "$message" > "$last_message"
+jq -nc --arg thread "$resume_id" '{type:"thread.started",thread_id:$thread}'
+jq -nc --arg text "$message" --arg prompt "$prompt" '{type:"item.completed",item:{type:"agent_message",text:$text},prompt_bytes:($prompt|length)}'

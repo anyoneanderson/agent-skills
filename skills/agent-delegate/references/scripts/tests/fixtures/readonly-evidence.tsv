@@ -1,0 +1,15 @@
+field	allowed
+structured_review	yes
+stdout	yes
+stderr	yes
+exit_code	yes
+run_id	yes
+report_path	yes
+state_observation	yes
+commit	yes
+os	yes
+bash_version	yes
+environment_dump	no
+credentials	no
+home_configuration	no
+source_copy	no

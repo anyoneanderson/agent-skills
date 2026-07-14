@@ -284,8 +284,9 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 
 12. **agent-delegate** hands a task to the other agent (Claude Code ⇄ Codex) headlessly, or gets an adversarial review from it:
     - `--mode delegate` executes a task on the peer CLI; `--mode review` gets a read-only adversarial review
-    - Returns a machine-readable `report.json` (last line of stdout is always its path)
-    - `--detach` for long runs: poll the report file instead of holding the session
+    - Returns a machine-readable `report.json` (the final stdout line remains its path; detached launches also print the expected run id)
+    - Writing delegates use explicit `--detach` by default; synchronous execution is limited to read-only work with a concrete 5-minute bound
+    - Poll detached runs every 15 seconds (30 seconds maximum), validating the expected-run report before owner, pid, heartbeat, and process state; a missing report while the run is alive is not failure
     - Session continuation via `--resume <thread_id>` keeps multi-round reviews in one context
 
 ### cmux Skills (optional, requires [cmux](https://cmux.dev/))

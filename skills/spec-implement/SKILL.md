@@ -204,7 +204,9 @@ each step is resolved per task.
 2. `owner = roles[kind]` when kind is known and present in the map; otherwise `claude` (default).
 3. Implementation executor:
    - `owner == claude` → **spec-code** (all existing dispatch modes apply, unchanged).
-   - `owner == codex` → **agent-delegate** script, `--mode delegate` (detach + poll `report.json`).
+   - `owner == codex` → **agent-delegate** script, `--mode delegate --detach`.
+     Retain the expected run id and use the contract's 15–30-second report-first
+     state wait. The caller-owned timeout is at least 30 minutes.
 
 **Reviewer inversion (review gate):** the reviewer is always the opposite side of the
 task's implementer ("the author does not review their own work"):
@@ -212,10 +214,10 @@ task's implementer ("the author does not review their own work"):
 | Implementer (from kind) | Reviewer | How |
 |---|---|---|
 | codex | claude | **spec-review** (unchanged) |
-| claude | codex | **agent-delegate** script, `--mode review` (synchronous) |
+| claude | codex | **agent-delegate** script, `--mode review` (sync only with a concrete <=5-minute basis; otherwise detach) |
 
 Fixes route to the implementer's executor: `spec-code --feedback` for claude,
-agent-delegate `--mode delegate` (resume) for codex. The agent-delegate review file is
+agent-delegate `--mode delegate --detach` (resume) for codex. The agent-delegate review file is
 spec-review-compatible (severity sections + `Gate: PASS|FAIL`), so the existing fix loop
 consumes it unchanged.
 
@@ -223,7 +225,7 @@ agent-delegate is a public-contract dependency: call the script per
 `agent-delegate/references/contract.md` and **always pass `--target` explicitly** (the
 contract's nested-chain caveat forbids self-detection for programmatic callers). See
 `references/implement-guide.md` → "Kind-Based Task Routing" for invocation details,
-polling, sandbox stages, resume, and unavailable-peer fallback.
+expected-run polling, sandbox stages, resume, and unavailable-peer fallback.
 
 ### Phase 7: Final Quality Gate
 

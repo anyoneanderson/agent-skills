@@ -1,0 +1,7 @@
+scenario	expected_phase	worker_attempts	heartbeat	publisher	report	launcher_decision
+owner-pid-mismatch	not_started	0	absent	launcher	blocked	pre-handoff
+acknowledgement-mismatch	not_started	0	absent	launcher	blocked	pre-handoff
+final-ack-timeout	committed	0	absent	launcher	blocked	pre-handoff
+expire-handoff	not_started	0	absent	launcher	blocked	pre-handoff
+worker-start-failure	verified	1	terminal-blocked	monitor	blocked	post-handoff
+final-ack-response-lost	verified	1	terminal-done	monitor	absent	post-handoff
