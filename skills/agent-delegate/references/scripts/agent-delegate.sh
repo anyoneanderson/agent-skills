@@ -86,6 +86,13 @@ MONITOR_HEARTBEAT_PID=""
 REPORT_IS_CANDIDATE=0
 REPORT_PUBLISH_ONLY_IF_ABSENT=0
 RUN_CLI_APPEND_STDERR=0
+OWNER_LOCK_HELD=0
+OWNER_LOCK_SIGNAL_GUARD_ACTIVE=0
+OWNER_LOCK_PENDING_SIGNAL=""
+OWNER_LOCK_SAVED_TERM=""
+OWNER_LOCK_SAVED_INT=""
+OWNER_LOCK_SAVED_HUP=""
+OWNER_LOCK_TEST_SIGNAL_SENT=0
 
 # Sandbox flag outputs (resolve_sandbox_flags()).
 CODEX_SANDBOX_VALUE=""
@@ -239,6 +246,23 @@ compute_paths() {
 utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 heartbeat_test_mode() { [ "${AGENT_DELEGATE_TEST_MODE:-0}" = heartbeat ]; }
+owner_lock_signal_test_mode() { [ "${AGENT_DELEGATE_TEST_MODE:-0}" = owner-lock-signal ]; }
+
+owner_lock_signal_test_hook() {
+  local stage="$1" configured="${AGENT_DELEGATE_TEST_OWNER_LOCK_SIGNAL_STAGE:-}"
+  local ready_file="${AGENT_DELEGATE_TEST_OWNER_LOCK_READY_FILE:-}" deadline
+  owner_lock_signal_test_mode || return 0
+  [ "$OWNER_LOCK_TEST_SIGNAL_SENT" -eq 0 ] && [ "$configured" = "$stage" ] || return 0
+  if [ -n "$ready_file" ]; then
+    deadline=$((SECONDS + 5))
+    while [ ! -f "$ready_file" ]; do
+      [ "$SECONDS" -lt "$deadline" ] || { err "owner lock signal test readiness timeout"; return 1; }
+      sleep 0.01
+    done
+  fi
+  OWNER_LOCK_TEST_SIGNAL_SENT=1
+  kill -TERM "${BASHPID:-$$}"
+}
 
 heartbeat_test_evidence_json() {
   local suffix="$1" path tmp
@@ -297,10 +321,55 @@ process_probe() {
   fi
 }
 
-OWNER_LOCK_HELD=0
+owner_lock_capture_signal() {
+  local signal="$1"
+  [ -n "$OWNER_LOCK_PENDING_SIGNAL" ] || OWNER_LOCK_PENDING_SIGNAL="$signal"
+}
+
+owner_lock_restore_signal_trap() {
+  local saved="$1" signal="$2"
+  if [ -n "$saved" ]; then eval "$saved"; else trap - "$signal"; fi
+}
+
+owner_lock_signal_guard_enter() {
+  if [ "$OWNER_LOCK_SIGNAL_GUARD_ACTIVE" -eq 1 ]; then
+    err "nested owner lock signal guard"
+    return 1
+  fi
+  OWNER_LOCK_PENDING_SIGNAL=""
+  OWNER_LOCK_SAVED_TERM="$(trap -p TERM)"
+  OWNER_LOCK_SAVED_INT="$(trap -p INT)"
+  OWNER_LOCK_SAVED_HUP="$(trap -p HUP)"
+  OWNER_LOCK_SIGNAL_GUARD_ACTIVE=1
+  trap 'owner_lock_capture_signal TERM' TERM
+  trap 'owner_lock_capture_signal INT' INT
+  trap 'owner_lock_capture_signal HUP' HUP
+}
+
+# Replaying a captured signal only after rmdir prevents a monitor or heartbeat
+# publisher from dying while it owns the mkdir-based lock.
+owner_lock_signal_guard_leave() {
+  local pending saved_term saved_int saved_hup
+  [ "$OWNER_LOCK_SIGNAL_GUARD_ACTIVE" -eq 1 ] || return 0
+  pending="$OWNER_LOCK_PENDING_SIGNAL"
+  saved_term="$OWNER_LOCK_SAVED_TERM"; saved_int="$OWNER_LOCK_SAVED_INT"; saved_hup="$OWNER_LOCK_SAVED_HUP"
+  OWNER_LOCK_SIGNAL_GUARD_ACTIVE=0
+  OWNER_LOCK_PENDING_SIGNAL=""
+  OWNER_LOCK_SAVED_TERM=""; OWNER_LOCK_SAVED_INT=""; OWNER_LOCK_SAVED_HUP=""
+  owner_lock_restore_signal_trap "$saved_term" TERM
+  owner_lock_restore_signal_trap "$saved_int" INT
+  owner_lock_restore_signal_trap "$saved_hup" HUP
+  [ -z "$pending" ] || kill -s "$pending" "${BASHPID:-$$}" 2>/dev/null || true
+}
+
 acquire_owner_lock() {
   local deadline=$((SECONDS + OWNER_LOCK_TIMEOUT)) holder_pid="" quarantine holder_hash remaining
+  owner_lock_signal_guard_enter || return 1
   while ! mkdir "$OWNER_LOCK" 2>/dev/null; do
+    if [ -n "$OWNER_LOCK_PENDING_SIGNAL" ]; then
+      owner_lock_signal_guard_leave
+      return 130
+    fi
     if [ "$FORCE" -eq 1 ] && [ -r "$OWNER_LOCK/holder" ]; then
       holder_pid="$(awk -F': ' '$1=="pid"{print $2; exit}' "$OWNER_LOCK/holder" 2>/dev/null || true)"
       if [ "$(process_probe "$holder_pid")" = "absent" ]; then
@@ -317,14 +386,21 @@ acquire_owner_lock() {
         fi
       fi
     fi
-    [ "$SECONDS" -lt "$deadline" ] || { err "timed out acquiring owner lock: $OWNER_LOCK"; return 1; }
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      err "timed out acquiring owner lock: $OWNER_LOCK"
+      owner_lock_signal_guard_leave
+      return 1
+    fi
     sleep 0.05
   done
   OWNER_LOCK_HELD=1
-  {
+  if ! {
     printf 'pid: %s\n' "${BASHPID:-$$}"
     printf 'run_id: %s\n' "${RUN_ID:-unknown}"
-  } > "$OWNER_LOCK/holder"
+  } > "$OWNER_LOCK/holder"; then
+    release_owner_lock
+    return 1
+  fi
 }
 
 release_owner_lock() {
@@ -332,6 +408,7 @@ release_owner_lock() {
   rm -f "$OWNER_LOCK/holder"
   rmdir "$OWNER_LOCK" 2>/dev/null || true
   OWNER_LOCK_HELD=0
+  owner_lock_signal_guard_leave
 }
 
 owner_is_valid() {
@@ -1341,7 +1418,9 @@ write_heartbeat() {
        report_path:$report_path}
     ' > "$HEARTBEAT_TMP"
   chmod 600 "$HEARTBEAT_TMP"
+  [ "$state" != running ] || owner_lock_signal_test_hook before_acquire
   acquire_owner_lock || { rm -f "$HEARTBEAT_TMP"; return 1; }
+  [ "$state" != running ] || owner_lock_signal_test_hook lock_held
   if ! owner_matches_run "$RUN_ID" || ! pid_matches_run "$RUN_ID" "$MONITOR_PID"; then
     release_owner_lock
     rm -f "$HEARTBEAT_TMP"
@@ -1369,6 +1448,7 @@ write_heartbeat() {
     return 1
   fi
   release_owner_lock
+  [ "$state" != running ] || owner_lock_signal_test_hook after_publish
 }
 
 heartbeat_loop() {
@@ -1915,6 +1995,19 @@ if [ -n "${AGENT_DELEGATE_TEST_LSTAT_METADATA:-}" ] && [ "${AGENT_DELEGATE_TEST_
   err "AGENT_DELEGATE_TEST_LSTAT_METADATA is only valid in heartbeat test mode"
   exit 2
 fi
+if [ -n "${AGENT_DELEGATE_TEST_OWNER_LOCK_SIGNAL_STAGE:-}" ]; then
+  if ! owner_lock_signal_test_mode; then
+    err "AGENT_DELEGATE_TEST_OWNER_LOCK_SIGNAL_STAGE is only valid in owner lock signal test mode"
+    exit 2
+  fi
+  case "$AGENT_DELEGATE_TEST_OWNER_LOCK_SIGNAL_STAGE" in
+    before_acquire|lock_held|after_publish) : ;;
+    *) err "invalid owner lock signal test stage"; exit 2 ;;
+  esac
+elif owner_lock_signal_test_mode; then
+  err "owner lock signal test mode requires a signal stage"
+  exit 2
+fi
 
 HANDOFF_ROOT="$(cd "${TMPDIR:-/tmp}" && pwd)"
 compute_paths
@@ -1939,7 +2032,7 @@ fi
 if [ "$DETACH" -eq 1 ]; then
   LAUNCHER_PID="${BASHPID:-$$}"
   HANDOFF_DEADLINE=$(( $(date -u +%s) + HANDOFF_TIMEOUT ))
-  if heartbeat_test_mode; then
+  if heartbeat_test_mode || owner_lock_signal_test_mode; then
     HANDOFF_DIR="${AGENT_DELEGATE_TEST_HANDOFF_DIR:-}"
     if [ -z "$HANDOFF_DIR" ] || [ "${HANDOFF_DIR#/}" = "$HANDOFF_DIR" ] ||
        [ ! -d "$HANDOFF_DIR" ] || [ -L "$HANDOFF_DIR" ] ||
@@ -1947,7 +2040,7 @@ if [ "$DETACH" -eq 1 ]; then
        [ "$(stat_uid "$HANDOFF_DIR")" != "$(id -u)" ] ||
        [ "$(stat_mode "$HANDOFF_DIR")" != 700 ] ||
        [ -n "$(find "$HANDOFF_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
-      err "heartbeat test handoff directory must be an empty mode 0700 directory directly under $HANDOFF_ROOT"
+      err "test handoff directory must be an empty mode 0700 directory directly under $HANDOFF_ROOT"
       exit 2
     fi
   else

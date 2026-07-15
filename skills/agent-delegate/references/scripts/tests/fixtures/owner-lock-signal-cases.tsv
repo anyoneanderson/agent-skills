@@ -1,0 +1,4 @@
+case_id	signal_stage	expected_status
+term-before-lock	before_acquire	blocked
+term-lock-held	lock_held	blocked
+term-after-publish	after_publish	blocked
