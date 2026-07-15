@@ -113,14 +113,16 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 ### spec_review（敵対的仕様レビュー）
 
 `spec_reviewer` を行列で解決し、review / read-only mode で走らせる。一致する role は
-native reviewer subagent、異なる role は
+spec author の文脈と分離した新規 native reviewer subagent、異なる role は
 agent-delegate `--mode review --target <spec_reviewer>` を使う。
 agent-delegate を同期実行するのは5分以内に完了する具体的根拠がある場合だけとし、
 それ以外は `--detach` と上記の expected-run 待機を使う。
 ラウンド1で
 セッションを作り、ラウンド2以降は state の `threads.spec_reviewer` の
 `--resume <thread_id>` で継続する（レビューセッションは read-only で作られ、resume
-が保てる sandbox はそれだけ）。
+が保てる sandbox はそれだけ）。cross-AI peer が利用不能なら、下記の独立 native
+review fallback を使う。この経路はセッションレスで、毎ラウンド新規 reviewer
+subagent を起動する。
 
 ### spec_generate（spec author）
 
@@ -146,15 +148,18 @@ agent-delegate `--mode delegate --target <spec_author> --detach` で走らせる
   または `pipeline.yml` のパスを渡す（spec-implement が `roles.impl_{kind}` を読む）。
 - 記録済み host を `--host-runtime <host_runtime>` で渡し、spec-implement が
   タスクごとにこの行列を適用できるようにする。
+- `--review-fallback native-independent` を渡す。これが、single-AI 環境で
+  spec-orchestrate を完走させる明示的な境界となる。単体の spec-implement は既定の
+  `block` を維持する。
 - `kind` が不明・未マップのタスクは spec-code（claude）にフォールバックする —
   spec-implement の文書化済み従来動作。
 
-## レビュアー反転（定義はここに一元化）
+## 優先 cross-AI review と独立性（定義はここに一元化）
 
-実装成果物のレビュアーは常に実装担当の **反対の AI role** — 「作った本人がレビュー
-しない」。先に reviewer role を決め、それから host-aware 行列で backend を解決する。
-backend を先に選んではならない。この規則はここで一度だけ定義し、spec-implement が
-`--roles` マップからタスク単位で適用するため、オーケストレーターが再実装しない。
+実装成果物の preferred reviewer は実装担当の **反対の AI role** とする。先に preferred
+reviewer を決め、それから host-aware 行列で backend を解決する。backend を先に選んでは
+ならない。この規則はここで一度だけ定義し、spec-implement が `--roles` マップから
+タスク単位で適用するため、オーケストレーターが再実装しない。
 
 | タスク実装担当（kind 由来） | Reviewer AI role |
 |--------------------------|------------------|
@@ -167,20 +172,45 @@ Codex implementer が native、Claude reviewer が agent-delegate になる。Cl
 role に戻し、再び行列で解決する。agent-delegate のレビューファイルは spec-review
 互換なので、既存の修正ループがそのまま消費する。
 
+cross-AI identity は優先だが、必須の不変条件は **実行 instance と文脈の独立性** である。
+preferred cross-AI reviewer が利用不能な場合、`native-independent` は次の制御をすべて
+満たす場合だけ host AI role を使える。
+
+1. runtime-native reviewer subagent を新規起動する。オーケストレーターや implementer
+   instance を使わず、実装会話も resume しない。
+2. 成果物 / diff、仕様、レビュー基準だけを渡す。後続ラウンドでは過去の review
+   findings と修正概要だけを追加する。
+3. write tool を公開せず、reviewer 起動直前とレビュー完了後に1つずつ取得した
+   repository change fingerprint を突合する。
+   tracked worktree / staged diff の内容と、gitignore 対象外の untracked path / 内容を
+   含める。除外するのは `pipeline-config.ja.md` で分類した orchestrator 所有の run-record
+   path だけで、`.specs/` 全体を除外してはいけない。対象 fingerprint に変化があれば
+   結果を無効とし、通常の workspace drift 手順へ blocked で回す。
+4. 再レビューでもセッションレスの新規 reviewer を毎回起動する。
+5. レビュー時点の host runtime を含む record を `state.review_fallbacks` に追記し、
+   cross-AI 保証が縮退したことを PR 本文へ明記する。実装レビューでは spec-implement が
+   構造化 record を返し、オーケストレーターが追記する。worker は pipeline state を
+   書かない。
+
+runtime がこれらを保証できなければ reviewer は利用不能として blocked にする。
+オーケストレーターまたは implementer 文脈で行う same-AI review は self-review であり、
+受理しない。
+
 ## 能力フォールバック
 
-すべてのフォールバックで AI role と backend の分離を保ち、
-`state.role_overrides` と PR 本文に記録する。
+すべてのフォールバックで AI role と backend の分離を保つ。review 以外の role 変更は
+`state.role_overrides`、独立 review fallback は `state.review_fallbacks` に記録し、
+どちらも PR 本文へ記載する。
 
 - **runtime-native subagent が利用不能:** manual は worker role を反対の AI へ
   振り替えるか停止するかを人に確認する。auto は反対側の peer CLI が利用できる場合
-  だけ振り替え、使えなければ blocked にする。reviewer を implementer と同じ AI role
-  へ振り替えてはならないため、manual は互換性のある独立 reviewer を求め、auto は
-  self-review を許さず blocked にする。
+  だけ振り替え、使えなければ blocked にする。reviewer は fallback 契約に必要な独立
+  native reviewer を作れないため blocked にする。
 - **cross-AI peer CLI が利用不能**（スクリプト欠落、exit 2、`tool_unavailable`）:
-  manual は worker role を host AI へ振り替えるか人に確認する。auto は host AI へ
-  振り替えて続行する。reviewer について host AI が成果物を実装していた場合、この
-  振り替えは禁止する。manual は独立 reviewer を求め、auto は blocked にする。
+  review 以外の worker では、manual は role を host AI へ振り替えるか人に確認し、
+  auto は host AI へ振り替えて続行する。reviewer にはこの一般 role fallback を使わない。
+  spec-orchestrate が `native-independent` を自動適用し、新規 host-native reviewer で
+  続行する。その reviewer が利用不能、または workspace へ書き込んだ場合は blocked。
 - **host runtime が不明:** Step 0 の manual / auto 規則を使う。host が確定するまで
   どの role も解決しない。
 
@@ -190,7 +220,7 @@ role に戻し、再び行列で解決する。agent-delegate のレビューフ
 ## 契約テスト
 
 spec-orchestrate skill directory から
-`bash references/scripts/tests/run_tests.sh` を実行する。tracked fixture は行列4行の
-期待 mapping を受理し、各行を破損させて反転 mapping の拒否を証明する。さらに
-3 skill にある marked matrix 6コピーの一致と、不明な `host_runtime` を state が
-拒否することを検証する。
+`bash references/scripts/tests/run_tests.sh` を実行する。tracked fixture は行列4行と
+single-AI review の両方向を網羅し、単体の `block` と orchestrate の
+`native-independent` を検証する。さらに3 skill の marked matrix を突合し、不正な
+`host_runtime` と review-fallback state を拒否することを確認する。

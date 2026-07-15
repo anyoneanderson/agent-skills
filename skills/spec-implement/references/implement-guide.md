@@ -752,6 +752,11 @@ agent-delegate backend. The Phase 6 loop and its review gates stay intact.
   required. Each task's implementer and reviewer AI roles are resolved first;
   their execution backends are resolved second.
 
+`--review-fallback` applies only to review in this path. Its default is `block`,
+which preserves standalone `spec-implement --roles` behavior when the preferred
+cross-AI reviewer is unavailable. `native-independent` must be explicit;
+spec-orchestrate passes it so a single-AI installation can still complete.
+
 The loop's control flow is identical in both paths: per-phase iteration, the fix loop
 with its 3-iteration cap, gate evaluation (`fix_before: implementation` re-run; deferred findings and Minor logged),
 checkbox marking, and commit strategy. Only the *executor* of each step is resolved per
@@ -841,9 +846,9 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 - `status == blocked` → read `blocker` / `blocker_category`; feed into the fix loop
   (see below) or surface to the caller.
 
-### Reviewer Inversion and Backend Resolution
+### Preferred Reviewer and Backend Resolution
 
-First choose the reviewer AI role, then resolve its backend:
+First choose the preferred reviewer AI role, then resolve its backend:
 
 ```
 reviewer = claude  if owner == codex
@@ -852,8 +857,8 @@ reviewer = codex   if owner == claude
 
 If `reviewer == host_runtime`, run spec-review in a runtime-native reviewer
 subagent and do not start agent-delegate. If they differ, use the peer review
-path below with `--target "$reviewer"`. This order prevents self-review on both
-Codex and Claude hosts.
+path below with `--target "$reviewer"`. Cross-AI review is the preferred path;
+review independence is the invariant that must always hold.
 
 ### Cross-AI Peer Review (`reviewer != host_runtime`)
 
@@ -882,6 +887,42 @@ The review file carries the same severity sections (`### Critical`, `### Improve
 `### Minor`) and `Gate: PASS|FAIL` line as spec-review output, so the existing gate logic
 in "Review Gate Details" consumes it with no change.
 
+### Independent Native Review Fallback
+
+Apply this path only when all of the following are true:
+
+1. the preferred reviewer differs from `host_runtime`;
+2. agent-delegate is missing, exits `2`, or reports
+   `blocker_category: tool_unavailable`; and
+3. `--review-fallback native-independent` was explicitly supplied.
+
+The fallback reviewer uses the host AI role, but it is not the implementer. Each
+review round must:
+
+- spawn a fresh runtime-native **reviewer** subagent through the runtime's new
+  subagent primitive; never reuse the orchestrator context, resume the
+  implementer instance, or continue the implementation conversation;
+- provide only the diff/artifact, specs, review criteria, and, on re-review,
+  prior findings plus the fix summary;
+- expose read-only tools and compare a repository change fingerprint taken
+  immediately before reviewer launch with one taken after review. Fingerprint
+  tracked worktree and staged diff content plus non-ignored untracked path and
+  content; exclude only caller-owned run-record paths, never the whole `.specs/`
+  directory. Any change in the included fingerprint invalidates the review:
+  discard the result and block for the normal workspace-drift procedure;
+- return the same spec-review-compatible structured content as the preferred
+  path; the orchestrator, not the reviewer, materializes the review file.
+
+Use `--review-fallback block` when the option is omitted. If the runtime cannot
+guarantee a new reviewer instance or the runtime-native reviewer is unavailable,
+report a blocker; do not perform the review in the orchestrator itself. Return
+every fallback launch to the caller as a structured `review_fallbacks` record:
+phase (`implement`), artifact/task id, round, `host_runtime` at review time,
+preferred/actual role, backend, reason, and independence. spec-orchestrate is
+the sole state writer and appends these records to `state.review_fallbacks`;
+standalone spec-implement lists them in its completion summary. The PR surfaces
+each entry as reduced cross-AI assurance.
+
 ### Fix Loop Routing
 
 The fix loop's structure (max 3 iterations, then downgrade/ask) is unchanged. Only the
@@ -889,8 +930,8 @@ fix executor follows the task's implementer:
 
 | Implementer backend | Fix step | Re-review |
 |---|---|---|
-| runtime-native | Re-run the native spec-code subagent with `--feedback {findings}` | Resolve the opposite reviewer AI through the matrix again |
-| agent-delegate | `--mode delegate --target <owner> --detach --resume {thread_id}` with findings appended | Resolve the opposite reviewer AI through the matrix again |
+| runtime-native | Re-run the native spec-code subagent with `--feedback {findings}` | Resolve the preferred opposite reviewer AI again; reapply the explicit fallback policy if unavailable |
+| agent-delegate | `--mode delegate --target <owner> --detach --resume {thread_id}` with findings appended | Resolve the preferred opposite reviewer AI again; reapply the explicit fallback policy if unavailable |
 
 For agent-delegate re-review across rounds, reuse the review session with
 `--resume {thread_id}` (thread_id read from the prior `report.json`) to preserve context
@@ -904,12 +945,16 @@ satisfies the contract's resume rule.
 - **Native subagent unavailable:** report upward; the orchestrator applies its
   manual/auto role fallback. Standalone asks before changing the owner AI role.
 - **Cross-AI peer unavailable** (script missing, exit `2`, or
-  `blocker_category: tool_unavailable`): report upward; the orchestrator applies
-  its manual/auto fallback. Standalone asks before reassigning to the host AI.
-  A reviewer must never be reassigned to the implementer's AI role.
+  `blocker_category: tool_unavailable`): for implementation, report upward so
+  the orchestrator can apply its manual/auto owner fallback. For review, default
+  `--review-fallback block` stops. Explicit `native-independent` uses the
+  independent native review contract above; it never reuses the implementer
+  instance even though both workers have the same AI role.
 
-Do not silently choose a fallback. The orchestrator records every reassignment
-in `state.role_overrides` and the PR body.
+Do not silently choose a fallback. spec-implement returns worker role changes
+and independent review fallbacks to its caller. spec-orchestrate, as sole state
+writer, records them in `state.role_overrides` / `state.review_fallbacks` and
+puts both in the PR body; standalone reports them without writing pipeline state.
 
 Never inline agent-delegate's internal implementation; depend only on the flags and
 `report.json` schema in its contract.

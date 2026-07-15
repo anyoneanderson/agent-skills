@@ -1,0 +1,13 @@
+host_runtime	preferred_role	peer_available	native_reviewer_available	policy	outcome	actual_role	backend
+codex	claude	yes	yes	block	preferred	claude	agent-delegate
+claude	codex	yes	yes	native-independent	preferred	codex	agent-delegate
+codex	codex	yes	yes	native-independent	preferred	codex	runtime-native
+claude	claude	yes	yes	block	preferred	claude	runtime-native
+codex	codex	yes	no	native-independent	blocked	-	-
+claude	claude	yes	no	block	blocked	-	-
+codex	claude	no	yes	block	blocked	-	-
+claude	codex	no	yes	block	blocked	-	-
+codex	claude	no	yes	native-independent	fallback	codex	runtime-native
+claude	codex	no	yes	native-independent	fallback	claude	runtime-native
+codex	claude	no	no	native-independent	blocked	-	-
+claude	codex	no	no	native-independent	blocked	-	-

@@ -751,6 +751,11 @@ runtime-native subagent か cross-AI agent-delegate backend を選びます。Ph
   が必須です。各タスクの implementer / reviewer AI role を先に決め、その後で実行
   backend を解決します。
 
+`--review-fallback` はこの経路のレビューだけに適用します。既定値は `block` で、
+preferred cross-AI reviewer が利用不能な場合に単体の `spec-implement --roles` が停止する
+従来の意図を維持します。`native-independent` は明示指定が必要です。spec-orchestrate は
+single-AI 環境でも完走できるよう、この値を渡します。
+
 ループの制御フローは両経路で同一です（フェーズ単位の反復、3回上限の修正ループ、
 ゲート判定＝ `fix_before: implementation` は再実行・先送りの指摘と Minor は記録のみ、チェックボックス更新、コミット方針）。
 タスクごとに解決されるのは各ステップの**実行主体だけ**です。
@@ -835,9 +840,9 @@ report="$(printf '%s\n' "$launch" | tail -1)"
   オーケストレーターが持つ。相手には「コミットするな」と指示する）。
 - `status == blocked` → `blocker` / `blocker_category` を読み、修正ループ（下記）に回すか呼び出し元に上げる。
 
-### Reviewer 反転と backend 解決
+### Preferred reviewer と backend 解決
 
-先に reviewer AI role を決め、その後で backend を解決します。
+先に preferred reviewer AI role を決め、その後で backend を解決します。
 
 ```
 reviewer = claude  if owner == codex
@@ -846,8 +851,8 @@ reviewer = codex   if owner == claude
 
 `reviewer == host_runtime` なら runtime-native reviewer subagent で spec-review を
 実行し、agent-delegate は起動しません。異なれば以下の peer review 経路で
-`--target "$reviewer"` を使います。この順序により Codex / Claude のどちらが host
-でも self-review を防ぎます。
+`--target "$reviewer"` を使います。cross-AI review は優先経路であり、常に守るべき
+不変条件はレビュー実行コンテキストの独立性です。
 
 ### Cross-AI peer review（`reviewer != host_runtime`）
 
@@ -876,6 +881,40 @@ gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
 `### Minor`）と `Gate: PASS|FAIL` 行を持つため、「Review Gate Details」の既存ゲートロジックが
 無改修でそのまま消費できます。
 
+### 独立 native review フォールバック
+
+次の条件をすべて満たす場合にだけ、この経路を適用します。
+
+1. preferred reviewer が `host_runtime` と異なる。
+2. agent-delegate が不在、exit `2`、または
+   `blocker_category: tool_unavailable` を返した。
+3. `--review-fallback native-independent` が明示指定されている。
+
+fallback reviewer は host AI role を使いますが、implementer そのものではありません。
+各レビューラウンドで次を守ります。
+
+- runtime の新規 subagent 起動機構で runtime-native **reviewer** subagent を毎回新規に
+  起動する。オーケストレーターの文脈を再利用せず、implementer instance を resume
+  せず、実装会話を継続しない。
+- diff / 成果物、仕様、レビュー基準だけを渡す。再レビューではこれに過去の findings と
+  修正概要だけを加える。
+- 読み取り専用ツールだけを公開し、reviewer 起動直前とレビュー後の repository change
+  fingerprint を突合する。fingerprint は tracked worktree / staged diff の内容と、
+  gitignore 対象外の untracked path / 内容を含める。除外するのは caller が所有する
+  run-record path だけで、`.specs/` 全体を除外してはいけない。対象 fingerprint に変化が
+  あれば review result を破棄し、通常の workspace drift 手順へ blocked で回す。
+- preferred 経路と同じ spec-review 互換の構造化内容を返す。レビューファイルを
+  materialize するのは reviewer ではなくオーケストレーターとする。
+
+option 省略時は `--review-fallback block` とします。runtime が新規 reviewer instance を
+保証できない場合や runtime-native reviewer が利用不能な場合は blocker を報告し、
+オーケストレーター自身でレビューしてはいけません。各 fallback 起動を構造化された
+`review_fallbacks` record として呼び出し元へ返します。record は phase（`implement`）・
+artifact/task id・round・レビュー時点の `host_runtime`・preferred/actual role・backend・
+reason・independence を持ちます。state を書くのは spec-orchestrate だけであり、返却 record
+を `state.review_fallbacks` へ追記します。単体の spec-implement は pipeline state を
+書かず、completion summary に列挙します。PR には cross-AI 保証の縮退を明記します。
+
 ### 修正ループのルーティング
 
 修正ループの構造（最大3回、その後は降格 or ユーザー確認）は不変です。修正の実行主体だけが
@@ -883,8 +922,8 @@ gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
 
 | Implementer backend | 修正ステップ | 再レビュー |
 |---|---|---|
-| runtime-native | native spec-code subagent を `--feedback {findings}` 付きで再実行 | 反対の reviewer AI を再び行列で解決 |
-| agent-delegate | `--mode delegate --target <owner> --detach --resume {thread_id}`（findings を追記） | 反対の reviewer AI を再び行列で解決 |
+| runtime-native | native spec-code subagent を `--feedback {findings}` 付きで再実行 | preferred の反対 reviewer AI を再解決し、利用不能なら明示された fallback policy を再適用 |
+| agent-delegate | `--mode delegate --target <owner> --detach --resume {thread_id}`（findings を追記） | preferred の反対 reviewer AI を再解決し、利用不能なら明示された fallback policy を再適用 |
 
 ラウンドをまたぐ agent-delegate 再レビューは `--resume {thread_id}`（thread_id は前ラウンドの
 `report.json` から取得）でレビューセッションを継続し、文脈を保ってトークンを節約します。resume は
@@ -897,12 +936,16 @@ gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
 - **native subagent が利用不能:** 上位へ報告し、オーケストレーターが manual / auto の
   role fallback を適用します。単体では owner AI role を変える前に人へ確認します。
 - **cross-AI peer が利用不能**（スクリプト不在、exit `2`、または
-  `blocker_category: tool_unavailable`）: 上位へ報告し、オーケストレーターが
-  manual / auto fallback を適用します。単体では host AI へ振り替える前に確認します。
-  reviewer を implementer と同じ AI role へ振り替えてはなりません。
+  `blocker_category: tool_unavailable`）: 実装では上位へ報告し、オーケストレーターが
+  manual / auto の owner fallback を適用します。レビューでは既定の
+  `--review-fallback block` なら停止します。明示された `native-independent` なら上記の
+  独立 native review 契約を使います。同じ AI role でも implementer instance は
+  決して再利用しません。
 
-fallback を黙って選びません。オーケストレーターはすべての振り替えを
-`state.role_overrides` と PR 本文に記録します。
+fallback を黙って選びません。spec-implement は worker role の変更と独立 review
+fallback を呼び出し元へ返します。唯一の state writer である spec-orchestrate が
+`state.role_overrides` / `state.review_fallbacks` へ記録して PR 本文へ記載します。
+単体実行では pipeline state を書かず、completion summary に表示します。
 
 agent-delegate の内部実装を取り込んではいけません。依存するのは契約に定義されたフラグと
 `report.json` スキーマのみです。

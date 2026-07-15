@@ -82,6 +82,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
   },
   "threads": {"spec_reviewer": "codex-thread-abc"},
   "role_overrides": {},
+  "review_fallbacks": [],
   "arbitrations": [
     {"phase": "spec_review", "signal": "S1", "decision": "continue", "note": "...", "ts": "..."}
   ],
@@ -100,9 +101,24 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 | `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, the `fix_required` count (fix-loop findings), finding fingerprints, class keys, and the gate. `evaluate` entries also carry a `blocked` count (blocked cases are neither critical nor improvement; see `phases/evaluate.md`). Consumed by stall detection (`stall-detection.md`) |
 | `threads` | Peer session ids for resume (e.g. `spec_reviewer`) |
 | `role_overrides` | Roles reassigned this run (capability fallback or arbitration swap) |
+| `review_fallbacks` | Review rounds where an unavailable preferred cross-AI reviewer was replaced by a fresh read-only host-native reviewer. Each entry records phase, artifact, round, the host runtime at review time, preferred/actual AI role, backend, reason, and independence guarantee. Omit or use `[]` when unused |
 | `arbitrations` | Stall adjudication records (see `stall-detection.md`) |
 | `repairs` | Optional. State-drift repairs applied on resume or after a failed integrity check (see §State Integrity Check) |
 | `ts_updated` | Last write timestamp |
+
+When the fallback is used, append one record per review round:
+
+```json
+{"phase":"implement","artifact":"T001","round":1,
+ "host_runtime":"codex","preferred_role":"claude","actual_role":"codex",
+ "backend":"runtime-native","reason":"peer_unavailable",
+ "independence":"fresh_subagent"}
+```
+
+The nested `host_runtime` is historical: it is the host used for that review,
+and `actual_role` must equal it. Do not validate old entries against the
+top-level `host_runtime`, because the top-level value is refreshed when a run is
+resumed from another runtime.
 
 ### Ownership: orchestrator writes, workers do not even read
 

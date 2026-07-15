@@ -41,6 +41,32 @@ case "$host_runtime" in
   *) report "host_runtime must be 'claude' or 'codex' (got '$host_runtime')" ;;
 esac
 
+# --- independent review fallback records ------------------------------------
+# Older states may omit review_fallbacks. When present, every entry describes
+# the only permitted same-AI review fallback: a fresh host-native reviewer used
+# because the preferred cross-AI peer was unavailable. Its nested host_runtime
+# is historical; the top-level host may change when another runtime resumes.
+if ! jq -e '
+  . as $state
+  | ($state.review_fallbacks // []) as $fallbacks
+  | (($fallbacks | type) == "array")
+    and all($fallbacks[];
+      ((.phase == "spec_review") or (.phase == "implement"))
+      and ((.artifact | type) == "string") and ((.artifact | length) > 0)
+      and ((.round | type) == "number") and (.round >= 1) and (.round == (.round | floor))
+      and ((.preferred_role == "claude") or (.preferred_role == "codex"))
+      and ((.actual_role == "claude") or (.actual_role == "codex"))
+      and ((.host_runtime == "claude") or (.host_runtime == "codex"))
+      and (.preferred_role != .actual_role)
+      and (.actual_role == .host_runtime)
+      and (.backend == "runtime-native")
+      and (.reason == "peer_unavailable")
+      and (.independence == "fresh_subagent")
+    )
+' "$STATE" >/dev/null 2>&1; then
+  report "review_fallbacks must contain only self-contained fresh host-native peer_unavailable review records"
+fi
+
 # --- completed_phases gap check ------------------------------------------------
 # Every phase that precedes the current one in the canonical order must be
 # recorded in completed_phases. A gap means a phase ran without its state update

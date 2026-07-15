@@ -81,7 +81,7 @@ The orchestrator runs one loop until the pipeline reaches a terminal state:
    different role → agent-delegate with an explicit target.
 4. Verify the worker's result. If it fails machine verification, do not advance.
 5. Update pipeline-state.json (completed phase, round counts, fingerprints,
-   thread ids), run the state integrity check
+   thread ids, role overrides, review fallbacks), run the state integrity check
    (references/scripts/pipeline-state-check.sh — must exit clean), and refresh
    the run marker (pipeline-config.md §Run Marker and Watchdog).
 6. Select the next phase per the Transition Table and dispatch it in this same
@@ -228,8 +228,8 @@ In every case, state is preserved so the run is resumable.
 |---|---|
 | Worker skill not installed | Show its install step and stop; state kept (resumable) |
 | Host runtime cannot be determined | manual: ask for `claude` or `codex` and record it. auto: preserve state and stop blocked with `host_runtime_unknown` |
-| Runtime-native subagent unavailable | manual: ask whether to reassign the worker AI role or stop. auto: reassign only if the opposite peer CLI is available; otherwise block. Never reassign a reviewer to the implementer's AI |
-| Cross-AI agent-delegate target unavailable | manual: ask whether to reassign the worker role to the host AI. auto: reassign and record it unless that would make an implementer review its own work; in that case block |
+| Runtime-native subagent unavailable | For non-review work, manual asks whether to reassign the worker AI role or stop; auto reassigns only if the opposite peer CLI is available. For review, block because the independent native fallback cannot be guaranteed |
+| Cross-AI agent-delegate target unavailable | For non-review work, manual asks whether to reassign the worker role to the host AI and auto reassigns it. For review, launch a fresh read-only host-native reviewer under the `native-independent` contract; record reduced assurance. Block only if that reviewer cannot be created |
 | `gh` auth error / Issue not found | Stop in intake; show the account-check steps (see GIT_ACCOUNTS.md) |
 | App fails to start during evaluate | Mark dependent cases blocked; show the recipe and `ready_pattern`. Blocked ≠ failed |
 | Worker result file is malformed | Re-run that worker once; if it recurs, mark blocked and route to arbitration |

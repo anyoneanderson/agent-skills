@@ -86,7 +86,7 @@ Write the initial `pipeline-state.json`:
 { "feature": "<name>", "mode": "manual|auto", "issue": <N|null>,
   "language": "en|ja", "host_runtime": "claude|codex", "phase": "spec_generate",
   "completed_phases": ["intake"], "rounds": {}, "threads": {},
-  "role_overrides": {}, "arbitrations": [] }
+  "role_overrides": {}, "review_fallbacks": [], "arbitrations": [] }
 ```
 The full schema and the jq/awk write idiom are in `../pipeline-config.md`;
 intake writes the minimum required to enter spec_generate. Determine

@@ -82,7 +82,7 @@ pipeline-metrics.jsonl
 { "feature": "<name>", "mode": "manual|auto", "issue": <N|null>,
   "language": "en|ja", "host_runtime": "claude|codex", "phase": "spec_generate",
   "completed_phases": ["intake"], "rounds": {}, "threads": {},
-  "role_overrides": {}, "arbitrations": [] }
+  "role_overrides": {}, "review_fallbacks": [], "arbitrations": [] }
 ```
 詳細スキーマと jq/awk の書き込み流儀は `../pipeline-config.ja.md` にある。intake は
 spec_generate に入るのに必要な最小限を書く。`host_runtime` は現在の runtime から

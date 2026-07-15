@@ -15,6 +15,7 @@ English version: [retrospective-format.md](retrospective-format.md)
 | `pipeline-state.json` `rounds` | ループ別ラウンド数（`spec_review`、`evaluate`）、severity 件数、ゲート |
 | `pipeline-state.json` `arbitrations` | 各停滞シグナル・裁定・結果 |
 | `pipeline-state.json` `role_overrides` | ロール入れ替え（能力フォールバック or 裁定） |
+| `pipeline-state.json` `review_fallbacks` | cross-AI review 保証の縮退（phase・artifact・preferred/actual role） |
 | 全ワーカー `report.json` | `blocker_category`（カテゴリ別に集計）、`status` |
 | `evaluate-{n}.md` | 不合格項目（項目ID、要件ID） |
 

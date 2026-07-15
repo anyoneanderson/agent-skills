@@ -17,6 +17,7 @@ Read only structured records — no re-interpretation of prose:
 | `pipeline-state.json` `rounds` | rounds per loop (`spec_review`, `evaluate`), severity counts, gates |
 | `pipeline-state.json` `arbitrations` | each stall signal, decision, and result |
 | `pipeline-state.json` `role_overrides` | owner swaps (capability fallback or arbitration) |
+| `pipeline-state.json` `review_fallbacks` | reduced cross-AI review assurance (phase, artifact, preferred/actual role) |
 | every worker `report.json` | `blocker_category` (tally by category), `status` |
 | `evaluate-{n}.md` | failing cases (case id, requirement id) |
 

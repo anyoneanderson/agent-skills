@@ -115,13 +115,16 @@ fresh state evaluation; it does not convert a missing report into failure.
 ### spec_review (adversarial spec review)
 
 Resolve `spec_reviewer` through the matrix, then run it in review/read-only mode.
-A matching role uses a native reviewer subagent. A different role uses
+A matching role uses a fresh native reviewer subagent, separate from the spec
+author context. A different role uses
 agent-delegate `--mode review --target <spec_reviewer>`. Use synchronous
 agent-delegate execution only with a concrete basis for completion within 5
 minutes; otherwise use `--detach` and the expected-run wait above.
 Round 1 creates the session; rounds ≥ 2 resume it with `--resume <thread_id>`
 from `threads.spec_reviewer` in state (a review session is created read-only, the
-only sandbox a resume can keep).
+only sandbox a resume can keep). If the cross-AI peer is unavailable, use the
+independent native review fallback below instead; it is sessionless and launches
+a fresh reviewer subagent each round.
 
 ### spec_generate (spec author)
 
@@ -149,16 +152,19 @@ per-task `kind → owner` routing internally (no double management).
   or pass the `pipeline.yml` path (spec-implement reads `roles.impl_{kind}` from it).
 - Pass the recorded host as `--host-runtime <host_runtime>` so spec-implement
   applies this matrix per task.
+- Pass `--review-fallback native-independent`. This is the explicit boundary
+  that lets spec-orchestrate finish on a single-AI installation; standalone
+  spec-implement keeps its default `block` behavior.
 - A task whose `kind` is unknown or unmapped falls back to spec-code (claude) —
   spec-implement's documented legacy behavior.
 
-## Reviewer Inversion (single definition)
+## Preferred Cross-AI Review and Independence (single definition)
 
-The reviewer of an implementation artifact is always the **opposite AI role**
-from its implementer — "the author does not review their own work". Choose the
-reviewer role first, then resolve that role through the host-aware matrix. Never
-choose a backend first. This rule is defined here once; spec-implement applies it
-per task from the `--roles` map, so it is not re-implemented by the orchestrator.
+The preferred reviewer of an implementation artifact is the **opposite AI role**
+from its implementer. Choose the preferred reviewer role first, then resolve it
+through the host-aware matrix. Never choose a backend first. This rule is
+defined here once; spec-implement applies it per task from the `--roles` map, so
+it is not re-implemented by the orchestrator.
 
 | Task implementer (from `kind`) | Reviewer AI role |
 |--------------------------------|------------------|
@@ -172,21 +178,49 @@ native review respectively. Fixes return to the implementer role and resolve
 through the matrix again. An agent-delegate review file is spec-review-compatible,
 so the existing fix loop consumes it unchanged.
 
+Cross-AI identity is preferred; **independent execution identity and context are
+required**. When the preferred cross-AI reviewer is unavailable,
+`native-independent` may use the host AI role only under all of these controls:
+
+1. launch a fresh runtime-native reviewer subagent, never the orchestrator or
+   implementer instance and never a resume of the implementation conversation;
+2. give it only the artifact/diff, specs, review criteria, and prior review
+   findings plus fix summary on later rounds;
+3. expose no write tools and compare one repository change fingerprint captured
+   immediately before reviewer launch with another captured after review
+   completion: tracked worktree and staged diff content plus non-ignored
+   untracked path and content. Exclude only orchestrator-owned run-record paths
+   classified in `pipeline-config.md`, never the whole `.specs/` directory. Any
+   change in the included fingerprint invalidates the result and blocks the run
+   for the normal workspace-drift procedure;
+4. launch a fresh sessionless reviewer again for every re-review round; and
+5. append a `state.review_fallbacks` entry containing the host runtime at review
+   time and disclose reduced cross-AI assurance in the PR body. For implement
+   reviews, spec-implement returns the structured entry and the orchestrator
+   appends it; workers never write pipeline state.
+
+If the runtime cannot guarantee those controls, the reviewer is unavailable and
+the pipeline blocks. A same-AI review performed in the orchestrator or the
+implementer context is self-review and is never accepted.
+
 ## Capability Fallbacks
 
-Every fallback must preserve the separation between AI role and backend and must
-be recorded in `state.role_overrides` and the PR body.
+Every fallback must preserve the separation between AI role and backend.
+Non-review role changes are recorded in `state.role_overrides`; independent
+review fallbacks are recorded in `state.review_fallbacks`. Both appear in the PR
+body.
 
 - **Runtime-native subagent unavailable:** manual asks whether to reassign the
   worker role to the opposite AI or stop. Auto reassigns to the opposite AI only
-  when its peer CLI is available; otherwise it blocks. A reviewer may never be
-  reassigned to its implementer's AI role, so manual asks for a compatible
-  independent reviewer and auto blocks instead of allowing self-review.
+  when its peer CLI is available; otherwise it blocks. A reviewer blocks because
+  the runtime cannot create the independent native reviewer required by the
+  fallback contract.
 - **Cross-AI peer CLI unavailable** (script missing, exit 2, or
-  `tool_unavailable`): manual asks whether to reassign the worker role to the
-  host AI. Auto reassigns it to the host AI and continues. For a reviewer, that
-  reassignment is forbidden when the host AI implemented the artifact; manual
-  asks for an independent reviewer and auto blocks.
+  `tool_unavailable`): for a non-review worker, manual asks whether to reassign
+  its role to the host AI; auto reassigns it and continues. A reviewer does not
+  use this general role fallback: spec-orchestrate automatically applies
+  `native-independent` and continues with a fresh host-native reviewer. If that
+  reviewer is unavailable or writes to the workspace, block.
 - **Host runtime unknown:** use the Step 0 manual/auto behavior. No role can be
   resolved until the host is known.
 
@@ -196,7 +230,7 @@ Capability fallback is distinct from the stall-driven role swap in arbitration
 ## Contract Test
 
 Run `bash references/scripts/tests/run_tests.sh` from the spec-orchestrate skill
-directory. The tracked fixture covers all four matrix rows with a positive
-expected mapping, corrupts each row to prove the reversed mapping is rejected,
-checks all six marked matrix copies across the three skills, and verifies that
-state rejects an unknown `host_runtime`.
+directory. The tracked fixtures cover all four matrix rows and both single-AI
+review directions, prove standalone `block` versus orchestrated
+`native-independent`, check all marked matrix copies across the three skills,
+and verify state rejects invalid host and review-fallback records.

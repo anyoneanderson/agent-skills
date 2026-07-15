@@ -34,6 +34,7 @@ Coordinate worker skills (spec-code, spec-review, spec-test) to implement from s
 | `--dry-run` | Show execution plan without making any changes |
 | `--roles {map}` | Per-task owner routing by `kind`. Format: `ui=claude,backend=codex,test=codex`, or a path to a `pipeline.yml` whose `roles.impl_{kind}` keys supply the mapping. Omitted → every task uses spec-code and every review uses spec-review (legacy behavior, no agent-delegate involvement). |
 | `--host-runtime {claude\|codex}` | Runtime executing this skill. Required with `--roles`; the orchestrator passes its recorded `host_runtime` so AI role and execution backend are resolved separately. |
+| `--review-fallback {block\|native-independent}` | Review-only capability policy for the `--roles` path. Default `block` preserves standalone behavior. `native-independent` lets a missing cross-AI reviewer fall back to a fresh, read-only runtime-native reviewer subagent; spec-orchestrate passes this explicitly. |
 
 ## Role: Orchestrator Only
 
@@ -218,9 +219,9 @@ each step is resolved per task.
      use the contract's 15–30-second report-first state wait. The caller-owned
      timeout is at least 30 minutes.
 
-**Reviewer inversion (review gate):** choose the reviewer as the opposite AI role
-from the task's implementer, then resolve that reviewer through the same
-host-aware matrix ("the author does not review their own work"):
+**Reviewer inversion (review gate):** choose the preferred reviewer as the
+opposite AI role from the task's implementer, then resolve that reviewer through
+the same host-aware matrix:
 
 | Implementer AI role | Reviewer AI role |
 |---|---|
@@ -233,6 +234,17 @@ concrete <=5-minute basis; otherwise detach). Fixes route to the implementer AI
 role and resolve through the same matrix again. An agent-delegate review file is
 spec-review-compatible (severity sections + `Gate: PASS|FAIL`), so the existing
 fix loop consumes it unchanged.
+
+If that cross-AI reviewer is unavailable, the default `--review-fallback block`
+reports a blocker. Only `native-independent` may continue with the host AI role,
+and only by spawning a **fresh runtime-native reviewer subagent** that is not the
+implementer instance, does not resume or receive the implementation conversation,
+has no write tools, and leaves the workspace unchanged. If that independent
+native reviewer cannot be created, block. Each use is recorded in orchestrator
+state and the PR body; never disguise it as cross-AI review. To preserve state
+ownership, spec-implement returns one structured fallback record per use to its
+caller. spec-orchestrate appends those records to state and the PR; a standalone
+caller shows them in the completion summary without writing pipeline state.
 
 agent-delegate is a public-contract dependency: call the script per
 `agent-delegate/references/contract.md` and **always pass `--target` explicitly** (the
@@ -284,7 +296,8 @@ never survive only in a run record.
 | Worker skill not installed | Error: suggest `npx skills add anyoneanderson/agent-skills --skill {name}` |
 | `--roles` provided without a valid `--host-runtime` | Report a configuration blocker to the orchestrator. Standalone: ask the user for `claude` or `codex`; do not guess |
 | Runtime-native subagent unavailable for an owned task | Report the blocker to the orchestrator, which applies its manual/auto role fallback. Standalone: ask before reassigning the AI role |
-| agent-delegate unavailable for a cross-AI task (script missing / exit 2 / `tool_unavailable`) | Report the blocker to the orchestrator, which applies its manual/auto role fallback. Standalone: ask before reassigning to the host AI; never allow self-review |
+| agent-delegate unavailable for cross-AI implementation (script missing / exit 2 / `tool_unavailable`) | Report the blocker to the orchestrator, which applies its manual/auto owner fallback. Standalone: ask before reassigning to the host AI |
+| agent-delegate unavailable for cross-AI review | With default `--review-fallback block`, report a blocker. With explicit `native-independent`, use a fresh read-only host-native reviewer subagent and record the degraded review; if that subagent is unavailable, block |
 | Review FAIL after 3 iterations | Ask user to decide |
 | Test FAIL after fix attempt | Ask user to decide |
 
