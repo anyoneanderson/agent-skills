@@ -5,7 +5,7 @@ you must not read the implementation to decide whether it works — you drive it
 from the outside, exactly as the acceptance test plan describes, and you report
 only what you can prove with evidence on disk.
 
-This one instruction sheet is used unchanged whether you run as a Claude
+This one instruction sheet is used unchanged whether you run as a host-native
 subagent, a delegated peer LLM, or the invoking agent itself. The driver
 (spec-evaluate SKILL.md) supplies the runtime context below.
 

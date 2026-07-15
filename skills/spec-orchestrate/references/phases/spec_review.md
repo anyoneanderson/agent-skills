@@ -2,19 +2,21 @@
 
 Run the adversarial specification review and loop until the review gate passes.
 This is the expensive semantic check, run only after inspect is clean. The
-review backend is whatever the `spec_reviewer` role resolves to
-(`../role-dispatch.md` → "spec_review"): codex via agent-delegate, or a Claude
-subagent.
+review backend is whatever the `spec_reviewer` AI role and recorded
+`host_runtime` resolve to (`../role-dispatch.md` → "spec_review"): a matching
+role uses a runtime-native subagent; a different role uses agent-delegate. If
+that cross-AI peer is unavailable, use a fresh independent host-native reviewer.
 
 ## Input
 
 - The four spec files (the reviewer reads the files themselves, not a diff).
 - The prior round's fix summary and the accumulated prior-round findings, for
   round ≥ 2.
-- `spec_reviewer` role → backend (default codex via agent-delegate), resolved by
+- `spec_reviewer` AI role plus the recorded `host_runtime`, resolved by
   `../role-dispatch.md` → "spec_review".
-- For a codex reviewer: the session `thread_id` from `state.threads.spec_reviewer`,
-  for resume on round ≥ 2.
+- For an agent-delegate backend: the session `thread_id` from
+  `state.threads.spec_reviewer`, for resume on round ≥ 2.
+- The orchestrator review fallback policy: `native-independent`.
 
 ## Action
 
@@ -44,9 +46,10 @@ fixes is `implementation` only for secret leak / data loss / merge-condition
 bypass / infeasibility). This matters especially for a resuming backend, which
 otherwise keeps drilling into the same area it explored last round.
 
-**codex backend (agent-delegate):**
-1. Round 1: launch agent-delegate `--mode review` (read-only) with the spec file
-   list, adversarial perspectives, and any prior fix summary.
+**Cross-AI backend (agent-delegate):**
+1. Round 1: launch agent-delegate `--mode review --target <spec_reviewer>`
+   (read-only) with the spec file list, adversarial perspectives, and any prior
+   fix summary.
 2. Round ≥ 2: resume the same session with `--resume <thread_id>` so context
    carries over. Review sessions start read-only, which is the only
    sandbox that resume can keep, so only resume sessions created read-only.
@@ -57,20 +60,36 @@ otherwise keeps drilling into the same area it explored last round.
    5-minute basis and therefore detaches. A caller-owned timeout for specification
    review or repair is at least 20 minutes.
 
-**claude backend (subagent):**
-1. Round 1: dispatch a review subagent with the spec file list and adversarial
-   perspectives; it emits the same structured review file.
-2. Round ≥ 2: a Claude subagent has no `thread_id` to resume, so continue
+**Runtime-native backend (subagent):**
+1. Round 1: dispatch a fresh review subagent, separate from the spec author and
+   orchestrator contexts, with the spec file list and adversarial perspectives;
+   it returns the same structured review content, which the orchestrator writes
+   to the review file.
+2. Round ≥ 2: a native subagent has no agent-delegate `thread_id` to resume, so continue
    **sessionless**: pass the prior-round fix summary plus the prior rounds'
    findings (from `state.rounds.spec_review`) into a fresh subagent so it does
-   not re-raise resolved points. This is the resume-equivalent for claude.
+   not re-raise resolved points. This is the resume-equivalent for native review.
+3. Expose no write tools and compare one repository change fingerprint taken
+   immediately before reviewer launch with another taken after review
+   completion. Include tracked worktree and staged diff content plus non-ignored
+   untracked path and content; exclude only
+   orchestrator-owned run-record paths from `../pipeline-config.md`, never the
+   whole `.specs/` directory. Any change in the included fingerprint invalidates
+   the result and blocks the run for the normal workspace-drift procedure.
+
+When the configured cross-AI reviewer is unavailable, this same runtime-native
+path is the `native-independent` fallback. The actual reviewer AI role becomes
+`host_runtime`, but its execution instance and context remain independent from
+the spec author. Record one `state.review_fallbacks` entry per round. If a fresh
+native reviewer cannot be guaranteed, block instead of reviewing in the
+orchestrator context.
 
 After either backend completes, read the review file's Gate line, severity
 counts, and `fix_before` tags.
 
 ## Output
 
-- `review-spec-{round}.md`, the peer reviewer's structured review file (severity
+- `review-spec-{round}.md`, the independent reviewer's structured review file (severity
   sections + `fix_before` tags + `Gate: PASS|FAIL`), written for
   `.specs/{feature}/`.
 
@@ -102,17 +121,21 @@ counts, and `fix_before` tags.
   `fix_before: implementation`), class keys (path + section, per
   `../stall-detection.md` S4), and the gate result. This entry is the sole
   input to stall detection.
-- codex backend only: record the reviewer `thread_id` under
-  `threads.spec_reviewer` for resume. A claude subagent has no thread_id (it
-  continues sessionless), so leave it unset.
+- agent-delegate backend only: record the reviewer `thread_id` under
+  `threads.spec_reviewer` for resume. A runtime-native subagent has no such
+  thread id (it continues sessionless), so leave it unset.
+- When `native-independent` was used, append the fallback record to
+  `review_fallbacks` with phase (`spec_review`), artifact (`spec`), round,
+  `host_runtime` at review time, preferred/actual role, runtime-native backend,
+  `peer_unavailable` reason, and `fresh_subagent` independence.
 - Evaluate the stall signals S1–S4 over the accumulated rounds
   (`../stall-detection.md`). If a signal fires, set `phase` to arbitration.
 
 ## Transitions
 
 - Any `fix_before: implementation` finding, no stall → **spec_generate** (fix,
-  then re-review — resuming the session for codex, sessionless with
-  carried-over findings for claude). Deferred findings (`trial` /
+  then re-review — resuming agent-delegate sessions, sessionless with
+  carried-over findings for native review). Deferred findings (`trial` /
   `required_check` / `follow_up`) and Minor findings are not fixed here; they
   are already recorded and are transcribed to the PR body.
 - Gate PASS (no `implementation` finding) → **approval**

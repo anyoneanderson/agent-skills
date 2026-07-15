@@ -1,13 +1,27 @@
 # Role Dispatch — Resolving Who Runs Each Phase
 
-Every phase names a role key (e.g. `spec_author`, `e2e_runner`). This file is the
-single place that turns a role key into a concrete execution: a Claude subagent
-or a delegated Codex run via agent-delegate. Phase guides reference this file
-rather than repeating the resolution.
+Every phase names an AI role key (e.g. `spec_author`, `e2e_runner`). This file is
+the single place that first resolves the key to an AI role (`claude` or `codex`)
+and then resolves that role to an execution backend for the current host. Phase
+guides reference this file rather than repeating either decision.
 
 日本語版: [role-dispatch.ja.md](role-dispatch.ja.md)
 
-## Step 1: Read the Roles
+## Step 0: Determine and Record the Host Runtime
+
+Before reading any role, explicitly set `host_runtime` to the identity of the
+runtime executing spec-orchestrate: `codex` in Codex or `claude` in Claude Code.
+Record it in `pipeline-state.json` during intake. On resume, determine it again
+and update the recorded value before dispatching another worker; never infer it
+from role defaults or from agent-delegate environment variables.
+
+If the current runtime cannot identify itself:
+
+- **manual:** ask the human to select `codex` or `claude`, then record it.
+- **auto:** stop in a resumable blocked state with `host_runtime_unknown`; do not
+  guess and do not dispatch a worker.
+
+## Step 1: Read the AI Roles
 
 Read `roles` from `pipeline.yml` (default path `.specs/pipeline.yml`; format in
 `pipeline-config.md`). When the file is absent, use these defaults verbatim:
@@ -21,23 +35,37 @@ Read `roles` from `pipeline.yml` (default path `.specs/pipeline.yml`; format in
 | `impl_test` | `codex` | implement (test tasks) |
 | `e2e_runner` | `claude` | evaluate |
 
-A role value is always `claude` or `codex`. Anything else is a config error —
-stop and report it.
+A role value selects an AI, not a backend. It is always `claude` or `codex`.
+Anything else is a config error — stop and report it.
 
 ## Step 2: Resolve the Backend
 
-| Role value | Backend | How to invoke |
-|------------|---------|---------------|
-| `claude` | Claude subagent | Dispatch a subagent in the current runtime. For planner and evaluator, use the `workflow-planner` / `workflow-evaluator` agent definitions installed by spec-workflow-init |
-| `codex` | agent-delegate | Call the agent-delegate script per its public contract, always passing `--target codex` explicitly |
+Resolve the backend only after the AI role is final. Matching host and role use
+the host's runtime-native subagent mechanism. A different role uses
+agent-delegate with the role as the explicit target.
 
-The subagent path names no specific dispatch tool; use whatever the runtime
-provides to run a subagent. Do not hardcode a tool name.
+<!-- dispatch-matrix:start -->
+| Host runtime | AI role | Backend | agent-delegate target |
+|--------------|---------|---------|-----------------------|
+| `codex` | `codex` | `runtime-native` | `-` |
+| `codex` | `claude` | `agent-delegate` | `claude` |
+| `claude` | `claude` | `runtime-native` | `-` |
+| `claude` | `codex` | `agent-delegate` | `codex` |
+<!-- dispatch-matrix:end -->
+
+For `runtime-native`, dispatch a subagent in the current runtime and do **not**
+start agent-delegate. Use the role-specific agent definition when one is
+installed: for example, `workflow-planner` for the spec author and
+`workflow-evaluator` for E2E. The native path names no specific dispatch tool;
+use whatever the current runtime provides and do not hardcode a tool name.
+
+For `agent-delegate`, call the script per its public contract and always pass
+`--target <AI role>` explicitly. Programmatic callers must not rely on
+environment self-detection in a nested chain.
 
 **agent-delegate is a contract dependency.** Call the script per
 `agent-delegate/references/contract.md` (arguments + `report.json` schema) and
-never depend on its internals. Programmatic callers must pass `--target`; the
-contract forbids relying on environment self-detection in a nested chain.
+never depend on its internals.
 
 ## Step 3: Choose Sync vs Detached Execution
 
@@ -51,7 +79,7 @@ The caller chooses the form from mutation risk and a concrete time basis:
 
 Detached launch capture (per the contract):
 ```bash
-launch="$(agent-delegate.sh --mode <delegate|review> --target codex ... --detach)"
+launch="$(agent-delegate.sh --mode <delegate|review> --target <AI-role> ... --detach)"
 expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
 report="$(printf '%s\n' "$launch" | tail -1)"
 ```
@@ -86,21 +114,33 @@ fresh state evaluation; it does not convert a missing report into failure.
 
 ### spec_review (adversarial spec review)
 
-`spec_reviewer` → agent-delegate `--mode review` (read-only). Use synchronous
-execution only with a concrete basis for completion within 5 minutes; otherwise
-use `--detach` and the expected-run wait above.
+Resolve `spec_reviewer` through the matrix, then run it in review/read-only mode.
+A matching role uses a fresh native reviewer subagent, separate from the spec
+author context. A different role uses
+agent-delegate `--mode review --target <spec_reviewer>`. Use synchronous
+agent-delegate execution only with a concrete basis for completion within 5
+minutes; otherwise use `--detach` and the expected-run wait above.
 Round 1 creates the session; rounds ≥ 2 resume it with `--resume <thread_id>`
 from `threads.spec_reviewer` in state (a review session is created read-only, the
-only sandbox a resume can keep).
+only sandbox a resume can keep). If the cross-AI peer is unavailable, use the
+independent native review fallback below instead; it is sessionless and launches
+a fresh reviewer subagent each round.
+
+### spec_generate (spec author)
+
+Resolve `spec_author` through the same matrix. A matching role runs
+`workflow-planner` as a runtime-native subagent. A different role runs
+agent-delegate `--mode delegate --target <spec_author> --detach` because the
+author writes specification files.
 
 ### evaluate (acceptance test)
 
-`e2e_runner` → spec-evaluate's backend of the same name, passed **explicitly**
-as `--backend` when dispatching spec-evaluate (its standalone default is `self`;
-relying on it inside the pipeline would mix the two defaults). `claude` runs the
-evaluator as a subagent (`workflow-evaluator`); `codex` runs agent-delegate
-`--mode delegate --sandbox workspace-write` (not review — the run launches the
-app and drives a browser). See spec-evaluate `references/execution-backend.md`.
+Pass the resolved `e2e_runner` AI role **explicitly** as `--backend` and the
+recorded host as `--host-runtime` when dispatching spec-evaluate. The option name
+`--backend` is retained for compatibility, but its `claude|codex` value selects
+the AI role; spec-evaluate applies this matrix to choose the vehicle. Its
+standalone default is `self`, so relying on that inside the pipeline would mix
+two defaults. See spec-evaluate `references/execution-backend.md`.
 
 ### implement (build the feature)
 
@@ -110,34 +150,87 @@ per-task `kind → owner` routing internally (no double management).
 
 - Build the map from `roles`: `ui=<impl_ui>,backend=<impl_backend>,test=<impl_test>`,
   or pass the `pipeline.yml` path (spec-implement reads `roles.impl_{kind}` from it).
+- Pass the recorded host as `--host-runtime <host_runtime>` so spec-implement
+  applies this matrix per task.
+- Pass `--review-fallback native-independent`. This is the explicit boundary
+  that lets spec-orchestrate finish on a single-AI installation; standalone
+  spec-implement keeps its default `block` behavior.
 - A task whose `kind` is unknown or unmapped falls back to spec-code (claude) —
   spec-implement's documented legacy behavior.
 
-## Reviewer Inversion (single definition)
+## Preferred Cross-AI Review and Independence (single definition)
 
-The reviewer of an implementation artifact is always the **opposite side** of its
-implementer — "the author does not review their own work". This rule is defined
-here once; spec-implement applies it per task from the `--roles` map, so it is
-not re-implemented by the orchestrator.
+The preferred reviewer of an implementation artifact is the **opposite AI role**
+from its implementer. Choose the preferred reviewer role first, then resolve it
+through the host-aware matrix. Never choose a backend first. This rule is
+defined here once; spec-implement applies it per task from the `--roles` map, so
+it is not re-implemented by the orchestrator.
 
-| Task implementer (from `kind`) | Reviewer | Mechanism |
-|--------------------------------|----------|-----------|
-| `codex` | `claude` | spec-review (unchanged) |
-| `claude` | `codex` | agent-delegate `--mode review` (sync only with a concrete <=5-minute basis; otherwise detach) |
+| Task implementer (from `kind`) | Reviewer AI role |
+|--------------------------------|------------------|
+| `codex` | `claude` |
+| `claude` | `codex` |
 
-Fixes route back to the implementer's executor: `spec-code --feedback` for
-claude, agent-delegate `--mode delegate --detach` (resume) for codex. The agent-delegate
-review file is spec-review-compatible, so the existing fix loop consumes it
-unchanged.
+Apply the matrix independently to the implementer and reviewer roles. For
+example, on a Codex host a Codex implementer is native and its Claude reviewer
+uses agent-delegate; on a Claude host the same roles use agent-delegate and
+native review respectively. Fixes return to the implementer role and resolve
+through the matrix again. An agent-delegate review file is spec-review-compatible,
+so the existing fix loop consumes it unchanged.
 
-## Unavailable Peer (codex missing)
+Cross-AI identity is preferred; **independent execution identity and context are
+required**. When the preferred cross-AI reviewer is unavailable,
+`native-independent` may use the host AI role only under all of these controls:
 
-If a `codex` role cannot run because agent-delegate is unavailable (script
-missing, exit 2, `tool_unavailable`):
+1. launch a fresh runtime-native reviewer subagent, never the orchestrator or
+   implementer instance and never a resume of the implementation conversation;
+2. give it only the artifact/diff, specs, review criteria, and prior review
+   findings plus fix summary on later rounds;
+3. expose no write tools and compare one repository change fingerprint captured
+   immediately before reviewer launch with another captured after review
+   completion: tracked worktree and staged diff content plus non-ignored
+   untracked path and content. Exclude only orchestrator-owned run-record paths
+   classified in `pipeline-config.md`, never the whole `.specs/` directory. Any
+   change in the included fingerprint invalidates the result and blocks the run
+   for the normal workspace-drift procedure;
+4. launch a fresh sessionless reviewer again for every re-review round; and
+5. append a `state.review_fallbacks` entry containing the host runtime at review
+   time and disclose reduced cross-AI assurance in the PR body. For implement
+   reviews, spec-implement returns the structured entry and the orchestrator
+   appends it; workers never write pipeline state.
 
-- **manual:** ask the human to confirm reassigning that role to `claude`.
-- **auto:** reassign to `claude`, continue, and record the swap in
-  `state.role_overrides` and the PR body.
+If the runtime cannot guarantee those controls, the reviewer is unavailable and
+the pipeline blocks. A same-AI review performed in the orchestrator or the
+implementer context is self-review and is never accepted.
 
-This is a capability fallback, distinct from the stall-driven role swap in
-arbitration (`stall-detection.md`), which is capped by `limits.role_swap_max`.
+## Capability Fallbacks
+
+Every fallback must preserve the separation between AI role and backend.
+Non-review role changes are recorded in `state.role_overrides`; independent
+review fallbacks are recorded in `state.review_fallbacks`. Both appear in the PR
+body.
+
+- **Runtime-native subagent unavailable:** manual asks whether to reassign the
+  worker role to the opposite AI or stop. Auto reassigns to the opposite AI only
+  when its peer CLI is available; otherwise it blocks. A reviewer blocks because
+  the runtime cannot create the independent native reviewer required by the
+  fallback contract.
+- **Cross-AI peer CLI unavailable** (script missing, exit 2, or
+  `tool_unavailable`): for a non-review worker, manual asks whether to reassign
+  its role to the host AI; auto reassigns it and continues. A reviewer does not
+  use this general role fallback: spec-orchestrate automatically applies
+  `native-independent` and continues with a fresh host-native reviewer. If that
+  reviewer is unavailable or writes to the workspace, block.
+- **Host runtime unknown:** use the Step 0 manual/auto behavior. No role can be
+  resolved until the host is known.
+
+Capability fallback is distinct from the stall-driven role swap in arbitration
+(`stall-detection.md`), which is capped by `limits.role_swap_max`.
+
+## Contract Test
+
+Run `bash references/scripts/tests/run_tests.sh` from the spec-orchestrate skill
+directory. The tracked fixtures cover all four matrix rows and both single-AI
+review directions, prove standalone `block` versus orchestrated
+`native-independent`, check all marked matrix copies across the three skills,
+and verify state rejects invalid host and review-fallback records.

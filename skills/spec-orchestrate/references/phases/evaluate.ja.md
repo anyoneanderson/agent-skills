@@ -7,19 +7,19 @@
 ## 入力
 
 - `test.md`、`pipeline.yml` の `app:` 起動レシピ、ラウンド番号。
-- `e2e_runner` ロール → spec-evaluate バックエンド（self / claude サブエージェント /
-  agent-delegate `--mode delegate`・workspace-write 経由の codex）。解決は
-  `../role-dispatch.ja.md` の「evaluate」。spec-evaluate の起動時には解決結果を
-  **必ず `--backend` で明示**して渡す。spec-evaluate 単体実行時の既定は `self` で、
-  これをパイプライン実行に混ぜないため。
+- `e2e_runner` AI role と記録済み `host_runtime`。解決は
+  `../role-dispatch.ja.md` の「evaluate」。spec-evaluate 起動時には role を
+  **必ず `--backend` で明示**し、host を `--host-runtime` で渡す。
+  spec-evaluate 単体実行時の既定は `self` なので、パイプライン実行に混ぜない。
 
 ## アクション
 
 1. spec-evaluate を `--spec .specs/{feature}/` とラウンドで起動する。アプリを起動し、
    各項目を検証方法別に実行し、証跡を `evidence/{round}/` に保存し、
    `evaluate-{round}.md` を書く。
-2. codex バックエンドは明示的な `--detach` を渡して expected run id を保持し、
-   `../role-dispatch.ja.md` の report-first な15〜30秒待機を適用する。
+2. evaluator role と host が異なる場合、agent-delegate backend は role を target として
+   明示し、`--detach` を渡して expected run id を保持し、`../role-dispatch.ja.md` の
+   report-first な15〜30秒待機を適用する。
    呼び出し側のタイムアウトは30分以上とする。
    heartbeat またはプロセス状態が生存を示す間、report の不在は失敗ではなく待機状態である。
 

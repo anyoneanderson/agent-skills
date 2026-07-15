@@ -9,16 +9,19 @@ the outcome.
 
 - `tasks.md` (with `kind:` labels) and the rest of the spec set.
 - The role map for implementation (`impl_ui` / `impl_backend` / `impl_test`),
-  passed to spec-implement as its `--roles` argument so it routes each task to
-  spec-code (claude) or agent-delegate (codex) by kind. Map construction and the
-  reviewer-inversion rule are in `../role-dispatch.md` → "implement".
+  passed to spec-implement as its `--roles` argument together with
+  `--host-runtime <host_runtime>` and
+  `--review-fallback native-independent`. spec-implement selects the AI role by
+  kind, then resolves native versus cross-AI execution. Map construction and the
+  reviewer independence rule are in `../role-dispatch.md` → "implement".
 - On re-entry from evaluate: the failing acceptance findings to feed back.
 
 ## Action
 
-1. First entry: dispatch spec-implement with the spec path, issue, and role map.
-   spec-implement creates the feature branch, runs the task loop, and applies the
-   reviewer-inversion rule (the author does not review their own work) internally.
+1. First entry: dispatch spec-implement with the spec path, issue, role map,
+   recorded host, and `--review-fallback native-independent`. spec-implement
+   creates the feature branch, runs the task loop, and prefers the opposite AI
+   reviewer while enforcing an independent reviewer instance internally.
 2. Re-entry (evaluate returned failures): pass the acceptance findings to
    `spec-code --feedback` through spec-implement so the same fix loop applies to
    test failures, then re-run the affected tasks.
@@ -35,14 +38,18 @@ the `.specs/.gitignore` written at intake is the backstop.
 
 - Implemented changes on the feature branch, with the corresponding `tasks.md`
   checkboxes marked complete and per-task reviews recorded by spec-implement.
+- spec-implement's completion summary, including a structured
+  `review_fallbacks` list (empty when unused). spec-implement reports these
+  records but never reads or writes pipeline state.
 
 ## Verification
 
 - Tasks in tasks.md are marked complete and the git diff reflects real changes
   (measured, not self-reported).
-- spec-implement returned without an unresolved blocker. If a `codex`-owned task
-  reports agent-delegate unavailable, apply the reassignment rule from
-  §Error Handling (auto reassigns and records; manual confirms).
+- spec-implement returned without an unresolved blocker. If a cross-AI reviewer
+  was unavailable, verify the fallback used a fresh read-only native reviewer,
+  left the workspace unchanged, and was recorded. If that reviewer could not be
+  created, the phase must remain blocked.
 
 ## State Update
 
@@ -50,6 +57,9 @@ the `.specs/.gitignore` written at intake is the backstop.
 - Append `implement` to `completed_phases`.
 - Record any role overrides applied during implementation under
   `role_overrides`.
+- Validate the `review_fallbacks` list returned by spec-implement, then append
+  every entry under `review_fallbacks`; the orchestrator is the sole state
+  writer.
 
 ## Transitions
 

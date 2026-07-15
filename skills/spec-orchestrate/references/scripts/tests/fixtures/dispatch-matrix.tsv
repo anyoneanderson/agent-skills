@@ -1,0 +1,5 @@
+host_runtime	ai_role	backend	target
+codex	codex	runtime-native	-
+codex	claude	agent-delegate	claude
+claude	claude	runtime-native	-
+claude	codex	agent-delegate	codex

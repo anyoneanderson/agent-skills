@@ -7,21 +7,22 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 ## Input
 
 - `test.md`, the `app:` launch recipe from `pipeline.yml`, and the round number.
-- `e2e_runner` role → spec-evaluate backend (self / claude subagent / codex via
-  agent-delegate `--mode delegate`, workspace-write), resolved by
-  `../role-dispatch.md` → "evaluate". Pass the resolved value **explicitly** as
-  `--backend` when dispatching spec-evaluate: its own standalone default is
-  `self`, which must not leak into pipeline runs.
+- `e2e_runner` AI role plus the recorded `host_runtime`, resolved by
+  `../role-dispatch.md` → "evaluate". Pass the role **explicitly** as
+  `--backend` and the host as `--host-runtime` when dispatching spec-evaluate.
+  Its standalone default is `self`, which must not leak into pipeline runs.
 
 ## Action
 
 1. Dispatch spec-evaluate with `--spec .specs/{feature}/` and the round. It
    launches the app, runs each case by its verification method, saves evidence
    under `evidence/{round}/`, and writes `evaluate-{round}.md`.
-2. The codex backend passes explicit `--detach`, retains the expected run id,
-   and applies the 15–30-second report-first wait from `../role-dispatch.md`.
-   Its caller-owned timeout is at least 30 minutes. Report absence while the
-   heartbeat or process state is live is a waiting condition, not failure.
+2. When the evaluator role differs from the host, the agent-delegate backend
+   passes the role as an explicit target plus `--detach`, retains the expected
+   run id, and applies the 15–30-second report-first wait from
+   `../role-dispatch.md`. Its caller-owned timeout is at least 30 minutes.
+   Report absence while the heartbeat or process state is live is a waiting
+   condition, not failure.
 
 ## Output
 

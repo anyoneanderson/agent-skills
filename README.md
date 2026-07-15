@@ -268,14 +268,15 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
     - Delegates: spec-code → spec-review → fix loop → spec-test
     - Processes `[code]` phases via worker skills, `[orchestrator]` phases directly
     - Updates tasks.md ONLY after review AND test PASS
-    - Optional: `--roles` routes tasks per `kind:` label to Claude (spec-code) or Codex (agent-delegate), with the reviewer always on the opposite side of the implementer
+    - Optional: `--roles` selects the Claude or Codex AI role per `kind:` label; `--host-runtime` then keeps a matching role runtime-native and sends only the opposite role through agent-delegate with an explicit target. The preferred reviewer is the opposite AI; standalone `--roles` blocks when it is unavailable unless `--review-fallback native-independent` is explicit
     - Optional: **cmux dispatch** for parallel sub-agent execution
     - Creates PR with quality gates passed
 
 11. **spec-orchestrate** drives the entire pipeline from a request or Issue to a PR:
     - Phases: intake → spec generation → mechanical inspection → adversarial spec review (another LLM) → human approval (manual mode only) → implementation → acceptance testing → PR → retrospective
     - Two modes: `manual` (one human gate at spec approval) and `auto` (Issue in, PR out, no human input)
-    - Role assignment per phase via `.specs/pipeline.yml` (claude ⇄ codex), executed through agent-delegate
+    - Role assignment per phase via `.specs/pipeline.yml` (claude ⇄ codex), resolved host-aware: matching roles use runtime-native subagents, opposite roles use agent-delegate with an explicit target
+    - Single-AI fallback: if the preferred cross-AI reviewer is unavailable, launches a fresh read-only host-native reviewer subagent, records reduced assurance, and blocks only when reviewer independence cannot be guaranteed
     - Detects stalled review loops by machine signals (finding fingerprints) and adjudicates: swap roles or land a draft PR
     - State lives in `pipeline-state.json`; interrupted runs resume from the last completed phase
     - Retrospective aggregates run records into improvement proposals and can auto-apply safe ones (branch → PR → auto-merge; contracts and SKILL.md always require human review)

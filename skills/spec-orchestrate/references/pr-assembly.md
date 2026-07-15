@@ -38,6 +38,10 @@ From `state.rounds` (`spec_review` and the per-task implementation reviews):
 - If a role swap or arbitration occurred, one line per `state.arbitrations` entry
   (signal + decision), so a reader sees why the run swapped owners or landed a
   draft.
+- If `state.review_fallbacks` is non-empty, one line per entry naming the
+  artifact and round, preferred and actual AI roles, and `fresh_subagent`
+  independence. Label it **Reduced cross-AI assurance**; a same-AI independent
+  review must never be presented as cross-AI review.
 
 ```markdown
 ## Adversarial Review History
@@ -48,6 +52,7 @@ From `state.rounds` (`spec_review` and the per-task implementation reviews):
   - [ ] **Improvement / fix_before: follow_up** `CR-STYLE-004` design.md §4.2 — naming nit (#125)
   - Minor: `CR-STYLE-002` design.md §3.1 — wording nit, deferred
 - Arbitration: S1 at spec_review round 4 → reviewer swapped codex→claude
+- Reduced cross-AI assurance: T001 round 1 preferred claude → actual codex runtime-native (`fresh_subagent`; peer unavailable)
 ```
 
 ### `## Acceptance Evidence`
