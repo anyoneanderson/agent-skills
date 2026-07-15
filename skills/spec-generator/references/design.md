@@ -87,6 +87,14 @@ options:
 ```markdown
 # Technical Design Document — [Project Name]
 
+## 0. How to Read This Document
+
+Summarize the current structure, the problem, and what this design changes, so that a reader with no prior context can follow §1 onwards without guessing.
+
+### 0.1 The Three Most Important Points of This Design
+
+List up to three design decisions that implementation and review must never violate. Each point should be one or two sentences covering where, what, and why (e.g., "the old-to-new vocabulary mapping is defined in exactly one place: X").
+
 ## 1. Requirements Traceability Matrix
 
 | Req ID | Requirement | Design Component | Existing Asset | New Reason |

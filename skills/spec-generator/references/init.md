@@ -167,6 +167,14 @@ Evaluate requirements from 7 perspectives:
 ```markdown
 # Requirements Document — [Project Name]
 
+## 0. How to Read This Document
+
+An introduction that lets a first-time reader (a reviewer or implementer with no prior context) grasp the big picture before entering the requirements.
+
+### 0.1 What Are We Building, in One Breath
+
+State what, why, and how things change, short enough (a few paragraphs) that a senior engineer new to the domain can understand it without guessing terminology. If there is a central concept or an old-vs-new contrast, show it with a code sample or a mapping table.
+
 ## 1. Overview
 Project purpose and background
 
