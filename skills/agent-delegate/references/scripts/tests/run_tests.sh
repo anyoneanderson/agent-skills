@@ -200,6 +200,125 @@ check_shared_run_files() {
     [ "$(awk -F ': ' '$1=="run_id"{print $2;exit}' "$dir/pid")" = "$run" ]
 }
 
+absent_test_pid() {
+  local pid=999999
+  while kill -0 "$pid" 2>/dev/null; do pid=$((pid + 1)); done
+  printf '%s' "$pid"
+}
+
+stale_reaper_removed_artifacts() {
+  local handoff="$1" owner="$2" pid_file="$3"
+  [ ! -e "$handoff" ] && [ ! -L "$handoff" ] &&
+    [ ! -e "$handoff/launcher-to-monitor.fifo" ] &&
+    [ ! -e "$handoff/monitor-to-launcher.fifo" ] &&
+    [ ! -e "$handoff/handoff-sentinel.json" ] &&
+    [ ! -e "$owner" ] && [ ! -e "$pid_file" ]
+}
+
+check_live_stale_reaper_result() {
+  local action="$1" diagnostic="$2" fifo_state="$3" handoff="$4" owner="$5" pid_file="$6" stderr_file="$7"
+  case "$action" in
+    remove)
+      stale_reaper_removed_artifacts "$handoff" "$owner" "$pid_file" &&
+        ! grep -q 'stale-reaper retained' "$stderr_file"
+      ;;
+    retain)
+      [ -d "$handoff" ] && [ ! -L "$handoff" ] && [ -f "$owner" ] && [ -f "$pid_file" ] || return 1
+      case "$diagnostic" in
+        invalid_sentinel) grep -q 'stale-reaper retained invalid_sentinel' "$stderr_file" || return 1 ;;
+        unknown_entry) grep -q 'stale-reaper retained handoff directory with unknown entry: outside-link' "$stderr_file" || return 1 ;;
+        *) return 1 ;;
+      esac
+      case "$fifo_state" in
+        present) [ -p "$handoff/launcher-to-monitor.fifo" ] && [ -p "$handoff/monitor-to-launcher.fifo" ] ;;
+        absent) [ ! -e "$handoff/launcher-to-monitor.fifo" ] && [ ! -e "$handoff/monitor-to-launcher.fifo" ] ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+check_live_stale_reaper_fixture() {
+  local file="$1" prefix="$2" id sentinel_variant expected_action expected_diagnostic expected_fifo_state
+  local dir root handoff new_handoff outside_file label run_id sentinel_run launcher_pid monitor_pid owner pid_file
+  local stderr_file rc owner_hash pid_hash outside_hash case_ok
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"
+  while IFS=$'\t' read -r id sentinel_variant expected_action expected_diagnostic expected_fifo_state; do
+    [ "$id" = case_id ] && continue
+    case_ok=1
+    dir="$(new_work_dir)"; label="$prefix-$id"; printf 'prompt\n' > "$dir/prompt.md"
+    launcher_pid=101; monitor_pid="$(absent_test_pid)"; run_id="stale-$id"
+    handoff="$(mktemp -d "$root/agent-delegate-handoff.${launcher_pid}.XXXXXX")"
+    new_handoff="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"
+    chmod 700 "$handoff" "$new_handoff"
+    mkfifo "$handoff/launcher-to-monitor.fifo" "$handoff/monitor-to-launcher.fifo"
+    outside_file=""
+    case "$sentinel_variant" in
+      valid|run_id_mismatch)
+        sentinel_run="$run_id"
+        [ "$sentinel_variant" != run_id_mismatch ] || sentinel_run="mutated-$run_id"
+        jq -n --arg run_id "$sentinel_run" --argjson launcher_pid "$launcher_pid" \
+          --argjson monitor_pid "$monitor_pid" --arg handoff_dir "$handoff" '
+            {run_id:$run_id,launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,
+             handoff_dir:$handoff_dir,
+             created_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]}
+          ' > "$handoff/handoff-sentinel.json"
+        ;;
+      absent_with_external_symlink)
+        outside_file="$dir/outside-protected.txt"
+        printf 'must survive stale reaping\n' > "$outside_file"
+        ln -s "$outside_file" "$handoff/outside-link"
+        ;;
+      *) case_ok=0 ;;
+    esac
+    owner="$dir/$label-owner.json"; pid_file="$dir/$label.pid"; stderr_file="$dir/$label.err"
+    jq -n --arg run_id "$run_id" --argjson launcher_pid "$launcher_pid" \
+      --argjson monitor_pid "$monitor_pid" --arg handoff_dir "$handoff" '
+        {run_id:$run_id,run_kind:"detach",runner_pid:$monitor_pid,
+         launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,worker_pid:null,
+         started_at:"2000-01-01T00:00:00Z",lease_at:"2000-01-01T00:00:00Z",
+         handoff_dir:$handoff_dir,handoff_phase:"not_started"}
+      ' > "$owner"
+    printf 'pid: %s\nrun_id: %s\n' "$monitor_pid" "$run_id" > "$pid_file"
+    owner_hash="$(sha256_file "$owner")"; pid_hash="$(sha256_file "$pid_file")"
+    outside_hash=""; [ -z "$outside_file" ] || outside_hash="$(sha256_file "$outside_file")"
+
+    [ -p "$handoff/launcher-to-monitor.fifo" ] && [ -p "$handoff/monitor-to-launcher.fifo" ] || case_ok=0
+    set +e
+    AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$new_handoff" \
+      AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid \
+      bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label "$label" \
+        --target claude --detach > "$dir/$label.out" 2> "$stderr_file"
+    rc=$?
+    set -e
+    [ "$rc" -eq 2 ] || case_ok=0
+    check_live_stale_reaper_result "$expected_action" "$expected_diagnostic" "$expected_fifo_state" \
+      "$handoff" "$owner" "$pid_file" "$stderr_file" || case_ok=0
+
+    if [ "$expected_action" = retain ]; then
+      [ "$(sha256_file "$owner")" = "$owner_hash" ] && [ "$(sha256_file "$pid_file")" = "$pid_hash" ] || case_ok=0
+    fi
+    if [ "$sentinel_variant" = run_id_mismatch ]; then
+      if check_live_stale_reaper_result remove none absent "$handoff" "$owner" "$pid_file" "$stderr_file"; then
+        case_ok=0
+      fi
+      [ -f "$handoff/handoff-sentinel.json" ] || case_ok=0
+    fi
+    if [ "$sentinel_variant" = absent_with_external_symlink ]; then
+      [ -L "$handoff/outside-link" ] && [ "$(readlink "$handoff/outside-link")" = "$outside_file" ] &&
+        [ "$(sha256_file "$outside_file")" = "$outside_hash" ] || case_ok=0
+    fi
+
+    rm -f "$handoff/launcher-to-monitor.fifo" "$handoff/monitor-to-launcher.fifo" \
+      "$handoff/handoff-sentinel.json" "$handoff/outside-link"
+    rmdir "$handoff" 2>/dev/null || true
+    rmdir "$new_handoff" 2>/dev/null || true
+    rm -rf "$dir"
+    [ "$case_ok" -eq 1 ] || return 1
+  done < "$file"
+}
+
 run_sync() {
   local dir="$1" label="$2" target="$3" mode="$4" stub_mode="$5" extra="${6:-}" rc report workspace_path
   printf 'stub prompt\n' > "$dir/$label-prompt.md"
@@ -306,6 +425,8 @@ case_run_ownership_force_resume() {
   awk 'BEGIN{FS=OFS="\t"} NR==2{$NF="retain"} {print}' "$FIXTURE_DIR/ownership-cases.tsv" > "$bad"
   if check_ownership_fixture "$bad"; then rm -f "$bad"; die "ownership checker accepted a corrupted expectation"; fi
   rm -f "$bad"
+  check_live_stale_reaper_fixture "$FIXTURE_DIR/stale-reaper-live-cases.tsv" "$1" ||
+    die "production stale reaper filesystem fixture rejected"
   dir="$(new_work_dir)"; printf 'prompt\n' > "$dir/prompt.md"
   set +e
   AGENT_DELEGATE_TEST_LSTAT_METADATA='{"type":"directory"}' PATH="$STUB_DIR:$PATH" \

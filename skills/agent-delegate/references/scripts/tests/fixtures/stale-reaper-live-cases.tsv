@@ -1,0 +1,4 @@
+case_id	sentinel_variant	expected_action	expected_diagnostic	expected_fifo_state
+valid-sentinel	valid	remove	none	absent
+mutated-run-id	run_id_mismatch	retain	invalid_sentinel	present
+absent-sentinel-external-symlink	absent_with_external_symlink	retain	unknown_entry	absent
