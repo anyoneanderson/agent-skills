@@ -59,7 +59,8 @@ evaluator を agent-delegate 経由で走らせる。受け入れ試験はアプ
 - `--target "$evaluator_role"` を明示的に渡す。agent-delegate の契約により、
   プログラムからの呼び出しは環境変数による自己判定に頼ってはならない。
 - 明示的な `--detach` を使い、expected run id と起動時刻を保持する。
-  15秒を標準、30秒を上限としてポーリングし、呼び出し側のタイムアウトは30分以上とする。
+  15秒を標準、30秒を上限としてポーリングし、30分ごとに状態を再確認する。
+  起動から2時間に達したら、公開契約の停止手順を適用する。
 
 ```bash
 # 合成: evaluator-prompt.ja.md + 実行時コンテキスト → 1つの prompt ファイル
@@ -78,6 +79,8 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 - 各周期では expected-run report、owner、pid、heartbeat、worker/monitor の
   プロセス状態の順に確認する。
   生存中または劣化状態では待機を続け、report の不在だけで失敗にしない。
+- 2時間に達したらreportとownerを読み直し、expected monitorと確認できたプロセスだけに`TERM`を送る。
+  terminal reportを最大90秒待ち、公開されなければ`--force`を実行せず、診断情報を人間へ渡して待機を終了する。
 - `status == done` → evaluator が書いた結果ファイルを読み、spec-evaluate の
   Step 5（証跡の機械検証）に渡す。
 - `status == blocked` → 実行が正常に完了していない。`blocker` /

@@ -60,8 +60,8 @@ the app and operates a browser, it needs write access:
 - Pass `--target "$evaluator_role"` explicitly. Per the agent-delegate contract,
   programmatic callers must not rely on environment self-detection.
 - Use explicit `--detach`, retain the expected run id and launch time, and poll
-  every 15 seconds (never less often than every 30 seconds). A caller-owned
-  timeout is at least 30 minutes.
+  every 15 seconds (never less often than every 30 seconds). Re-evaluate at
+  30-minute intervals and apply the public contract's controlled stop at 2 hours.
 
 ```bash
 # Compose: evaluator-prompt.md + runtime context → one prompt file
@@ -80,6 +80,9 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 - Each poll validates the expected-run report first, then owner, pid,
   heartbeat, and worker/monitor process state. Live or degraded states keep
   waiting; report absence alone is not failure.
+- At the 2-hour limit, recheck the report and owner before sending `TERM` only
+  to the verified expected monitor. Wait up to 90 seconds for its terminal
+  report; otherwise stop waiting and escalate diagnostics without `--force`.
 - `status == done` → read the result file the evaluator wrote; hand it to
   spec-evaluate Step 5 (machine-verify evidence).
 - `status == blocked` → the run did not complete cleanly. Record the

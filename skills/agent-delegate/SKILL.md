@@ -99,8 +99,13 @@ Save both as the expected run. Poll every 15 seconds by default, never less
 often than every 30 seconds, and follow the expected-run state machine in
 `references/contract.md`: validate the report first, then inspect owner, pid,
 heartbeat, and process state. A missing report while the run is alive is not a
-failure. Caller-owned timeouts must be at least 20 minutes for specification
-work and 30 minutes for implementation or E2E.
+failure. Use the expected-run owner's `worker_pid` before the first heartbeat,
+and select states in this order: terminal report, different owner, process
+disappearance, invalid report, then heartbeat. Re-evaluate every detached run
+at 30 minutes and every 30 minutes thereafter. At 2 hours, apply the contract's
+controlled stop: recheck the report, send `TERM` only to the verified expected
+monitor, wait up to 90 seconds for its terminal report, then stop waiting and
+escalate with diagnostics. Never use `--force` for this timeout path.
 
 ### Step 4: Run the script
 

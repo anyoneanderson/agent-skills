@@ -56,9 +56,8 @@ otherwise keeps drilling into the same area it explored last round.
 3. Use synchronous execution only when there is a concrete basis for this round
    to finish within 5 minutes. Otherwise use explicit `--detach`, retain the
    expected run id, and apply the 15–30-second report-first wait from
-   `../role-dispatch.md`. A review gate with a 20-minute-or-longer budget has no
-   5-minute basis and therefore detaches. A caller-owned timeout for specification
-   review or repair is at least 20 minutes.
+   `../role-dispatch.md`. Re-evaluate at 30-minute intervals and apply its
+   2-hour controlled stop. A review without a concrete 5-minute basis detaches.
 
 **Runtime-native backend (subagent):**
 1. Round 1: dispatch a fresh review subagent, separate from the spec author and

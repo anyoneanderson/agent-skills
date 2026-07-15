@@ -33,7 +33,7 @@ done
 
 case "$TARGET" in codex|claude) : ;; *) printf 'heartbeat-harness: invalid target\n' >&2; exit 2 ;; esac
 case "$SCENARIO" in
-  done|blocked|worker-death|missing|invalid-json|invalid-status|wrong-run|owner-pid-mismatch|acknowledgement-mismatch|final-ack-timeout|expire-handoff|worker-start-failure|final-ack-response-lost|sentinel-committed-failure|owner-committed-failure|sentinel-verified-failure|owner-verified-failure) : ;;
+  done|blocked|worker-death|missing|invalid-json|invalid-status|wrong-run|monitor-kill-before-heartbeat|owner-pid-mismatch|acknowledgement-mismatch|final-ack-timeout|expire-handoff|worker-start-failure|final-ack-response-lost|sentinel-committed-failure|owner-committed-failure|sentinel-verified-failure|owner-verified-failure) : ;;
   *) printf 'heartbeat-harness: invalid scenario: %s\n' "$SCENARIO" >&2; exit 2 ;;
 esac
 
@@ -60,6 +60,7 @@ OWNER_SNAPSHOT="$OUT_DIR/$LABEL-owner-before-worker.json"
 PID_SNAPSHOT="$OUT_DIR/$LABEL-pid-before-worker.txt"
 SENTINEL_SNAPSHOT="$OUT_DIR/$LABEL-sentinel-ready.json"
 MONITOR_PID=""
+WORKER_PID=""
 LAUNCHER_PID=""
 CONTROL_OPEN=0
 
@@ -107,6 +108,7 @@ cleanup() {
   close_control
   if [ -n "$LAUNCHER_PID" ] && process_alive "$LAUNCHER_PID"; then kill "$LAUNCHER_PID" 2>/dev/null || true; fi
   if [ -n "$MONITOR_PID" ] && process_alive "$MONITOR_PID"; then kill "$MONITOR_PID" 2>/dev/null || true; fi
+  if [ -n "$WORKER_PID" ] && process_alive "$WORKER_PID"; then kill "$WORKER_PID" 2>/dev/null || true; fi
   [ -z "$LAUNCHER_PID" ] || wait "$LAUNCHER_PID" 2>/dev/null || true
   fallback_cleanup
   if [ "$KEEP" -eq 0 ] && [ -f "$OUT_DIR/$LABEL-prompt.md" ]; then rm -f "$OUT_DIR/$LABEL-prompt.md"; fi
@@ -115,7 +117,7 @@ trap cleanup EXIT TERM INT HUP
 
 request="$SCENARIO"
 case "$SCENARIO" in
-  done|blocked|worker-death|missing|invalid-json|invalid-status|wrong-run|sentinel-committed-failure|owner-committed-failure|sentinel-verified-failure|owner-verified-failure) request=normal ;;
+  done|blocked|worker-death|missing|invalid-json|invalid-status|wrong-run|monitor-kill-before-heartbeat|sentinel-committed-failure|owner-committed-failure|sentinel-verified-failure|owner-verified-failure) request=normal ;;
 esac
 case "$SCENARIO" in
   sentinel-committed-failure) FAIL_STAGE=sentinel_committed ;;
@@ -195,6 +197,47 @@ wait "$LAUNCHER_PID"
 launcher_exit=$?
 set -e
 printf '5\tlauncher-exit\t%s\n' "$launcher_exit" >> "$EVENTS_FILE"
+
+if [ "$SCENARIO" = monitor-kill-before-heartbeat ]; then
+  owner_after_worker="$OUT_DIR/$LABEL-owner-before-first-heartbeat.json"
+  while :; do
+    [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: worker owner publication timeout\n' >&2; exit 1; }
+    if [ ! -e "$HEARTBEAT_FILE" ] && jq -e --arg run "$expected_run" '
+      .run_id==$run and (.worker_pid|type)=="number" and .worker_pid>0
+    ' "$OWNER_FILE" >/dev/null 2>&1; then
+      WORKER_PID="$(jq -r '.worker_pid' "$OWNER_FILE")"
+      process_alive "$WORKER_PID" || continue
+      cp "$OWNER_FILE" "$owner_after_worker"
+      break
+    fi
+    process_alive "$MONITOR_PID" || { printf 'heartbeat-harness: monitor exited before worker owner publication\n' >&2; exit 1; }
+  done
+  kill -KILL "$MONITOR_PID"
+  for _ in $(seq 1 10000); do process_alive "$MONITOR_PID" || break; done
+  process_alive "$MONITOR_PID" && { printf 'heartbeat-harness: monitor survived injected KILL\n' >&2; exit 1; }
+  process_alive "$WORKER_PID" || { printf 'heartbeat-harness: worker did not survive initial monitor loss\n' >&2; exit 1; }
+  jq -n --arg run_id "$expected_run" --arg owner_snapshot "$owner_after_worker" \
+    --arg heartbeat_path "$HEARTBEAT_FILE" --argjson launcher_pid "$LAUNCHER_PID" \
+    --argjson monitor_pid "$MONITOR_PID" --argjson worker_pid "$WORKER_PID" '
+    {run_id:$run_id,scenario:"monitor-kill-before-heartbeat",launcher_pid:$launcher_pid,
+     monitor_pid:$monitor_pid,worker_pid:$worker_pid,owner_snapshot:$owner_snapshot,
+     heartbeat_path:$heartbeat_path,monitor_alive:false,worker_alive_before_cleanup:true,
+     heartbeat_absent:true}
+  ' > "$RESULT_FILE"
+  close_control
+  kill -TERM "$WORKER_PID" 2>/dev/null || true
+  for _ in $(seq 1 10000); do process_alive "$WORKER_PID" || break; done
+  process_alive "$WORKER_PID" && kill -KILL "$WORKER_PID" 2>/dev/null || true
+  fallback_cleanup
+  rm -f "$OWNER_FILE" "$PID_FILE"
+  [ ! -d "$HANDOFF_DIR" ] && [ ! -e "$OWNER_FILE" ] && [ ! -e "$PID_FILE" ] || {
+    printf 'heartbeat-harness: initial monitor death cleanup failed\n' >&2
+    exit 1
+  }
+  printf '%s\n' "$RESULT_FILE"
+  trap - EXIT TERM INT HUP
+  exit 0
+fi
 
 case "$SCENARIO" in
   owner-pid-mismatch|acknowledgement-mismatch|final-ack-timeout|expire-handoff|sentinel-committed-failure|sentinel-verified-failure)

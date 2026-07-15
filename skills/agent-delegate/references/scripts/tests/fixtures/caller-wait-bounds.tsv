@@ -1,0 +1,16 @@
+case_id	elapsed_seconds	state	owner	monitor	stop_age_seconds	terminal	expected_action
+before-first-checkpoint	1799	RUNNING	expected	alive	0	none	WAIT
+first-checkpoint	1800	RUNNING	expected	alive	0	none	REEVALUATE_CONTINUE
+second-checkpoint	3600	DEGRADED_STALE	expected	alive	0	none	REEVALUATE_CONTINUE
+third-checkpoint	5400	RUNNING	expected	alive	0	none	REEVALUATE_CONTINUE
+between-checkpoints	5415	RUNNING	expected	alive	0	none	WAIT
+before-hard-limit	7199	RUNNING	expected	alive	0	none	WAIT
+terminal-wins-at-limit	7200	RUNNING	expected	alive	0	done	TERMINAL_DONE
+superseded-wins-at-limit	7200	RUNNING	other	alive	0	none	SUPERSEDED
+dead-wins-at-limit	7200	DEAD	expected	absent	0	none	DEAD
+hard-limit-live-monitor	7200	RUNNING	expected	alive	0	none	TERM_MONITOR
+terminal-grace	7201	RUNNING	expected	alive	1	none	WAIT_TERMINAL
+blocked-during-grace	7250	RUNNING	expected	alive	50	blocked	TERMINAL_BLOCKED
+terminal-grace-expired	7290	RUNNING	expected	alive	90	none	ESCALATE_STOP_WAITING
+monitor-absent-at-limit	7200	ORPHANED_WORKER	expected	absent	0	none	ESCALATE_STOP_WAITING
+monitor-unknown-at-limit	7200	DEGRADED_STALE	expected	unknown	0	none	ESCALATE_STOP_WAITING
