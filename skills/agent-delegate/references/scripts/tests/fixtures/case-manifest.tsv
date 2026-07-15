@@ -21,3 +21,6 @@ T-A19	readonly-gate-evidence	meta	readonly-evidence	readonly-evidence.tsv	readon
 T-A20	synchronous-no-heartbeat	suite	sync-barrier	compatibility-cases.tsv	sync-runtime-summary
 T-A21	pid-handoff-barrier	suite	handoff-failures	handoff-cases.tsv	handoff-failure-summary
 T-A22	all-repeat-3	meta	repeat-suite	case-manifest.tsv	repeat-manifests
+T-A23	caller-initial-heartbeat-death	suite	state-and-runtime	caller-initial-heartbeat.tsv	initial-window-state-and-runtime-evidence
+T-A24	caller-state-priority	suite	state-fixture	caller-priority.tsv	priority-state-decisions
+T-A25	caller-wait-upper-bound	suite	wait-bound-fixture	caller-wait-bounds.tsv	reevaluation-stop-and-escalation-decisions

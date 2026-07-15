@@ -1,14 +1,19 @@
-report	status	heartbeat	monitor	worker	elapsed_seconds	expected_state
-valid	done	any	any	any	0	TERMINAL_DONE
-valid	blocked	any	any	any	0	TERMINAL_BLOCKED
-absent	none	absent	absent	absent	0	STARTING
-absent	none	absent	alive	alive	1	DEGRADED_NO_HEARTBEAT
-absent	none	unreadable	alive	alive	1	DEGRADED_UNREADABLE
-absent	none	fresh	alive	alive	1	RUNNING
-absent	none	stale	alive	alive	1	DEGRADED_STALE
-absent	none	fresh	absent	alive	1	ORPHANED_WORKER
-absent	none	fresh	alive	absent	1	FINALIZING
-absent	none	fresh	absent	absent	0	DEATH_CANDIDATE
-absent	none	fresh	absent	absent	30	DEAD
-invalid	unknown	fresh	alive	alive	1	REPORT_INVALID_PENDING
-wrong-run	wrong-run	fresh	alive	alive	1	REPORT_INVALID_PENDING
+case_id	report	status	owner	heartbeat	worker_source	monitor	worker	launch_age_seconds	death_for_seconds	expected_state
+terminal-done	valid	done	expected	any	none	any	unpublished	0	0	TERMINAL_DONE
+terminal-blocked	valid	blocked	expected	any	none	any	unpublished	0	0	TERMINAL_BLOCKED
+terminal-before-superseded	valid	done	other	any	none	absent	unpublished	0	30	TERMINAL_DONE
+superseded-before-process	invalid	unknown	other	fresh	heartbeat	absent	absent	120	30	SUPERSEDED
+starting	absent	none	expected	absent	none	alive	unpublished	90	0	STARTING
+no-heartbeat-degraded	absent	none	expected	absent	none	alive	unpublished	91	0	DEGRADED_NO_HEARTBEAT
+heartbeat-unreadable	absent	none	expected	unreadable	heartbeat	alive	alive	120	0	DEGRADED_UNREADABLE
+running	absent	none	expected	fresh	heartbeat	alive	alive	120	0	RUNNING
+stale	absent	none	expected	stale	heartbeat	alive	alive	120	0	DEGRADED_STALE
+owner-worker-orphaned	absent	none	expected	absent	owner	absent	alive	15	0	ORPHANED_WORKER
+permission-unknown-orphaned	absent	none	expected	absent	owner	absent	unknown	15	0	ORPHANED_WORKER
+finalizing	absent	none	expected	fresh	heartbeat	alive	absent	120	0	FINALIZING
+initial-unpublished-worker	absent	none	expected	absent	none	absent	unpublished	15	0	DEATH_CANDIDATE
+initial-unpublished-worker-dead	absent	none	expected	absent	none	absent	unpublished	45	30	DEAD
+invalid-processes-live	invalid	unknown	expected	fresh	heartbeat	alive	alive	120	0	REPORT_INVALID_PENDING
+wrong-run-processes-live	wrong-run	wrong-run	expected	fresh	heartbeat	alive	alive	120	0	REPORT_INVALID_PENDING
+invalid-both-absent	invalid	unknown	expected	fresh	heartbeat	absent	absent	120	0	DEATH_CANDIDATE
+invalid-both-absent-dead	invalid	unknown	expected	fresh	heartbeat	absent	absent	150	30	DEAD

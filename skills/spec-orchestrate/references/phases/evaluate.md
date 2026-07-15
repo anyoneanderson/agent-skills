@@ -20,9 +20,9 @@ come back as spec-review-compatible findings that feed `spec-code --feedback`.
 2. When the evaluator role differs from the host, the agent-delegate backend
    passes the role as an explicit target plus `--detach`, retains the expected
    run id, and applies the 15–30-second report-first wait from
-   `../role-dispatch.md`. Its caller-owned timeout is at least 30 minutes.
-   Report absence while the heartbeat or process state is live is a waiting
-   condition, not failure.
+   `../role-dispatch.md`. Re-evaluate at 30-minute intervals and apply its
+   2-hour controlled stop. Report absence while the heartbeat or process state
+   is live is a waiting condition, not failure.
 
 ## Output
 

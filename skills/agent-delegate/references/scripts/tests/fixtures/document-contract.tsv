@@ -2,6 +2,8 @@ contract_id	english_token	japanese_token	expected_value
 write-delegate	--detach	--detach	required
 sync-scope	read-only	読み取り専用	5 minutes
 polling	15 seconds	15秒	30 seconds maximum
-spec-timeout	20 minutes	20分	minimum
-implementation-timeout	30 minutes	30分	minimum
+reevaluation	30 minutes	30分	repeat while waiting
+hard-stop	2 hours	2時間	elapsed runtime
+termination-grace	90 seconds	90秒	terminal publication
+automatic-force	--force	--force	prohibited
 heartbeat-interval	30 seconds	30秒	90 seconds freshness

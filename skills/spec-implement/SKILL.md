@@ -216,8 +216,8 @@ each step is resolved per task.
      do not start agent-delegate.
    - `owner != host_runtime` → run the **agent-delegate** script with
      `--mode delegate --target <owner> --detach`. Retain the expected run id and
-     use the contract's 15–30-second report-first state wait. The caller-owned
-     timeout is at least 30 minutes.
+     use the contract's 15–30-second report-first state wait. Re-evaluate at
+     30-minute intervals and apply the contract's controlled stop at 2 hours.
 
 **Reviewer inversion (review gate):** choose the preferred reviewer as the
 opposite AI role from the task's implementer, then resolve that reviewer through

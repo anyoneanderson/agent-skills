@@ -23,7 +23,8 @@ inspect or spec_review or approval sends findings back for revision.
      writes files for both initial generation and repair: pass the author role
      as the explicit target, use `--detach`, retain the expected run id, and use
      the 15–30-second expected-run wait in `../role-dispatch.md`.
-     Any caller-owned timeout is at least 20 minutes.
+     Re-evaluate at 30-minute intervals and apply the 2-hour controlled stop
+     from that shared wait contract.
 2. The planner writes `requirement.md`, `design.md`, `tasks.md`, and `test.md`
    into `.specs/{feature}/`. The orchestrator does not write these files.
 

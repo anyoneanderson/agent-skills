@@ -300,10 +300,13 @@ seconds. At each poll, inspect the expected run in this order:
 1. Read the report. Finish only for valid JSON whose `status` is `done` or
    `blocked` and whose `meta.run_id` equals `expected_run_id`.
 2. Read owner and pid. If the owner has moved to another run, return
-   `SUPERSEDED`.
+   `SUPERSEDED`. Before the first heartbeat, use a non-null `worker_pid` from
+   the expected-run owner as the worker identity.
 3. Read the heartbeat. Keep the last valid heartbeat if a replacement is
    temporarily unreadable.
-4. Probe the worker and monitor PIDs. A permission error is unknown, not absent.
+4. Probe the worker and monitor PIDs. After a valid heartbeat, its worker PID
+   must agree with the expected-run owner. A permission error is unknown, not
+   absent.
 5. For `DEATH_CANDIDATE`, wait 30 seconds and begin the next poll by checking
    the report again.
 
@@ -311,9 +314,9 @@ seconds. At each poll, inspect the expected run in this order:
 |---|---|
 | expected-run report is valid `done` / `blocked` | `TERMINAL_DONE` / `TERMINAL_BLOCKED` |
 | owner belongs to another run | `SUPERSEDED` |
-| monitor absent, worker alive or unknown | `ORPHANED_WORKER` |
+| monitor absent, expected-run worker PID published and worker alive or unknown | `ORPHANED_WORKER` |
 | worker absent, monitor alive or unknown | `FINALIZING` |
-| worker and monitor absent | `DEATH_CANDIDATE`; after 30 seconds, `DEAD` |
+| monitor absent and worker absent, or monitor absent before any worker PID was published | `DEATH_CANDIDATE`; after 30 seconds, `DEAD` |
 | report exists but JSON, status, or run id is invalid while processes remain | `REPORT_INVALID_PENDING` |
 | heartbeat not generated, monitor alive, launch age at most 90 seconds | `STARTING` |
 | heartbeat not generated after 90 seconds, monitor alive | `DEGRADED_NO_HEARTBEAT` |
@@ -321,10 +324,49 @@ seconds. At each poll, inspect the expected run in this order:
 | fresh heartbeat, processes alive or unknown | `RUNNING` |
 | heartbeat older than 90 seconds, processes alive or unknown | `DEGRADED_STALE` |
 
+State selection uses this priority: valid terminal report, owner moved to
+another run, worker/monitor disappearance combination, invalid report, then
+heartbeat generation and freshness. Thus an invalid report with both processes
+absent enters `DEATH_CANDIDATE` and becomes `DEAD` after 30 seconds; it does not
+remain `REPORT_INVALID_PENDING`.
+
 Terminal report validation has priority over every heartbeat and PID state.
 A terminal heartbeat never substitutes for an invalid or missing report.
 `RUNNING`, every `DEGRADED_*` state, `ORPHANED_WORKER`, `FINALIZING`, and
 `REPORT_INVALID_PENDING` are waiting states, not failures.
+
+If the monitor disappears before the first heartbeat, the caller probes the
+expected-run owner's `worker_pid` when that field is non-null. If no worker PID
+was published, the caller records `worker_pid_unpublished` and treats the worker
+as absent for this state selection because it has no expected-run process
+identity that it can safely probe. A published PID whose probe returns a
+permission error remains unknown and therefore never proves death.
+
+### Detached wait budget and controlled stop
+
+Measure the detached wait from `launched_at`; a fresh heartbeat does not reset
+this elapsed runtime. At 30 minutes, and again at 60 and 90 minutes, the caller
+re-reads the report, owner, pid, heartbeat, and process state and records the
+observed state. A valid waiting state continues after each re-evaluation.
+
+At 2 hours, the caller performs one final report-first state evaluation:
+
+1. Return a newly observed terminal, `SUPERSEDED`, or `DEAD` state without
+   sending a signal.
+2. If the expected-run owner still matches and its monitor is alive, send
+   `TERM` to that monitor. The monitor terminates the worker and peer, publishes
+   an expected-run `blocked` report and terminal heartbeat, and removes runtime
+   owner records.
+3. Continue report-first polling for up to 90 seconds. Accept a valid terminal
+   report if it appears.
+4. If the monitor is absent or unknown at the 2-hour limit, or no terminal
+   report appears during the 90-second grace period, stop the caller's wait and
+   escalate to a human with the run id, last owner, pid, heartbeat, process
+   probes, and report-validation error.
+
+The 2-hour value limits peer work; controlled termination may extend caller
+wall time to 2 hours plus 90 seconds. The caller never invokes `--force` or
+signals an unidentified process as part of this timeout path.
 
 ### Sync vs detach
 
@@ -334,9 +376,10 @@ A terminal heartbeat never substitutes for an invalid or missing report.
   delegate that is read-only and has a concrete basis for completing within
   5 minutes.
 - If a task writes anything or lacks that time basis, use `--detach`.
-- A caller-owned timeout is at least 20 minutes for specification generation or
-  repair, and at least 30 minutes for implementation or E2E. Reaching it starts
-  a state re-evaluation; report absence alone still does not mean failure.
+- Every detached caller uses the 30-minute re-evaluation and 2-hour controlled
+  stop above, including specification work, review, implementation, and E2E.
+  Report absence alone still does not mean failure before the controlled-stop
+  decision.
 
 The script preserves CLI compatibility: omitting `--detach` still selects
 synchronous execution. The defaults above are caller policy, not an automatic

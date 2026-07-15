@@ -815,8 +815,8 @@ use agent-delegate per its contract.
 Follow `agent-delegate/references/contract.md`. Code implementation writes files,
 so use explicit `--detach` and `--sandbox workspace-write`. Pass the owner AI
 role as `--target` explicitly. Retain the expected run id and launch time, poll every 15 seconds
-(never less often than every 30 seconds), and allow at least 30 minutes before a
-caller-owned re-evaluation.
+(never less often than every 30 seconds), re-evaluate at 30-minute intervals,
+and apply the public contract's controlled stop at 2 hours.
 
 ```bash
 OUT=".specs/{feature}/delegate/{task-id}"; mkdir -p "$OUT"
@@ -841,6 +841,9 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 - At each poll, validate the expected-run report first, then owner, pid,
   heartbeat, and worker/monitor process state. Keep waiting through live and
   degraded states; report absence alone is not failure.
+- At the 2-hour limit, recheck the report and owner before sending `TERM` only
+  to the verified expected monitor. Wait up to 90 seconds for its terminal
+  report; otherwise stop waiting and escalate diagnostics without `--force`.
 - `status == done` → the peer finished. Mark the checkbox and commit (the orchestrator,
   not the peer, owns commits — the peer is told to commit nothing).
 - `status == blocked` → read `blocker` / `blocker_category`; feed into the fix loop

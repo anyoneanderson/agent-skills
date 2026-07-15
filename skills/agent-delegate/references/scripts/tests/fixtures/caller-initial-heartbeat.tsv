@@ -1,0 +1,9 @@
+case_id	report	status	owner	heartbeat	worker_source	monitor	worker	launch_age_seconds	death_for_seconds	expected_state
+monitor-live-before-worker	absent	none	expected	absent	none	alive	unpublished	90	0	STARTING
+monitor-live-after-grace	absent	none	expected	absent	none	alive	unpublished	91	0	DEGRADED_NO_HEARTBEAT
+owner-worker-live	absent	none	expected	absent	owner	absent	alive	15	0	ORPHANED_WORKER
+owner-worker-permission-unknown	absent	none	expected	absent	owner	absent	unknown	15	0	ORPHANED_WORKER
+owner-worker-absent-first	absent	none	expected	absent	owner	absent	absent	15	0	DEATH_CANDIDATE
+owner-worker-absent-confirmed	absent	none	expected	absent	owner	absent	absent	45	30	DEAD
+worker-pid-unpublished-first	absent	none	expected	absent	none	absent	unpublished	15	0	DEATH_CANDIDATE
+worker-pid-unpublished-confirmed	absent	none	expected	absent	none	absent	unpublished	45	30	DEAD

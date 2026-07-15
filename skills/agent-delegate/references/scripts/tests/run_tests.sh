@@ -149,29 +149,114 @@ run_basic_harness_case() {
 }
 
 state_decision() {
-  local report="$1" status="$2" heartbeat="$3" monitor="$4" worker="$5" elapsed="$6"
+  local report="$1" status="$2" owner="$3" heartbeat="$4" worker_source="$5"
+  local monitor="$6" worker="$7" launch_age="$8" death_for="$9"
   if [ "$report" = valid ] && [ "$status" = done ]; then printf TERMINAL_DONE; return; fi
   if [ "$report" = valid ] && [ "$status" = blocked ]; then printf TERMINAL_BLOCKED; return; fi
+  if [ "$owner" = other ]; then printf SUPERSEDED; return; fi
+  if [ "$monitor" = absent ]; then
+    if [ "$worker_source" = none ] || [ "$worker" = absent ]; then
+      [ "$death_for" -ge 30 ] && printf DEAD || printf DEATH_CANDIDATE
+    else
+      printf ORPHANED_WORKER
+    fi
+    return
+  fi
+  if [ "$worker_source" != none ] && [ "$worker" = absent ]; then printf FINALIZING; return; fi
   if [ "$report" = invalid ] || [ "$report" = wrong-run ]; then printf REPORT_INVALID_PENDING; return; fi
   if [ "$heartbeat" = absent ]; then
-    [ "$elapsed" -eq 0 ] && printf STARTING || printf DEGRADED_NO_HEARTBEAT
+    [ "$launch_age" -le 90 ] && printf STARTING || printf DEGRADED_NO_HEARTBEAT
   elif [ "$heartbeat" = unreadable ]; then printf DEGRADED_UNREADABLE
-  elif [ "$monitor" = absent ] && [ "$worker" = alive ]; then printf ORPHANED_WORKER
-  elif [ "$monitor" = alive ] && [ "$worker" = absent ]; then printf FINALIZING
-  elif [ "$monitor" = absent ] && [ "$worker" = absent ]; then
-    [ "$elapsed" -ge 30 ] && printf DEAD || printf DEATH_CANDIDATE
   elif [ "$heartbeat" = stale ]; then printf DEGRADED_STALE
   else printf RUNNING
   fi
 }
 
 check_state_fixture() {
-  local file="$1" report status heartbeat monitor worker elapsed expected actual
-  while IFS=$'\t' read -r report status heartbeat monitor worker elapsed expected; do
-    [ "$report" = report ] && continue
-    actual="$(state_decision "$report" "$status" "$heartbeat" "$monitor" "$worker" "$elapsed")"
+  local file="$1" case_id report status owner heartbeat worker_source monitor worker launch_age death_for expected actual count=0
+  while IFS=$'\t' read -r case_id report status owner heartbeat worker_source monitor worker launch_age death_for expected; do
+    [ "$case_id" = case_id ] && continue
+    count=$((count + 1))
+    case "$report" in valid|absent|invalid|wrong-run) : ;; *) return 1 ;; esac
+    case "$owner" in expected|other) : ;; *) return 1 ;; esac
+    case "$heartbeat" in any|absent|unreadable|fresh|stale) : ;; *) return 1 ;; esac
+    case "$worker_source" in none|owner|heartbeat) : ;; *) return 1 ;; esac
+    case "$monitor" in any|alive|absent|unknown) : ;; *) return 1 ;; esac
+    case "$worker" in alive|absent|unknown|unpublished) : ;; *) return 1 ;; esac
+    case "$launch_age" in ''|*[!0-9]*) return 1 ;; esac
+    case "$death_for" in ''|*[!0-9]*) return 1 ;; esac
+    if [ "$worker_source" = none ]; then
+      [ "$worker" = unpublished ] || return 1
+    else
+      [ "$worker" != unpublished ] || return 1
+    fi
+    actual="$(state_decision "$report" "$status" "$owner" "$heartbeat" "$worker_source" \
+      "$monitor" "$worker" "$launch_age" "$death_for")"
     [ "$actual" = "$expected" ] || return 1
   done < "$file"
+  [ "$count" -gt 0 ]
+}
+
+wait_decision() {
+  local elapsed="$1" state="$2" owner="$3" monitor="$4" stop_age="$5" terminal="$6"
+  case "$terminal" in done) printf TERMINAL_DONE; return ;; blocked) printf TERMINAL_BLOCKED; return ;; esac
+  if [ "$owner" = other ]; then printf SUPERSEDED; return; fi
+  if [ "$state" = DEAD ]; then printf DEAD; return; fi
+  if [ "$elapsed" -ge 7200 ]; then
+    if [ "$stop_age" -gt 0 ]; then
+      [ "$stop_age" -lt 90 ] && printf WAIT_TERMINAL || printf ESCALATE_STOP_WAITING
+    elif [ "$monitor" = alive ]; then
+      printf TERM_MONITOR
+    else
+      printf ESCALATE_STOP_WAITING
+    fi
+    return
+  fi
+  if [ "$elapsed" -gt 0 ] && [ $((elapsed % 1800)) -eq 0 ]; then
+    printf REEVALUATE_CONTINUE
+  else
+    printf WAIT
+  fi
+}
+
+check_wait_fixture() {
+  local file="$1" case_id elapsed state owner monitor stop_age terminal expected actual count=0
+  while IFS=$'\t' read -r case_id elapsed state owner monitor stop_age terminal expected; do
+    [ "$case_id" = case_id ] && continue
+    count=$((count + 1))
+    case "$elapsed" in ''|*[!0-9]*) return 1 ;; esac
+    case "$stop_age" in ''|*[!0-9]*) return 1 ;; esac
+    case "$state" in RUNNING|STARTING|DEGRADED_*|ORPHANED_WORKER|FINALIZING|REPORT_INVALID_PENDING|DEAD) : ;; *) return 1 ;; esac
+    case "$owner" in expected|other) : ;; *) return 1 ;; esac
+    case "$monitor" in alive|absent|unknown) : ;; *) return 1 ;; esac
+    case "$terminal" in none|done|blocked) : ;; *) return 1 ;; esac
+    actual="$(wait_decision "$elapsed" "$state" "$owner" "$monitor" "$stop_age" "$terminal")"
+    [ "$actual" = "$expected" ] || return 1
+  done < "$file"
+  [ "$count" -gt 0 ]
+}
+
+corrupt_fixture_expectation() {
+  local source="$1" case_id="$2" replacement="$3" destination="$4"
+  awk -v id="$case_id" -v replacement="$replacement" 'BEGIN{FS=OFS="\t"} $1==id{$NF=replacement} {print}' \
+    "$source" > "$destination"
+}
+
+check_wait_contract_docs() {
+  local fixture="$FIXTURE_DIR/document-contract.tsv" id en ja expected
+  while IFS=$'\t' read -r id en ja expected; do
+    case "$id" in
+      reevaluation|hard-stop|termination-grace|automatic-force)
+        grep -Fq -- "$en" "$REPO_ROOT/skills/agent-delegate/references/contract.md" || return 1
+        grep -Fq -- "$ja" "$REPO_ROOT/skills/agent-delegate/references/contract.ja.md" || return 1
+        grep -Fq -- "$en" "$REPO_ROOT/skills/spec-orchestrate/references/role-dispatch.md" || return 1
+        grep -Fq -- "$ja" "$REPO_ROOT/skills/spec-orchestrate/references/role-dispatch.ja.md" || return 1
+        ;;
+    esac
+  done < "$fixture"
+  grep -Fq '2 hours' "$REPO_ROOT/skills/agent-delegate/SKILL.md" &&
+    grep -Fq '2 hours' "$REPO_ROOT/skills/spec-implement/SKILL.md" &&
+    grep -Fq '2 hours' "$REPO_ROOT/skills/spec-evaluate/SKILL.md"
 }
 
 stale_decision() {
@@ -413,9 +498,70 @@ case_caller_state_machine() {
   local bad
   check_state_fixture "$FIXTURE_DIR/caller-states.tsv" || die "state fixture rejected"
   bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-states.XXXXXX")"
-  awk 'BEGIN{FS=OFS="\t"} NR==2{$NF="RUNNING"} {print}' "$FIXTURE_DIR/caller-states.tsv" > "$bad"
+  corrupt_fixture_expectation "$FIXTURE_DIR/caller-states.tsv" invalid-both-absent-dead \
+    REPORT_INVALID_PENDING "$bad"
   if check_state_fixture "$bad"; then rm -f "$bad"; die "state checker accepted a corrupted expectation"; fi
   rm -f "$bad"
+}
+
+case_caller_initial_heartbeat_death() {
+  local fixture="$FIXTURE_DIR/caller-initial-heartbeat.tsv" bad dir result owner bad_owner
+  check_state_fixture "$fixture" || die "initial heartbeat state fixture rejected"
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-initial-heartbeat.XXXXXX")"
+  corrupt_fixture_expectation "$fixture" worker-pid-unpublished-confirmed DEGRADED_NO_HEARTBEAT "$bad"
+  if check_state_fixture "$bad"; then
+    rm -f "$bad"
+    die "initial heartbeat checker accepted an unbounded missing-worker state"
+  fi
+  rm -f "$bad"
+
+  dir="$(new_work_dir)"
+  result="$(run_harness "$dir" initial-heartbeat claude monitor-kill-before-heartbeat)"
+  owner="$(jq -r '.owner_snapshot' "$result")"
+  jq -e --slurpfile owner "$owner" '
+    .scenario=="monitor-kill-before-heartbeat" and .monitor_alive==false and
+    .worker_alive_before_cleanup==true and .heartbeat_absent==true and
+    .run_id==$owner[0].run_id and .monitor_pid==$owner[0].monitor_pid and
+    .worker_pid==$owner[0].worker_pid
+  ' "$result" >/dev/null || die "initial heartbeat runtime evidence rejected"
+  [ ! -e "$(jq -r '.heartbeat_path' "$result")" ] || die "initial heartbeat was published before injected monitor death"
+  bad_owner="$dir/initial-heartbeat-owner.negative.json"
+  jq '.worker_pid += 1' "$owner" > "$bad_owner"
+  if jq -e --slurpfile owner "$bad_owner" '
+    .run_id==$owner[0].run_id and .monitor_pid==$owner[0].monitor_pid and
+    .worker_pid==$owner[0].worker_pid
+  ' "$result" >/dev/null; then
+    rm -rf "$dir"
+    die "initial heartbeat runtime checker accepted a corrupted owner worker PID"
+  fi
+  rm -rf "$dir"
+}
+
+case_caller_state_priority() {
+  local fixture="$FIXTURE_DIR/caller-priority.tsv" bad
+  check_state_fixture "$fixture" || die "caller priority fixture rejected"
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-priority.XXXXXX")"
+  corrupt_fixture_expectation "$fixture" process-before-invalid-confirmed REPORT_INVALID_PENDING "$bad"
+  if check_state_fixture "$bad"; then
+    rm -f "$bad"
+    die "caller priority checker accepted invalid-report priority over process death"
+  fi
+  rm -f "$bad"
+}
+
+case_caller_wait_upper_bound() {
+  local fixture="$FIXTURE_DIR/caller-wait-bounds.tsv" bad
+  check_wait_fixture "$fixture" || die "caller wait-bound fixture rejected"
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-wait-bound.XXXXXX")"
+  corrupt_fixture_expectation "$fixture" hard-limit-live-monitor WAIT "$bad"
+  if check_wait_fixture "$bad"; then
+    rm -f "$bad"
+    die "wait-bound checker accepted an unbounded live monitor"
+  fi
+  rm -f "$bad"
+  check_wait_contract_docs || die "public wait-bound contract is incomplete"
+  run_detach_review_lifecycle_stub monitor-termination ||
+    die "TERM did not produce a blocked terminal report and process cleanup"
 }
 
 case_run_ownership_force_resume() {
@@ -814,7 +960,14 @@ case_allowed_scope_and_skill_style() {
   while IFS= read -r path; do
     [ -z "$path" ] && continue
     case "$path" in
+      README.md|README.ja.md|skills/agent-delegate/SKILL.md|skills/agent-delegate/references/contract.md|skills/agent-delegate/references/contract.ja.md) : ;;
       skills/agent-delegate/references/scripts/agent-delegate.sh|skills/agent-delegate/references/scripts/tests/*) : ;;
+      skills/spec-orchestrate/SKILL.md|skills/spec-orchestrate/references/role-dispatch.md|skills/spec-orchestrate/references/role-dispatch.ja.md) : ;;
+      skills/spec-orchestrate/references/phases/spec_generate.md|skills/spec-orchestrate/references/phases/spec_generate.ja.md) : ;;
+      skills/spec-orchestrate/references/phases/spec_review.md|skills/spec-orchestrate/references/phases/spec_review.ja.md) : ;;
+      skills/spec-orchestrate/references/phases/evaluate.md|skills/spec-orchestrate/references/phases/evaluate.ja.md) : ;;
+      skills/spec-implement/SKILL.md|skills/spec-implement/references/implement-guide.md|skills/spec-implement/references/implement-guide.ja.md) : ;;
+      skills/spec-evaluate/SKILL.md|skills/spec-evaluate/references/execution-backend.md|skills/spec-evaluate/references/execution-backend.ja.md) : ;;
       *) die "out-of-scope tracked change: $path" ;;
     esac
   done <<EOF
@@ -1048,9 +1201,9 @@ write_repeat_manifest() {
     --arg fixture "$fixture_hash" --arg harness "$harness_hash" --argjson beats "$CURRENT_HEARTBEATS" \
     --argjson terminals "$CURRENT_TERMINALS" '
     {iteration:$iteration,commit:$commit,hashes:{runner:$runner,fixture:$fixture,harness:$harness},
-     case_count:21,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
+     case_count:24,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
   ' > "$out"
-  jq -e '.case_count==21 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
+  jq -e '.case_count==24 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
 }
 
 if [ -n "$RUN_CASE" ]; then
@@ -1082,12 +1235,12 @@ done
 if [ "$REPEAT" -eq 3 ]; then
   aggregate="$repeat_root/aggregate.json"
   jq -n --argjson repeats "$REPEAT" --arg commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" \
-    '{commit:$commit,repeats:$repeats,registered_cases:22,passed_cases:22,failed_cases:0,
+    '{commit:$commit,repeats:$repeats,registered_cases:25,passed_cases:25,failed_cases:0,
       meta_cases:["readonly-gate-evidence","all-repeat-3"]}' > "$aggregate"
-  jq -e '.repeats==3 and .registered_cases==22 and .passed_cases==22 and .failed_cases==0' "$aggregate" >/dev/null
+  jq -e '.repeats==3 and .registered_cases==25 and .passed_cases==25 and .failed_cases==0' "$aggregate" >/dev/null
   printf 'PASS\tall-repeat-3\n'
   printf 'AGGREGATE\t%s\n' "$(jq -c . "$aggregate")"
-  printf 'ALL_PASS\trepeats=%s\tcases=22/22\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=25/25\n' "$REPEAT"
 else
-  printf 'ALL_PASS\trepeats=%s\tcases=21/22\tmeta=all-repeat-3-deferred\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=24/25\tmeta=all-repeat-3-deferred\n' "$REPEAT"
 fi

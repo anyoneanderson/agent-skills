@@ -106,9 +106,19 @@ There is exactly one standard way to wait, plus a backup rule:
   an actionable state first, verify the result and nudge (or replace) the stalled worker.
   This is standard procedure, not an optional extra.
 
-Caller-owned timeouts are at least 20 minutes for specification generation or
-repair and at least 30 minutes for implementation or E2E. A timeout triggers a
-fresh state evaluation; it does not convert a missing report into failure.
+At 30 minutes, and again at 60 and 90 minutes, the background watcher performs
+a report-first state re-evaluation and records the last owner, pid, heartbeat,
+process probes, and report-validation error. A waiting state continues; a
+missing report alone is not failure.
+
+At 2 hours from `launched_at`, the watcher re-evaluates once more. It returns a
+new terminal, `SUPERSEDED`, or `DEAD` result without signaling. Otherwise, if
+the expected owner still matches and its monitor is alive, it sends `TERM` to
+that monitor and waits up to 90 seconds for the expected-run terminal report.
+If the monitor is absent or unknown, or the grace period expires, the watcher
+clears `waiting_report`, stops waiting, and reports the saved diagnostics to the
+human operator. This path never invokes `--force` or signals an unidentified
+process.
 
 ## Phase-Specific Resolution
 

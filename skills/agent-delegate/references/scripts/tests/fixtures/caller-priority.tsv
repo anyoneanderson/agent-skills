@@ -1,0 +1,9 @@
+case_id	report	status	owner	heartbeat	worker_source	monitor	worker	launch_age_seconds	death_for_seconds	expected_state
+terminal-before-owner	valid	done	other	any	none	absent	unpublished	150	30	TERMINAL_DONE
+owner-before-process	invalid	unknown	other	fresh	heartbeat	absent	absent	150	30	SUPERSEDED
+process-before-invalid-first	invalid	unknown	expected	fresh	heartbeat	absent	absent	120	0	DEATH_CANDIDATE
+process-before-invalid-confirmed	invalid	unknown	expected	fresh	heartbeat	absent	absent	150	30	DEAD
+invalid-before-heartbeat	invalid	unknown	expected	fresh	heartbeat	alive	alive	120	0	REPORT_INVALID_PENDING
+monitor-loss-before-heartbeat	absent	none	expected	stale	heartbeat	absent	alive	120	0	ORPHANED_WORKER
+worker-loss-before-heartbeat	absent	none	expected	stale	heartbeat	alive	absent	120	0	FINALIZING
+heartbeat-last	absent	none	expected	stale	heartbeat	alive	alive	120	0	DEGRADED_STALE

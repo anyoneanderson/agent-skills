@@ -156,8 +156,9 @@ read-only and cannot launch or operate the app).
    ```
 
    Apply the public contract state machine: validate the expected-run report
-   first, then owner, pid, heartbeat, and process state. Use at least 30 minutes
-   for a caller-owned timeout; report absence while the run is live is not failure.
+   first, then owner, pid, heartbeat, and process state. Re-evaluate at
+   30-minute intervals and apply the contract's controlled stop at 2 hours;
+   report absence while the run is live is not failure.
 
 3. After a valid terminal report, read `status` from `report.json`. On `blocked`, treat the run as an
    evaluation failure with the blocker recorded, not a silent pass.

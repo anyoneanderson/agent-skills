@@ -20,7 +20,7 @@
 2. evaluator role と host が異なる場合、agent-delegate backend は role を target として
    明示し、`--detach` を渡して expected run id を保持し、`../role-dispatch.ja.md` の
    report-first な15〜30秒待機を適用する。
-   呼び出し側のタイムアウトは30分以上とする。
+   30分ごとに状態を再確認し、同じ待機契約に定めた2時間の停止手順を適用する。
    heartbeat またはプロセス状態が生存を示す間、report の不在は失敗ではなく待機状態である。
 
 ## 出力
