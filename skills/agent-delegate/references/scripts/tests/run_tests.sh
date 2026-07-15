@@ -556,11 +556,15 @@ process_group_of() {
 
 cleanup_detach_stub_fixture() {
   local dir="$1" label="$2" owner="$dir/$label-owner.json" monitor="" worker="" pgid="" own_pgid
-  local handoff=""
+  local handoff="" heartbeat="$dir/$label-heartbeat.json"
   if [ -f "$owner" ] && jq -e . "$owner" >/dev/null 2>&1; then
     monitor="$(jq -r '.monitor_pid // empty' "$owner")"
     worker="$(jq -r '.worker_pid // empty' "$owner")"
     handoff="$(jq -r '.handoff_dir // empty' "$owner")"
+  fi
+  if [ -z "$monitor" ] && jq -e . "$heartbeat" >/dev/null 2>&1; then
+    monitor="$(jq -r '.monitor_pid // empty' "$heartbeat")"
+    worker="$(jq -r '.pid // empty' "$heartbeat")"
   fi
   own_pgid="$(process_group_of "${BASHPID:-$$}")"
   if [ -n "$monitor" ]; then
@@ -577,12 +581,21 @@ cleanup_detach_stub_fixture() {
 }
 
 launch_detach_review_stub() {
-  local dir="$1" label="$2" barrier="$3" driver driver_pgid monitor_mode=0
+  local dir="$1" label="$2" barrier="$3" signal_stage="${4:-}" test_handoff="${5:-}"
+  local driver driver_pgid monitor_mode=0 test_mode=0 ready_file=""
+  if [ -n "$signal_stage" ]; then
+    test_mode=owner-lock-signal
+    ready_file="$barrier/claude.ready"
+  fi
   case $- in *m*) monitor_mode=1 ;; esac
   set -m
   (
     exec env PATH="$STUB_DIR:$PATH" AGENT_DELEGATE_STUB_BARRIER_DIR="$barrier" \
-      AGENT_DELEGATE_STUB_REVIEW=1 bash "$SCRIPT" --mode review --prompt-file "$dir/prompt.md" \
+      AGENT_DELEGATE_STUB_REVIEW=1 AGENT_DELEGATE_TEST_MODE="$test_mode" \
+      AGENT_DELEGATE_TEST_HANDOFF_DIR="$test_handoff" \
+      AGENT_DELEGATE_TEST_OWNER_LOCK_SIGNAL_STAGE="$signal_stage" \
+      AGENT_DELEGATE_TEST_OWNER_LOCK_READY_FILE="$ready_file" \
+      bash "$SCRIPT" --mode review --prompt-file "$dir/prompt.md" \
         --out-dir "$dir" --label "$label" --target claude --detach
   ) > "$dir/$label-launch.out" 2> "$dir/$label-launch.err" &
   driver=$!
@@ -669,6 +682,63 @@ run_detach_review_lifecycle_stub() (
   rm -rf "$dir"
 )
 
+check_owner_lock_signal_artifacts() {
+  local report="$1" heartbeat="$2" dir="$3" label="$4" handoff="$5" expected_status="$6"
+  [ -f "$report" ] && [ -f "$heartbeat" ] || return 1
+  jq -e --arg status "$expected_status" '
+    .status==$status and (.meta.run_id|type)=="string" and (.meta.run_id|length)>0 and
+    .blocker_category=="env_error" and (.blocker|contains("TERM"))
+  ' "$report" >/dev/null || return 1
+  jq -e --arg status "$expected_status" --slurpfile report "$report" '
+    .state==$status and .run_id==$report[0].meta.run_id and
+    (.pid|type)=="number" and (.monitor_pid|type)=="number"
+  ' "$heartbeat" >/dev/null || return 1
+  [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] &&
+    [ ! -e "$dir/$label-owner.lock" ] && [ ! -d "$handoff" ] || return 1
+  ! find "$dir" -maxdepth 1 \( -name "$label-report.candidate.*" -o -name "$label-report.json.tmp.*" \
+    -o -name "$label-heartbeat.json.tmp.*" -o -name "$label-owner.json.tmp.*" \) -print -quit | grep -q .
+}
+
+run_owner_lock_signal_stub() (
+  local case_id="$1" signal_stage="$2" expected_status="$3" dir label barrier handoff report heartbeat bad_heartbeat
+  local monitor peer deadline
+  dir="$(new_work_dir)"; label="owner-lock-signal-$case_id"; barrier="$dir/barrier"
+  handoff="$(mktemp -d "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-owner-lock-signal-handoff.XXXXXX")"
+  chmod 700 "$handoff"
+  trap 'cleanup_detach_stub_fixture "$dir" "$label"; rm -rf "$handoff"' EXIT TERM INT HUP
+  mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'review prompt\n' > "$dir/prompt.md"
+  launch_detach_review_stub "$dir" "$label" "$barrier" "$signal_stage" "$handoff" || return 1
+  report="$dir/$label-report.json"; heartbeat="$dir/$label-heartbeat.json"
+  deadline=$(( $(date -u +%s) + 10 ))
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    if check_owner_lock_signal_artifacts "$report" "$heartbeat" "$dir" "$label" "$handoff" "$expected_status"; then
+      monitor="$(jq -r '.monitor_pid' "$heartbeat")"
+      peer="$(cat "$barrier/claude.pid" 2>/dev/null || true)"
+      if ! kill -0 "$monitor" 2>/dev/null && { [ -z "$peer" ] || ! kill -0 "$peer" 2>/dev/null; }; then break; fi
+    fi
+  done
+  check_owner_lock_signal_artifacts "$report" "$heartbeat" "$dir" "$label" "$handoff" "$expected_status" || return 1
+  monitor="$(jq -r '.monitor_pid' "$heartbeat")"; ! kill -0 "$monitor" 2>/dev/null || return 1
+  peer="$(cat "$barrier/claude.pid" 2>/dev/null || true)"; [ -z "$peer" ] || ! kill -0 "$peer" 2>/dev/null || return 1
+
+  bad_heartbeat="$dir/$label-heartbeat.negative.json"
+  jq '.run_id="corrupted-run"' "$heartbeat" > "$bad_heartbeat"
+  if check_owner_lock_signal_artifacts "$report" "$bad_heartbeat" "$dir" "$label" "$handoff" "$expected_status"; then
+    return 1
+  fi
+  rm -f "$bad_heartbeat"
+  trap - EXIT TERM INT HUP
+  rm -rf "$dir"
+)
+
+check_owner_lock_signal_fixture() {
+  local file="$1" case_id signal_stage expected_status
+  while IFS=$'\t' read -r case_id signal_stage expected_status; do
+    [ "$case_id" = case_id ] && continue
+    run_owner_lock_signal_stub "$case_id" "$signal_stage" "$expected_status" || return 1
+  done < "$file"
+}
+
 case_clean_checkout_compatibility() {
   local dir rc worktree_parent worktree runner_rel deadline detach_report bad_fixture
   runner_rel="skills/agent-delegate/references/scripts/tests/run_tests.sh"
@@ -719,6 +789,8 @@ case_clean_checkout_compatibility() {
   run_detach_review_lifecycle_stub survives-launcher-exit || die "detach monitor did not survive launcher process-group cleanup"
   run_detach_review_lifecycle_stub worker-death || die "detach monitor did not synthesize blocked after worker death"
   run_detach_review_lifecycle_stub monitor-termination || die "detach monitor did not synthesize blocked after monitor termination"
+  check_owner_lock_signal_fixture "$FIXTURE_DIR/owner-lock-signal-cases.tsv" ||
+    die "owner lock signal fixture rejected"
 }
 
 case_monitor_only_publishers() {
