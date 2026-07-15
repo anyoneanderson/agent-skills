@@ -27,12 +27,18 @@ report() { echo "DRIFT: $1"; drift=1; }
 
 phase="$(jq -r '.phase // empty' "$STATE")"
 completed="$(jq -r '(.completed_phases // []) | join(",")' "$STATE")"
+host_runtime="$(jq -r '.host_runtime // empty' "$STATE")"
 
 has_completed() { case ",$completed," in *",$1,"*) return 0;; *) return 1;; esac; }
 
 case "$phase" in
   intake|spec_generate|inspect|spec_review|approval|implement|evaluate|arbitration|pr|retrospective) ;;
   *) report "unknown phase '$phase'" ;;
+esac
+
+case "$host_runtime" in
+  claude|codex) ;;
+  *) report "host_runtime must be 'claude' or 'codex' (got '$host_runtime')" ;;
 esac
 
 # --- completed_phases gap check ------------------------------------------------

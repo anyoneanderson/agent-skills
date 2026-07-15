@@ -84,12 +84,14 @@ pipeline-metrics.jsonl
 Write the initial `pipeline-state.json`:
 ```json
 { "feature": "<name>", "mode": "manual|auto", "issue": <N|null>,
-  "language": "en|ja", "phase": "spec_generate",
+  "language": "en|ja", "host_runtime": "claude|codex", "phase": "spec_generate",
   "completed_phases": ["intake"], "rounds": {}, "threads": {},
   "role_overrides": {}, "arbitrations": [] }
 ```
 The full schema and the jq/awk write idiom are in `../pipeline-config.md`;
-intake writes the minimum required to enter spec_generate.
+intake writes the minimum required to enter spec_generate. Determine
+`host_runtime` from the current runtime explicitly; if it is unknown, apply the
+manual/auto fallback in `../role-dispatch.md` Step 0 before writing state.
 
 ## Transitions
 

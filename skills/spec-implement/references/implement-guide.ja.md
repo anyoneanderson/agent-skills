@@ -210,10 +210,10 @@ fi
 - ワークフローに明示された定義ファイルパスを最優先で使用
 - ワークフロー未記載時のみランタイム既定パスにフォールバック
 - Codex のランタイム既定パスは `.codex/agents/workflow-implementer.toml`、`.codex/agents/workflow-reviewer.toml`、`.codex/agents/workflow-tester.toml`
-- Codex は `.codex/agents/*.toml` から custom agent を検出する。`[agents.<name>] config_file = ...` は要求しない
+- Codex は `.codex/agents/*.toml` から custom agent を検出する。`[agents.<name>] config_file = ...` は要求も作成もしない
 - Claude Code agent team のランタイム既定パスは `.claude/agents/workflow-implementer.md`、`.claude/agents/workflow-reviewer.md`、`.claude/agents/workflow-tester.md`
 - Claude Code 実行中で `.claude/agents/workflow-*.md` が存在し、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` が設定されている場合は、Claude Code agent team を使用する
-- cmux dispatch は別ペインで外部起動する方式。ワークフローまたはユーザーが cmux を明示選択した場合、またはランタイム組み込み agent が使えない場合に使用する
+- cmux dispatch は別ペインで外部起動する方式。`--roles` なしでは、ワークフローまたはユーザーが cmux を明示選択した場合、または runtime-native agent が使えない場合に使用する。`--roles` ありでは host-aware 能力 fallback を優先し、dispatch mode を黙って切り替えず native 利用不能を caller へ報告する
 - ランタイムを判定できない場合は、起動前にユーザーへ確認
 - ランタイム設定が不正な場合は順次実行へフォールバック
 
@@ -738,16 +738,18 @@ Classify findings as: Critical / Improvement / Minor
 
 ## kind ラベルによるタスク単位ルーティング
 
-SKILL.md の「Phase 6b」で要約した `--roles` レイヤーの詳細です。タスクの `kind` ラベルを見て、
-各タスクを実行主体（spec-code / spec-review、または agent-delegate の相手 LLM）に振り分けます。
-オーケストレーターがタスクごとに実装を別の LLM に委ねつつ、Phase 6 のループとレビューゲートは
-そのまま保てます。
+SKILL.md の「Phase 6b」で要約した `--roles` レイヤーの詳細です。まずタスクの
+`kind` を implementer AI role へ対応づけ、その後 `--host-runtime` を使って
+runtime-native subagent か cross-AI agent-delegate backend を選びます。Phase 6 の
+ループとレビューゲートはそのまま保ちます。
 
 ### 有効になる条件
 
 - **`--roles` 省略時** → 従来経路。全タスクを spec-code、全レビューを spec-review で処理し、
   spec-test も従来どおり。agent-delegate は一切呼ばれません。パイプライン以前の仕様書と完全に同じ挙動です。
-- **`--roles` 指定時** → オーケストレーション経路。各タスクの実装担当とレビュー担当を下記の規則で解決します。
+- **`--roles` 指定時** → オーケストレーション経路。`--host-runtime {claude|codex}`
+  が必須です。各タスクの implementer / reviewer AI role を先に決め、その後で実行
+  backend を解決します。
 
 ループの制御フローは両経路で同一です（フェーズ単位の反復、3回上限の修正ループ、
 ゲート判定＝ `fix_before: implementation` は再実行・先送りの指摘と Minor は記録のみ、チェックボックス更新、コミット方針）。
@@ -772,6 +774,10 @@ impl_backend="$(yq -r '.roles.impl_backend // empty' "$roles_path")"
 impl_test="$(yq -r '.roles.impl_test // empty' "$roles_path")"
 ```
 
+タスク処理前に `--host-runtime` を検証します。値は `claude` / `codex` のどちらかです。
+オーケストレーターは pipeline state に記録した値を渡します。単体呼び出しでは明示指定が
+必要です。role の既定値や agent-delegate の環境変数から推測しません。
+
 ### 担当解決（タスクごと）
 
 ```
@@ -780,14 +786,26 @@ owner = roles[kind]              kind が既知かつマップに存在する場
 owner = claude                   それ以外（kind 不明・欠落、またはマップ未登録）
 ```
 
-`claude` → そのタスクは従来どおり **spec-code** で処理（「Agent Role Detection」の全ディスパッチ
-モードがそのまま適用）。`codex` → そのタスクは **agent-delegate** スクリプトを契約に従って呼び出します。
+`owner` は implementer AI role であり、backend ではありません。次の共通の
+host-aware 行列で実行手段を解決します。
 
-### 相手 LLM への実装委譲（`owner == codex`）
+<!-- dispatch-matrix:start -->
+| Host runtime | Owner AI role | Backend | agent-delegate target |
+|---|---|---|---|
+| `codex` | `codex` | `runtime-native` | `-` |
+| `codex` | `claude` | `agent-delegate` | `claude` |
+| `claude` | `claude` | `runtime-native` | `-` |
+| `claude` | `codex` | `agent-delegate` | `codex` |
+<!-- dispatch-matrix:end -->
+
+host と owner が一致すれば runtime-native subagent を使い、agent-delegate は起動しません。
+native worker では spec-code を実行します。異なれば公開契約どおりに agent-delegate を使います。
+
+### 相手 LLM への実装委譲（`owner != host_runtime`）
 
 `agent-delegate/references/contract.md` に従います。
 コード実装はファイルを書き込むため、明示的な `--detach` と `--sandbox workspace-write` を使います。
-`--target` を明示し、expected run id と起動時刻を保持します。
+owner AI role を `--target` で明示し、expected run id と起動時刻を保持します。
 15秒を標準、30秒を上限としてポーリングし、呼び出し側が再評価するまで30分以上を確保します。
 
 ```bash
@@ -801,7 +819,7 @@ Implement {task-id} from the spec.
 Commit nothing; report changed files and any blocker.
 EOF
 
-launch="$(agent-delegate.sh --mode delegate --target codex \
+launch="$(agent-delegate.sh --mode delegate --target "$owner" \
   --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}" \
   --sandbox workspace-write --detach)"
 expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
@@ -817,7 +835,21 @@ report="$(printf '%s\n' "$launch" | tail -1)"
   オーケストレーターが持つ。相手には「コミットするな」と指示する）。
 - `status == blocked` → `blocker` / `blocker_category` を読み、修正ループ（下記）に回すか呼び出し元に上げる。
 
-### 相手 LLM によるレビュー（`owner == claude`、実装が claude → レビューは codex）
+### Reviewer 反転と backend 解決
+
+先に reviewer AI role を決め、その後で backend を解決します。
+
+```
+reviewer = claude  if owner == codex
+reviewer = codex   if owner == claude
+```
+
+`reviewer == host_runtime` なら runtime-native reviewer subagent で spec-review を
+実行し、agent-delegate は起動しません。異なれば以下の peer review 経路で
+`--target "$reviewer"` を使います。この順序により Codex / Claude のどちらが host
+でも self-review を防ぎます。
+
+### Cross-AI peer review（`reviewer != host_runtime`）
 
 契約上、review モードは常に read-only です。
 5分以内に完了する具体的根拠がある場合だけ同期実行します。
@@ -834,7 +866,7 @@ Review the changes for {task-id}.
 - Review criteria: {review_rules.md のパス}, {coding-rules.md のパス}
 EOF
 
-report="$(agent-delegate.sh --mode review --target codex \
+report="$(agent-delegate.sh --mode review --target "$reviewer" \
   --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}-review" | tail -1)"
 review_file="$(jq -r .artifacts.review_file "$report")"
 gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
@@ -842,31 +874,35 @@ gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
 
 レビューファイルは spec-review 出力と同じ severity セクション（`### Critical` / `### Improvement` /
 `### Minor`）と `Gate: PASS|FAIL` 行を持つため、「Review Gate Details」の既存ゲートロジックが
-無改修でそのまま消費できます。実装が codex の場合はレビューが claude になり、このブロック全体は
-通常の spec-review 呼び出しに置き換わります。
+無改修でそのまま消費できます。
 
 ### 修正ループのルーティング
 
 修正ループの構造（最大3回、その後は降格 or ユーザー確認）は不変です。修正の実行主体だけが
 タスクの実装担当に従います:
 
-| 実装担当 | 修正ステップ | 再レビュー |
+| Implementer backend | 修正ステップ | 再レビュー |
 |---|---|---|
-| claude | `spec-code --feedback {findings}` | レビュアーが再実行（codex は agent-delegate `--resume {thread_id}`。5分以内という具体的根拠がある場合だけ同期し、それ以外は detach。claude は spec-review） |
-| codex | agent-delegate `--mode delegate --detach --resume {thread_id}`（findings をプロンプト末尾に追記） | レビュアーが再実行（claude は spec-review） |
+| runtime-native | native spec-code subagent を `--feedback {findings}` 付きで再実行 | 反対の reviewer AI を再び行列で解決 |
+| agent-delegate | `--mode delegate --target <owner> --detach --resume {thread_id}`（findings を追記） | 反対の reviewer AI を再び行列で解決 |
 
 ラウンドをまたぐ agent-delegate 再レビューは `--resume {thread_id}`（thread_id は前ラウンドの
 `report.json` から取得）でレビューセッションを継続し、文脈を保ってトークンを節約します。resume は
 作成時のサンドボックスを維持し、レビューセッションは read-only なので契約の resume 規則を満たします。
 
-### 相手 LLM が利用不能な場合のフォールバック
+### 能力フォールバック
 
-`codex` 担当タスクを委譲できない場合 — スクリプト不在、exit `2`、または report が
-`blocker_category: tool_unavailable` を示す場合:
+- **host runtime が不正・未指定:** オーケストレーター配下では設定 blocker を報告します。
+  単体では `claude` / `codex` の指定を人に求めます。
+- **native subagent が利用不能:** 上位へ報告し、オーケストレーターが manual / auto の
+  role fallback を適用します。単体では owner AI role を変える前に人へ確認します。
+- **cross-AI peer が利用不能**（スクリプト不在、exit `2`、または
+  `blocker_category: tool_unavailable`）: 上位へ報告し、オーケストレーターが
+  manual / auto fallback を適用します。単体では host AI へ振り替える前に確認します。
+  reviewer を implementer と同じ AI role へ振り替えてはなりません。
 
-- **オーケストレーター配下**: ブロッカーを上位に報告する。claude への振り替えはオーケストレーターが
-  モードに応じて判断する（manual は人間に確認、auto は振り替えて記録）。勝手に決めない。
-- **単体 `/spec-implement`**: 警告し、そのタスクを spec-code にフォールバックして実行を完走させる。
+fallback を黙って選びません。オーケストレーターはすべての振り替えを
+`state.role_overrides` と PR 本文に記録します。
 
 agent-delegate の内部実装を取り込んではいけません。依存するのは契約に定義されたフラグと
 `report.json` スキーマのみです。

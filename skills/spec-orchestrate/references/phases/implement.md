@@ -9,8 +9,9 @@ the outcome.
 
 - `tasks.md` (with `kind:` labels) and the rest of the spec set.
 - The role map for implementation (`impl_ui` / `impl_backend` / `impl_test`),
-  passed to spec-implement as its `--roles` argument so it routes each task to
-  spec-code (claude) or agent-delegate (codex) by kind. Map construction and the
+  passed to spec-implement as its `--roles` argument together with
+  `--host-runtime <host_runtime>`. spec-implement selects the AI role by kind,
+  then resolves native versus cross-AI execution. Map construction and the
   reviewer-inversion rule are in `../role-dispatch.md` → "implement".
 - On re-entry from evaluate: the failing acceptance findings to feed back.
 
@@ -40,9 +41,9 @@ the `.specs/.gitignore` written at intake is the backstop.
 
 - Tasks in tasks.md are marked complete and the git diff reflects real changes
   (measured, not self-reported).
-- spec-implement returned without an unresolved blocker. If a `codex`-owned task
-  reports agent-delegate unavailable, apply the reassignment rule from
-  §Error Handling (auto reassigns and records; manual confirms).
+- spec-implement returned without an unresolved blocker. If native execution or
+  a cross-AI peer is unavailable, apply the capability fallback from
+  `../role-dispatch.md` without permitting self-review.
 
 ## State Update
 

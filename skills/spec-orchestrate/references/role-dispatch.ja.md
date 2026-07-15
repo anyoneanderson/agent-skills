@@ -1,13 +1,26 @@
 # 担当解決（role-dispatch）— 各フェーズを誰が実行するか
 
-各フェーズはロールキー（例: `spec_author`、`e2e_runner`）を名指しする。この
-ファイルは、ロールキーを具体的な実行に変換する唯一の場所である: Claude
-サブエージェント、または agent-delegate 経由の委譲 Codex 実行。フェーズ指示書は
-解決を繰り返さず、このファイルを参照する。
+各フェーズは AI ロールキー（例: `spec_author`、`e2e_runner`）を名指しする。この
+ファイルは、キーを AI role（`claude` / `codex`）へ解決し、次に現在の host に合う
+実行 backend へ解決する唯一の場所である。フェーズ指示書はどちらの判断も繰り返さず、
+このファイルを参照する。
 
 English version: [role-dispatch.md](role-dispatch.md)
 
-## Step 1: roles を読む
+## Step 0: host runtime を確定して記録する
+
+role を読む前に、spec-orchestrate を実行している runtime の識別子を明示的に
+`host_runtime` へ設定する。Codex なら `codex`、Claude Code なら `claude` である。
+intake で `pipeline-state.json` に記録する。resume 時も改めて確定し、次の worker を
+起動する前に記録を更新する。role の既定値や agent-delegate の環境変数から推測しない。
+
+現在の runtime を確定できない場合:
+
+- **manual:** 人に `codex` / `claude` を選んでもらい、記録する。
+- **auto:** `host_runtime_unknown` を理由に再開可能な blocked 状態で停止する。
+  推測せず、worker を起動しない。
+
+## Step 1: AI roles を読む
 
 `pipeline.yml` の `roles` を読む（既定パス `.specs/pipeline.yml`。形式は
 `pipeline-config.ja.md`）。ファイル不在時は次の既定値をそのまま使う:
@@ -21,22 +34,36 @@ English version: [role-dispatch.md](role-dispatch.md)
 | `impl_test` | `codex` | implement（test タスク） |
 | `e2e_runner` | `claude` | evaluate |
 
-ロール値は常に `claude` か `codex`。それ以外は設定エラー — 停止して報告する。
+role 値が選ぶのは AI であり、backend ではない。値は常に `claude` か `codex`。
+それ以外は設定エラー — 停止して報告する。
 
 ## Step 2: バックエンドを解決する
 
-| ロール値 | バックエンド | 起動方法 |
-|---------|------------|---------|
-| `claude` | Claude サブエージェント | 現行ランタイムでサブエージェントを起動。planner / evaluator は spec-workflow-init が入れる `workflow-planner` / `workflow-evaluator` エージェント定義を使う |
-| `codex` | agent-delegate | agent-delegate スクリプトを公開契約どおりに呼ぶ。常に `--target codex` を明示 |
+AI role が確定してから backend を解決する。host と role が一致すれば host の
+runtime-native subagent を使う。異なれば agent-delegate を使い、role を明示的な
+target にする。
 
-サブエージェント経路は特定の起動ツールを名指ししない。ランタイムが提供する手段で
-サブエージェントを走らせる。ツール名をハードコードしない。
+<!-- dispatch-matrix:start -->
+| Host runtime | AI role | Backend | agent-delegate target |
+|--------------|---------|---------|-----------------------|
+| `codex` | `codex` | `runtime-native` | `-` |
+| `codex` | `claude` | `agent-delegate` | `claude` |
+| `claude` | `claude` | `runtime-native` | `-` |
+| `claude` | `codex` | `agent-delegate` | `codex` |
+<!-- dispatch-matrix:end -->
+
+`runtime-native` では現在の runtime でサブエージェントを起動し、agent-delegate は
+**起動しない**。role 用の agent 定義があれば使う。たとえば spec author は
+`workflow-planner`、E2E は `workflow-evaluator` である。native 経路は特定の起動
+ツールを名指しせず、現在の runtime が提供する手段を使う。ツール名をハードコードしない。
+
+`agent-delegate` では公開契約どおりにスクリプトを呼び、常に
+`--target <AI-role>` を明示する。プログラムからの呼び出しは、ネストしたチェーンで
+環境による自己判定に頼らない。
 
 **agent-delegate は契約依存。** スクリプトは `agent-delegate/references/contract.md`
 （引数 + `report.json` スキーマ）どおりに呼び、内部実装に依存しない。プログラムからの
-呼び出しは `--target` を渡すこと。契約上、ネストしたチェーンで環境自己判定に頼るのは
-禁止。
+呼び出しは `--target` を渡すこと。
 
 ## Step 3: 同期 vs detach を選ぶ
 
@@ -50,7 +77,7 @@ English version: [role-dispatch.md](role-dispatch.md)
 
 detach 起動時の取得値（契約どおり）:
 ```bash
-launch="$(agent-delegate.sh --mode <delegate|review> --target codex ... --detach)"
+launch="$(agent-delegate.sh --mode <delegate|review> --target <AI-role> ... --detach)"
 expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
 report="$(printf '%s\n' "$launch" | tail -1)"
 ```
@@ -85,21 +112,29 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 
 ### spec_review（敵対的仕様レビュー）
 
-`spec_reviewer` → agent-delegate `--mode review`（read-only）。
-5分以内に完了する具体的根拠がある場合だけ同期実行し、それ以外は `--detach` と上記の expected-run 待機を使う。
+`spec_reviewer` を行列で解決し、review / read-only mode で走らせる。一致する role は
+native reviewer subagent、異なる role は
+agent-delegate `--mode review --target <spec_reviewer>` を使う。
+agent-delegate を同期実行するのは5分以内に完了する具体的根拠がある場合だけとし、
+それ以外は `--detach` と上記の expected-run 待機を使う。
 ラウンド1で
 セッションを作り、ラウンド2以降は state の `threads.spec_reviewer` の
 `--resume <thread_id>` で継続する（レビューセッションは read-only で作られ、resume
 が保てる sandbox はそれだけ）。
 
+### spec_generate（spec author）
+
+`spec_author` も同じ行列で解決する。一致する role は `workflow-planner` を
+runtime-native subagent として走らせる。異なる role は仕様ファイルを書くため、
+agent-delegate `--mode delegate --target <spec_author> --detach` で走らせる。
+
 ### evaluate（受け入れ試験）
 
-`e2e_runner` → spec-evaluate の同名バックエンド。spec-evaluate の起動時には
-**必ず `--backend` で明示**して渡す（spec-evaluate 単体実行時の既定は `self` で、
-パイプライン内でこれに頼ると2つの既定が混ざる）。`claude` は evaluator を
-サブエージェント（`workflow-evaluator`）で走らせ、`codex` は agent-delegate
-`--mode delegate --sandbox workspace-write` で走らせる（review ではない — アプリ
-起動とブラウザ操作を伴うため）。spec-evaluate `references/execution-backend.md` 参照。
+解決した `e2e_runner` AI role を **必ず `--backend` で明示**し、記録済み host を
+`--host-runtime` で spec-evaluate へ渡す。`--backend` という option 名は互換性のため
+維持するが、`claude|codex` の値が選ぶのは AI role であり、spec-evaluate がこの行列で
+実行手段を決める。単体実行時の既定は `self` なので、パイプライン内でこれに頼ると
+2つの既定が混ざる。spec-evaluate `references/execution-backend.ja.md` 参照。
 
 ### implement（機能を作る）
 
@@ -109,32 +144,53 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 
 - `roles` からマップを組む: `ui=<impl_ui>,backend=<impl_backend>,test=<impl_test>`、
   または `pipeline.yml` のパスを渡す（spec-implement が `roles.impl_{kind}` を読む）。
+- 記録済み host を `--host-runtime <host_runtime>` で渡し、spec-implement が
+  タスクごとにこの行列を適用できるようにする。
 - `kind` が不明・未マップのタスクは spec-code（claude）にフォールバックする —
   spec-implement の文書化済み従来動作。
 
 ## レビュアー反転（定義はここに一元化）
 
-実装成果物のレビュアーは常に実装担当の **反対側** — 「作った本人がレビューしない」。
-この規則はここで一度だけ定義し、spec-implement が `--roles` マップからタスク単位で
-適用するため、オーケストレーターが再実装しない。
+実装成果物のレビュアーは常に実装担当の **反対の AI role** — 「作った本人がレビュー
+しない」。先に reviewer role を決め、それから host-aware 行列で backend を解決する。
+backend を先に選んではならない。この規則はここで一度だけ定義し、spec-implement が
+`--roles` マップからタスク単位で適用するため、オーケストレーターが再実装しない。
 
-| タスク実装担当（kind 由来） | レビュアー | 仕組み |
-|--------------------------|-----------|-------|
-| `codex` | `claude` | spec-review（そのまま） |
-| `claude` | `codex` | agent-delegate `--mode review`（5分以内という具体的根拠がある場合だけ同期。それ以外は detach） |
+| タスク実装担当（kind 由来） | Reviewer AI role |
+|--------------------------|------------------|
+| `codex` | `claude` |
+| `claude` | `codex` |
 
-修正は実装担当の実行系に戻る: claude は `spec-code --feedback`、codex は
-agent-delegate `--mode delegate --detach`（resume）。agent-delegate のレビューファイルは
-spec-review 互換なので、既存の修正ループがそのまま消費する。
+実装担当と reviewer の各 role に行列を別々に適用する。たとえば Codex host では
+Codex implementer が native、Claude reviewer が agent-delegate になる。Claude host
+では同じ role の組を agent-delegate と native review で実行する。修正は implementer
+role に戻し、再び行列で解決する。agent-delegate のレビューファイルは spec-review
+互換なので、既存の修正ループがそのまま消費する。
 
-## peer 利用不能（codex 不在）
+## 能力フォールバック
 
-`codex` ロールが agent-delegate 利用不能（スクリプト欠落、exit 2、
-`tool_unavailable`）で走れない場合:
+すべてのフォールバックで AI role と backend の分離を保ち、
+`state.role_overrides` と PR 本文に記録する。
 
-- **manual:** そのロールを `claude` に振り替えてよいか人に確認する。
-- **auto:** `claude` に振り替えて続行し、入れ替えを `state.role_overrides` と PR
-  本文に記録する。
+- **runtime-native subagent が利用不能:** manual は worker role を反対の AI へ
+  振り替えるか停止するかを人に確認する。auto は反対側の peer CLI が利用できる場合
+  だけ振り替え、使えなければ blocked にする。reviewer を implementer と同じ AI role
+  へ振り替えてはならないため、manual は互換性のある独立 reviewer を求め、auto は
+  self-review を許さず blocked にする。
+- **cross-AI peer CLI が利用不能**（スクリプト欠落、exit 2、`tool_unavailable`）:
+  manual は worker role を host AI へ振り替えるか人に確認する。auto は host AI へ
+  振り替えて続行する。reviewer について host AI が成果物を実装していた場合、この
+  振り替えは禁止する。manual は独立 reviewer を求め、auto は blocked にする。
+- **host runtime が不明:** Step 0 の manual / auto 規則を使う。host が確定するまで
+  どの role も解決しない。
 
-これは能力フォールバックであり、arbitration（`stall-detection.ja.md`）の停滞起因の
-ロール入れ替え（`limits.role_swap_max` で上限）とは区別する。
+能力フォールバックは arbitration（`stall-detection.ja.md`）の停滞起因の role
+入れ替え（`limits.role_swap_max` で上限）とは区別する。
+
+## 契約テスト
+
+spec-orchestrate skill directory から
+`bash references/scripts/tests/run_tests.sh` を実行する。tracked fixture は行列4行の
+期待 mapping を受理し、各行を破損させて反転 mapping の拒否を証明する。さらに
+3 skill にある marked matrix 6コピーの一致と、不明な `host_runtime` を state が
+拒否することを検証する。

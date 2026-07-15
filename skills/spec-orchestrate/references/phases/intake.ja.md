@@ -80,12 +80,14 @@ pipeline-metrics.jsonl
 初期 `pipeline-state.json` を書く:
 ```json
 { "feature": "<name>", "mode": "manual|auto", "issue": <N|null>,
-  "language": "en|ja", "phase": "spec_generate",
+  "language": "en|ja", "host_runtime": "claude|codex", "phase": "spec_generate",
   "completed_phases": ["intake"], "rounds": {}, "threads": {},
   "role_overrides": {}, "arbitrations": [] }
 ```
 詳細スキーマと jq/awk の書き込み流儀は `../pipeline-config.ja.md` にある。intake は
-spec_generate に入るのに必要な最小限を書く。
+spec_generate に入るのに必要な最小限を書く。`host_runtime` は現在の runtime から
+明示的に確定する。不明なら state を書く前に `../role-dispatch.ja.md` Step 0 の
+manual / auto フォールバックを適用する。
 
 ## 遷移
 

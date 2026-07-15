@@ -33,6 +33,7 @@ Coordinate worker skills (spec-code, spec-review, spec-test) to implement from s
 | `--spec {path}` | Specify .specs/ directory path (default: auto-detect) |
 | `--dry-run` | Show execution plan without making any changes |
 | `--roles {map}` | Per-task owner routing by `kind`. Format: `ui=claude,backend=codex,test=codex`, or a path to a `pipeline.yml` whose `roles.impl_{kind}` keys supply the mapping. Omitted → every task uses spec-code and every review uses spec-review (legacy behavior, no agent-delegate involvement). |
+| `--host-runtime {claude\|codex}` | Runtime executing this skill. Required with `--roles`; the orchestrator passes its recorded `host_runtime` so AI role and execution backend are resolved separately. |
 
 ## Role: Orchestrator Only
 
@@ -52,7 +53,8 @@ If a worker skill is not installed, stop and suggest installation. Never fall ba
 
 1. **Verify environment**: `pwd`, `git status`, `gh auth status`
 
-2. **Parse user input**: Extract `--resume`, `--issue`, `--spec`, `--dry-run` options
+2. **Parse user input**: Extract `--resume`, `--issue`, `--spec`, `--dry-run`,
+   `--roles`, and `--host-runtime` options
 
 3. **Check cmux availability**:
    ```bash
@@ -172,6 +174,11 @@ Mode priority:
 3. If cmux is available and the workflow/user explicitly selects cmux → use cmux dispatch
 4. Otherwise use single-agent sequential execution
 
+This priority applies to the legacy path without `--roles`. When `--roles` is
+active, Phase 6b's host-aware capability fallback takes precedence: report an
+unavailable native worker to the caller and do not silently switch to cmux or
+single-agent execution.
+
 For Codex sub-agents:
 1. Validate `.codex/agents/workflow-implementer.toml`, `.codex/agents/workflow-reviewer.toml`, and `.codex/agents/workflow-tester.toml` exist when referenced by the workflow
 2. Use the `Agent` column value as the custom agent type
@@ -202,24 +209,30 @@ each step is resolved per task.
 **Owner resolution (per task):**
 1. Read the task's `kind:` field (`ui | backend | test`) from its detail block in tasks.md.
 2. `owner = roles[kind]` when kind is known and present in the map; otherwise `claude` (default).
-3. Implementation executor:
-   - `owner == claude` → **spec-code** (all existing dispatch modes apply, unchanged).
-   - `owner == codex` → **agent-delegate** script, `--mode delegate --detach`.
-     Retain the expected run id and use the contract's 15–30-second report-first
-     state wait. The caller-owned timeout is at least 30 minutes.
+3. Treat `owner` as the implementer AI role, not the backend.
+4. Resolve the executor from `--host-runtime`:
+   - `owner == host_runtime` → run spec-code in a **runtime-native subagent**;
+     do not start agent-delegate.
+   - `owner != host_runtime` → run the **agent-delegate** script with
+     `--mode delegate --target <owner> --detach`. Retain the expected run id and
+     use the contract's 15–30-second report-first state wait. The caller-owned
+     timeout is at least 30 minutes.
 
-**Reviewer inversion (review gate):** the reviewer is always the opposite side of the
-task's implementer ("the author does not review their own work"):
+**Reviewer inversion (review gate):** choose the reviewer as the opposite AI role
+from the task's implementer, then resolve that reviewer through the same
+host-aware matrix ("the author does not review their own work"):
 
-| Implementer (from kind) | Reviewer | How |
-|---|---|---|
-| codex | claude | **spec-review** (unchanged) |
-| claude | codex | **agent-delegate** script, `--mode review` (sync only with a concrete <=5-minute basis; otherwise detach) |
+| Implementer AI role | Reviewer AI role |
+|---|---|
+| codex | claude |
+| claude | codex |
 
-Fixes route to the implementer's executor: `spec-code --feedback` for claude,
-agent-delegate `--mode delegate --detach` (resume) for codex. The agent-delegate review file is
-spec-review-compatible (severity sections + `Gate: PASS|FAIL`), so the existing fix loop
-consumes it unchanged.
+Matching reviewer and host use a runtime-native spec-review subagent; differing
+roles use agent-delegate `--mode review --target <reviewer>` (sync only with a
+concrete <=5-minute basis; otherwise detach). Fixes route to the implementer AI
+role and resolve through the same matrix again. An agent-delegate review file is
+spec-review-compatible (severity sections + `Gate: PASS|FAIL`), so the existing
+fix loop consumes it unchanged.
 
 agent-delegate is a public-contract dependency: call the script per
 `agent-delegate/references/contract.md` and **always pass `--target` explicitly** (the
@@ -269,7 +282,9 @@ never survive only in a run record.
 | `tasks.md` missing | Warning: generate simple checklist from Issue |
 | On protected branch | 🚨 BLOCKING: stop, require feature branch |
 | Worker skill not installed | Error: suggest `npx skills add anyoneanderson/agent-skills --skill {name}` |
-| agent-delegate unavailable for a `codex`-owned task (script missing / exit 2 / `tool_unavailable`) | Report the blocker to the caller (orchestrator decides reassignment per its mode). Standalone: warn and fall back to spec-code for that task. |
+| `--roles` provided without a valid `--host-runtime` | Report a configuration blocker to the orchestrator. Standalone: ask the user for `claude` or `codex`; do not guess |
+| Runtime-native subagent unavailable for an owned task | Report the blocker to the orchestrator, which applies its manual/auto role fallback. Standalone: ask before reassigning the AI role |
+| agent-delegate unavailable for a cross-AI task (script missing / exit 2 / `tool_unavailable`) | Report the blocker to the orchestrator, which applies its manual/auto role fallback. Standalone: ask before reassigning to the host AI; never allow self-review |
 | Review FAIL after 3 iterations | Ask user to decide |
 | Test FAIL after fix attempt | Ask user to decide |
 

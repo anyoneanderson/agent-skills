@@ -68,6 +68,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
   "mode": "auto",
   "issue": 42,
   "language": "en",
+  "host_runtime": "codex",
   "phase": "spec_review",
   "completed_phases": ["intake", "spec_generate", "inspect"],
   "inspect": {"critical": 0, "warning": 0, "info": 2, "gate": "PASS"},
@@ -92,6 +93,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 |-------|---------|
 | `feature` / `mode` / `issue` | Run identity (issue is null in manual) |
 | `language` | Detected I/O language, set at intake |
+| `host_runtime` | Explicit current orchestrator runtime (`claude` or `codex`), set at intake and refreshed before dispatch on resume |
 | `phase` | Current phase; the loop reads this to decide what to run next |
 | `completed_phases` | Phases finished at least once (for the resume summary) |
 | `inspect` | Summary of the last inspect result: CRITICAL / WARNING / INFO counts and the gate (`PASS` when no CRITICAL/WARNING). inspect is a single machine check, not a review loop, so it is one summary object here, not a `rounds` array |
@@ -115,6 +117,7 @@ Read a field:
 ```bash
 phase="$(jq -r .phase "$state")"
 mode="$(jq -r .mode "$state")"
+host_runtime="$(jq -r .host_runtime "$state")"
 ```
 
 Write atomically (never edit in place — write a temp file then move):

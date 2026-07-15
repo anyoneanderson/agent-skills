@@ -213,7 +213,7 @@ Determine runtime from the current execution environment. Do NOT infer runtime s
 - Codex discovers custom agents from `.codex/agents/*.toml`; do not require or create `[agents.<name>] config_file = ...` entries
 - For Claude Code agent team, runtime defaults are `.claude/agents/workflow-implementer.md`, `.claude/agents/workflow-reviewer.md`, and `.claude/agents/workflow-tester.md`
 - Claude Code agent team should be used when running inside Claude Code, the `.claude/agents/workflow-*.md` files exist, and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set
-- cmux dispatch is a separate external-pane mode; use it only when the workflow/user explicitly selects cmux or runtime-native agents are unavailable
+- cmux dispatch is a separate external-pane mode. Without `--roles`, use it only when the workflow/user explicitly selects cmux or runtime-native agents are unavailable. With `--roles`, the host-aware capability fallback takes precedence and reports native unavailability to the caller instead of silently switching dispatch modes
 - If runtime cannot be determined, ask user to choose runtime before dispatch
 - If runtime setup is invalid, fallback to sequential mode
 
@@ -738,18 +738,19 @@ Classify findings as: Critical / Improvement / Minor
 
 ## Kind-Based Task Routing
 
-This section details the `--roles` layer summarized in SKILL.md → "Phase 6b". It routes
-each task to an executor (spec-code / spec-review, or the agent-delegate peer) by the
-task's `kind` label, so an orchestrator can hand implementation to a different LLM per
-task while keeping the Phase 6 loop and its review gates intact.
+This section details the `--roles` layer summarized in SKILL.md → "Phase 6b". It
+first maps each task's `kind` to an implementer AI role, then uses
+`--host-runtime` to choose a runtime-native subagent or the cross-AI
+agent-delegate backend. The Phase 6 loop and its review gates stay intact.
 
 ### When It Activates
 
 - **`--roles` absent** → legacy path. Every task uses spec-code; every review uses
   spec-review; spec-test unchanged. agent-delegate is never invoked. This is the exact
   behavior of specs that predate the pipeline.
-- **`--roles` present** → orchestrated path. Each task's implementer and reviewer are
-  resolved per the rules below.
+- **`--roles` present** → orchestrated path. `--host-runtime {claude|codex}` is
+  required. Each task's implementer and reviewer AI roles are resolved first;
+  their execution backends are resolved second.
 
 The loop's control flow is identical in both paths: per-phase iteration, the fix loop
 with its 3-iteration cap, gate evaluation (`fix_before: implementation` re-run; deferred findings and Minor logged),
@@ -775,6 +776,11 @@ impl_backend="$(yq -r '.roles.impl_backend // empty' "$roles_path")"
 impl_test="$(yq -r '.roles.impl_test // empty' "$roles_path")"
 ```
 
+Validate `--host-runtime` before processing a task. It must be exactly `claude`
+or `codex`. The orchestrator passes the value recorded in pipeline state. A
+standalone caller must supply it explicitly; do not infer it from role defaults
+or agent-delegate environment variables.
+
 ### Owner Resolution (per task)
 
 ```
@@ -783,15 +789,27 @@ owner = roles[kind]              if kind is known AND present in the map
 owner = claude                   otherwise (unknown/missing kind, or kind not mapped)
 ```
 
-`claude` → the task runs through **spec-code** exactly as today (all dispatch modes in
-"Agent Role Detection" still apply). `codex` → the task runs through the **agent-delegate**
-script per its contract.
+`owner` is the implementer AI role, not the backend. Resolve the vehicle with
+the shared host-aware matrix:
 
-### Delegating Implementation to the Peer (`owner == codex`)
+<!-- dispatch-matrix:start -->
+| Host runtime | Owner AI role | Backend | agent-delegate target |
+|---|---|---|---|
+| `codex` | `codex` | `runtime-native` | `-` |
+| `codex` | `claude` | `agent-delegate` | `claude` |
+| `claude` | `claude` | `runtime-native` | `-` |
+| `claude` | `codex` | `agent-delegate` | `codex` |
+<!-- dispatch-matrix:end -->
+
+When host and owner match, use the runtime-native subagent mechanism and do not
+start agent-delegate; run spec-code in that native worker. When they differ,
+use agent-delegate per its contract.
+
+### Delegating Implementation to the Peer (`owner != host_runtime`)
 
 Follow `agent-delegate/references/contract.md`. Code implementation writes files,
-so use explicit `--detach` and `--sandbox workspace-write`. Pass `--target`
-explicitly. Retain the expected run id and launch time, poll every 15 seconds
+so use explicit `--detach` and `--sandbox workspace-write`. Pass the owner AI
+role as `--target` explicitly. Retain the expected run id and launch time, poll every 15 seconds
 (never less often than every 30 seconds), and allow at least 30 minutes before a
 caller-owned re-evaluation.
 
@@ -806,7 +824,7 @@ Implement {task-id} from the spec.
 Commit nothing; report changed files and any blocker.
 EOF
 
-launch="$(agent-delegate.sh --mode delegate --target codex \
+launch="$(agent-delegate.sh --mode delegate --target "$owner" \
   --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}" \
   --sandbox workspace-write --detach)"
 expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
@@ -823,7 +841,21 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 - `status == blocked` → read `blocker` / `blocker_category`; feed into the fix loop
   (see below) or surface to the caller.
 
-### Peer Review (`owner == claude`, implementer is claude → reviewer is codex)
+### Reviewer Inversion and Backend Resolution
+
+First choose the reviewer AI role, then resolve its backend:
+
+```
+reviewer = claude  if owner == codex
+reviewer = codex   if owner == claude
+```
+
+If `reviewer == host_runtime`, run spec-review in a runtime-native reviewer
+subagent and do not start agent-delegate. If they differ, use the peer review
+path below with `--target "$reviewer"`. This order prevents self-review on both
+Codex and Claude hosts.
+
+### Cross-AI Peer Review (`reviewer != host_runtime`)
 
 Review mode is always read-only per the contract. Run synchronously only when
 there is a concrete basis for completion within 5 minutes. Otherwise add
@@ -840,7 +872,7 @@ Review the changes for {task-id}.
 - Review criteria: {path to review_rules.md}, {path to coding-rules.md}
 EOF
 
-report="$(agent-delegate.sh --mode review --target codex \
+report="$(agent-delegate.sh --mode review --target "$reviewer" \
   --prompt-file "$PROMPT" --out-dir "$OUT" --label "{task-id}-review" | tail -1)"
 review_file="$(jq -r .artifacts.review_file "$report")"
 gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
@@ -848,34 +880,36 @@ gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
 
 The review file carries the same severity sections (`### Critical`, `### Improvement`,
 `### Minor`) and `Gate: PASS|FAIL` line as spec-review output, so the existing gate logic
-in "Review Gate Details" consumes it with no change. When the implementer is codex, the
-reviewer is claude and this whole block is replaced by the normal spec-review call.
+in "Review Gate Details" consumes it with no change.
 
 ### Fix Loop Routing
 
 The fix loop's structure (max 3 iterations, then downgrade/ask) is unchanged. Only the
 fix executor follows the task's implementer:
 
-| Implementer | Fix step | Re-review |
+| Implementer backend | Fix step | Re-review |
 |---|---|---|
-| claude | `spec-code --feedback {findings}` | reviewer re-runs (codex via agent-delegate `--resume {thread_id}`, sync only with a concrete <=5-minute basis; otherwise detach; or claude via spec-review) |
-| codex | agent-delegate `--mode delegate --detach --resume {thread_id}` with findings appended to the prompt | reviewer re-runs (claude via spec-review) |
+| runtime-native | Re-run the native spec-code subagent with `--feedback {findings}` | Resolve the opposite reviewer AI through the matrix again |
+| agent-delegate | `--mode delegate --target <owner> --detach --resume {thread_id}` with findings appended | Resolve the opposite reviewer AI through the matrix again |
 
 For agent-delegate re-review across rounds, reuse the review session with
 `--resume {thread_id}` (thread_id read from the prior `report.json`) to preserve context
 and save tokens. Resume keeps the original sandbox; review sessions are read-only, which
 satisfies the contract's resume rule.
 
-### Unavailable Peer Fallback
+### Capability Fallbacks
 
-If a `codex`-owned task cannot be delegated — the script is missing, exits `2`, or the
-report shows `blocker_category: tool_unavailable`:
+- **Invalid or missing host runtime:** under an orchestrator, report a
+  configuration blocker. Standalone asks the user for `claude` or `codex`.
+- **Native subagent unavailable:** report upward; the orchestrator applies its
+  manual/auto role fallback. Standalone asks before changing the owner AI role.
+- **Cross-AI peer unavailable** (script missing, exit `2`, or
+  `blocker_category: tool_unavailable`): report upward; the orchestrator applies
+  its manual/auto fallback. Standalone asks before reassigning to the host AI.
+  A reviewer must never be reassigned to the implementer's AI role.
 
-- **Under an orchestrator**: report the blocker upward. Reassignment (to claude) is the
-  orchestrator's decision per its mode (manual asks the human; auto reassigns and records
-  it). Do not silently decide.
-- **Standalone `/spec-implement`**: warn and fall back to spec-code for that task so the
-  run still completes.
+Do not silently choose a fallback. The orchestrator records every reassignment
+in `state.role_overrides` and the PR body.
 
 Never inline agent-delegate's internal implementation; depend only on the flags and
 `report.json` schema in its contract.

@@ -270,14 +270,14 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
     - 委任: spec-code → spec-review → fix loop → spec-test
     - `[code]` フェーズはワーカースキルに委任、`[orchestrator]` フェーズは直接実行
     - review + test 両方 PASS 後にのみ tasks.md を更新
-    - オプション: `--roles` でタスクの `kind:` ラベルごとに Claude（spec-code）/ Codex（agent-delegate）へ振り分け。レビューは常に実装担当の反対側
+    - オプション: `--roles` でタスクの `kind:` ごとに Claude / Codex の AI role を選び、`--host-runtime` との一致時は runtime-native、反対側だけを target 明示の agent-delegate で実行。reviewer AI role は常に implementer の反対側
     - オプション: **cmux dispatch** でサブエージェント並列実行
     - 品質ゲート通過後にPRを作成
 
 12. **spec-orchestrate** が要求や Issue から PR までパイプライン全体を駆動:
     - フェーズ: 受付 → 仕様生成 → 機械検査 → 敵対的仕様レビュー（別 LLM）→ 人間承認（manual のみ）→ 実装 → 受け入れ試験 → PR → 振り返り
     - 2モード: `manual`（仕様承認の1箇所だけ人間ゲート）と `auto`（Issue を入れると PR が出る、人間の入力なし）
-    - フェーズ別の担当割りを `.specs/pipeline.yml` で設定（claude ⇄ codex）。codex 担当は agent-delegate 経由で実行
+    - フェーズ別の担当割りを `.specs/pipeline.yml` で設定（claude ⇄ codex）。host と一致する role は runtime-native subagent、反対側は target 明示の agent-delegate で実行
     - 停滞したレビューループを機械シグナル（findings 指紋）で検知し裁定: 担当を入れ替えるか draft PR で着地
     - 状態は `pipeline-state.json` に保存。中断しても最後の完了フェーズから再開
     - 振り返りでは実行記録を集計して改善提案を生成し、安全なものは自動適用（ブランチ → PR → 自動マージ。公開契約と SKILL.md は常に人間レビュー）

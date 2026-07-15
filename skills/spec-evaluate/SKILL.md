@@ -8,7 +8,7 @@ description: |
   file-check), launches the app from a project recipe, saves screenshots and
   logs as evidence, and writes a spec-review-compatible findings file that
   spec-code --feedback can consume. Runs standalone or inside the
-  spec-orchestrate pipeline, on a Claude subagent or a delegated peer LLM.
+  spec-orchestrate pipeline, on a host-native subagent or a delegated peer LLM.
 
   English triggers: "Acceptance test this feature", "Run spec-evaluate",
   "Verify against test.md", "Run the acceptance test plan"
@@ -41,7 +41,8 @@ The evaluator instruction sheet is `references/evaluator-prompt.md`
 | `--spec {path}` | Path to the `.specs/{feature}/` directory (contains test.md). Required |
 | `--round {n}` | Evaluation round number (default: auto-detect from existing `evaluate-{n}.md`, else 1) |
 | `--pipeline {path}` | Path to `pipeline.yml` for the app launch recipe and roles (default: `.specs/pipeline.yml`) |
-| `--backend {self\|claude\|codex}` | Execution backend override (default: resolved from `e2e_runner`, else `self`) |
+| `--backend {self\|claude\|codex}` | Evaluator AI role override (legacy option name; default: resolved from `e2e_runner`, else `self`) |
+| `--host-runtime {claude\|codex}` | Runtime executing the evaluator driver. Required whenever `--backend` resolves to `claude` or `codex`; `self` does not need it |
 | `--output {path}` | Result file path (default: `.specs/{feature}/evaluate-{round}.md`) |
 
 ## Core Principle — Evidence Over Self-Report
@@ -68,16 +69,25 @@ the returned result. It does not itself decide pass/fail from memory.
    `roles.e2e_runner`). If `pipeline.yml` is absent, there is no app recipe and
    no role assignment — proceed with `backend = self` and no app launch.
 
-### Step 2: Resolve Execution Backend
+### Step 2: Resolve AI Role, Then Execution Backend
 
 Resolution order: `--backend` flag > `roles.e2e_runner` from `pipeline.yml` >
 `self`.
 
-| Backend | How the evaluator runs |
-|---------|------------------------|
-| `self` | The current agent executes `references/evaluator-prompt.md` directly. Used for standalone runs outside the pipeline |
-| `claude` | Dispatch a subagent with `references/evaluator-prompt.md` as its instructions |
-| `codex` | Delegate to the peer LLM via agent-delegate (see §Delegated Backend) |
+The option name `--backend` is retained for compatibility, but `claude` and
+`codex` select the evaluator AI role. Resolve the vehicle only after that role
+is selected:
+
+| Selected value | How the evaluator runs |
+|----------------|------------------------|
+| `self` | The current agent executes `references/evaluator-prompt.md` directly. Standalone only; bypasses role dispatch |
+| AI role equals `--host-runtime` | Dispatch a runtime-native subagent with `references/evaluator-prompt.md`; do not start agent-delegate |
+| AI role differs from `--host-runtime` | Delegate through agent-delegate with `--target <AI role>` (see §Cross-AI Backend) |
+
+Pipeline callers must pass their recorded `host_runtime`. A standalone caller
+that explicitly selects `claude` or `codex` must also supply it; if omitted,
+ask the user to choose the current host and never guess. `self` bypasses this
+requirement.
 
 The evaluator instruction sheet is the **same one file** for every backend; only
 the execution vehicle changes. See `references/execution-backend.md`.
@@ -123,9 +133,10 @@ Write the finalized result file to `--output` (default
 `{spec}/evaluate-{round}.md`). Report a one-line summary: round, pass/total,
 gate, and the evidence directory path.
 
-## Delegated Backend (codex)
+## Cross-AI Backend
 
-When `backend = codex`, run the evaluator through agent-delegate. Acceptance
+When the selected evaluator AI role differs from `host_runtime`, run the
+evaluator through agent-delegate. Acceptance
 testing launches the app and drives a browser, so it needs write access — use
 **`--mode delegate --sandbox workspace-write`, never review mode** (review is
 read-only and cannot launch or operate the app).
@@ -137,7 +148,7 @@ read-only and cannot launch or operate the app).
    polls every 15 seconds and never less often than every 30 seconds:
 
    ```bash
-   launch="$(agent-delegate.sh --mode delegate --target codex \
+   launch="$(agent-delegate.sh --mode delegate --target "$evaluator_role" \
      --sandbox workspace-write --prompt-file <prompt> \
      --out-dir {spec}/evidence/{round} --detach)"
    expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
@@ -184,7 +195,9 @@ absent or incomplete:
 | `pipeline.yml` missing | Proceed with `backend = self`, no app launch; `playwright` cases become blocked |
 | App fails to start / `ready_pattern` never matches | Mark dependent cases blocked; report the recipe and captured startup log; distinct from FAIL |
 | Result file from backend is malformed | Re-run the evaluator once; if it recurs, report blocked (do not guess results) |
-| agent-delegate unavailable (codex missing) | Report it; standalone falls back to `self`, pipeline escalation is the orchestrator's call |
+| `claude` or `codex` role selected without a valid `--host-runtime` | Pipeline: report a configuration blocker for the orchestrator's manual/auto unknown-host policy. Standalone: ask the user for the current host; do not guess |
+| Runtime-native subagent unavailable | Report it; standalone may ask to use `self`, while the orchestrator applies its manual/auto role fallback |
+| Cross-AI agent-delegate target unavailable | Report it; standalone asks before falling back to `self`, while the orchestrator applies its manual/auto role fallback |
 | Evidence directory not writable | Error: cannot guarantee evidence; stop before running |
 
 ## Usage Examples
@@ -196,6 +209,6 @@ absent or incomplete:
 # Specific round with an explicit backend override
 /spec-evaluate --spec .specs/user-auth/ --round 2 --backend self
 
-# Pipeline use: backend follows roles.e2e_runner from pipeline.yml
-/spec-evaluate --spec .specs/user-auth/ --pipeline .specs/pipeline.yml
+# Pipeline use: role follows e2e_runner; host is explicit
+/spec-evaluate --spec .specs/user-auth/ --pipeline .specs/pipeline.yml --host-runtime codex
 ```

@@ -64,6 +64,7 @@ with state preserved (resumable).
 | `--issue {N}` | GitHub Issue number (auto mode input) |
 | `--spec {path}` | `.specs/{feature}/` directory. Default: derived from feature name |
 | `--pipeline {path}` | `pipeline.yml` for roles and app recipe. Default: `.specs/pipeline.yml` |
+| `--host-runtime {claude\|codex}` | Explicit identity of the runtime executing the orchestrator. Default: the current runtime's known identity; recorded in state before dispatch |
 | `--resume` | Resume from `pipeline-state.json`. This is the default behavior when a state file exists |
 
 ## Execution Model
@@ -74,9 +75,10 @@ The orchestrator runs one loop until the pipeline reaches a terminal state:
 1. Read current phase from pipeline-state.json (or start at intake).
 2. Open references/phases/<phase>.md and follow its Input → Action →
    Verification → State Update steps.
-3. Dispatch the phase's worker (see Phase Index). Resolve claude vs codex
-   backends with `references/role-dispatch.md` (claude → subagent, codex →
-   agent-delegate).
+3. Dispatch the phase's worker (see Phase Index). First choose its `claude` or
+   `codex` AI role, then resolve the backend with the recorded `host_runtime`
+   and `references/role-dispatch.md`: same role → runtime-native subagent;
+   different role → agent-delegate with an explicit target.
 4. Verify the worker's result. If it fails machine verification, do not advance.
 5. Update pipeline-state.json (completed phase, round counts, fingerprints,
    thread ids), run the state integrity check
@@ -196,9 +198,10 @@ owner up to `limits.role_swap_max`, else lands a draft PR) are defined in
 | pr | spec-implement final step + evidence | — | `phases/pr.md` |
 | retrospective | orchestrator (aggregate) + worker (edits) | — | `phases/retrospective.md` |
 
-Role keys resolve to a backend (claude subagent or codex via agent-delegate)
-through `references/role-dispatch.md`. If `pipeline.yml` is absent, the default
-roles apply and the app recipe is empty.
+Role keys resolve to an AI role first and an execution backend second through
+`references/role-dispatch.md`. The same four-row host-aware matrix applies to
+the spec author, implementer, reviewer, and E2E runner. If `pipeline.yml` is
+absent, the default roles apply and the app recipe is empty.
 
 ## Intake Summary
 
@@ -212,8 +215,10 @@ state file. Full steps live in `phases/intake.md`; the shape is:
   into a no-dialogue planner input, and derive the feature name as kebab-case
   from the Issue title.
 
-Both modes then write the initial `pipeline-state.json` (mode, issue, feature,
-language, `phase: spec_generate`) and proceed.
+Both modes then explicitly determine the current host runtime and write the
+initial `pipeline-state.json` (mode, issue, feature, language, `host_runtime`,
+`phase: spec_generate`) before dispatching the spec author. On resume, determine
+the current host again and refresh this field before another dispatch.
 
 ## Error Handling
 
@@ -222,7 +227,9 @@ In every case, state is preserved so the run is resumable.
 | Situation | Response |
 |---|---|
 | Worker skill not installed | Show its install step and stop; state kept (resumable) |
-| agent-delegate unavailable (codex missing, etc.) | manual: ask the human to confirm reassigning to claude. auto: reassign, continue, record in `state.role_overrides` and the PR body |
+| Host runtime cannot be determined | manual: ask for `claude` or `codex` and record it. auto: preserve state and stop blocked with `host_runtime_unknown` |
+| Runtime-native subagent unavailable | manual: ask whether to reassign the worker AI role or stop. auto: reassign only if the opposite peer CLI is available; otherwise block. Never reassign a reviewer to the implementer's AI |
+| Cross-AI agent-delegate target unavailable | manual: ask whether to reassign the worker role to the host AI. auto: reassign and record it unless that would make an implementer review its own work; in that case block |
 | `gh` auth error / Issue not found | Stop in intake; show the account-check steps (see GIT_ACCOUNTS.md) |
 | App fails to start during evaluate | Mark dependent cases blocked; show the recipe and `ready_pattern`. Blocked ≠ failed |
 | Worker result file is malformed | Re-run that worker once; if it recurs, mark blocked and route to arbitration |
