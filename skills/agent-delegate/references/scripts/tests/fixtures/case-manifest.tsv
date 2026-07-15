@@ -7,7 +7,7 @@ T-A05	terminal-worker-blocked	suite	blocked	compatibility-cases.tsv	blocked-repo
 T-A06	worker-death-synthesis	suite	worker-death	compatibility-cases.tsv	synthesized-blocked-report
 T-A07	invalid-terminal-report	suite	invalid-candidates	compatibility-cases.tsv	validated-blocked-reports
 T-A08	caller-state-machine	suite	state-fixture	caller-states.tsv	state-decisions
-T-A09	run-ownership-force-resume	suite	ownership-fixture	ownership-cases.tsv	stale-and-ownership-decisions
+T-A09	run-ownership-force-resume	suite	ownership-fixture	ownership-cases.tsv	stale-filesystem-and-ownership-decisions
 T-A10	heartbeat-testmode-both-directions	suite	bidirectional	compatibility-cases.tsv	codex-and-claude-results
 T-A11	write-delegate-docs-use-detach	suite	document-contract	document-contract.tsv	detach-contract-check
 T-A12	caller-sync-poll-timeout-contract	suite	document-contract	document-contract.tsv	timing-contract-check
