@@ -566,6 +566,36 @@ terminate_confirmed_old_process() {
   kill -KILL "$pid" 2>/dev/null || true
 }
 
+terminate_confirmed_old_monitor_group() {
+  local monitor_pid="$1" pid pgid command current_pgid="" confirmed=0 i
+  case "$monitor_pid" in ''|*[!0-9]*|0) return 0 ;; esac
+  current_pgid="$(ps -o pgid= -p "${BASHPID:-$$}" 2>/dev/null | tr -d '[:space:]')"
+  [ "$monitor_pid" != "$current_pgid" ] || return 0
+
+  # Detached monitors are launched as process-group leaders. If the monitor and
+  # worker die first, the peer CLI can remain in that group without a PID in the
+  # owner record. Confirm that the group still contains an agent-delegate or peer
+  # process before signalling the whole group, so a recycled PID cannot target an
+  # unrelated process group.
+  while read -r pid pgid command; do
+    [ "$pgid" = "$monitor_pid" ] || continue
+    if [[ "$command" == *"$(basename "$SELF")"*"--_monitor"* ]] ||
+       [[ "$command" == *"$(basename "$SELF")"*"--_worker"* ]] ||
+       [[ "$command" =~ (^|[[:space:]/])(codex|claude)([[:space:]]|$) ]]; then
+      confirmed=1
+      break
+    fi
+  done < <(ps -axo pid=,pgid=,command= 2>/dev/null)
+  [ "$confirmed" -eq 1 ] || return 0
+
+  kill -TERM -- "-$monitor_pid" 2>/dev/null || return 0
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 -- "-$monitor_pid" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  kill -KILL -- "-$monitor_pid" 2>/dev/null || true
+}
+
 publish_detach_owner() {
   local monitor_pid="$1" started_at="$2" pid_tmp="${PID_FILE}.tmp.${RUN_ID}"
   local pid_backup="${PID_FILE}.backup.${RUN_ID}"
@@ -648,6 +678,7 @@ publish_detach_owner() {
   remove_run_artifacts "$old_run_id"
   release_owner_lock
   if [ "$FORCE" -eq 1 ]; then
+    terminate_confirmed_old_monitor_group "$old_monitor_pid"
     terminate_confirmed_old_process "$old_worker_pid" worker
     terminate_confirmed_old_process "$old_monitor_pid" monitor
     [ "$old_runner_pid" = "$old_monitor_pid" ] || terminate_confirmed_old_process "$old_runner_pid" runner
@@ -695,6 +726,7 @@ publish_sync_owner() {
   remove_run_artifacts "$old_run_id"
   release_owner_lock
   if [ "$FORCE" -eq 1 ]; then
+    terminate_confirmed_old_monitor_group "$old_monitor_pid"
     terminate_confirmed_old_process "$old_worker_pid" worker
     terminate_confirmed_old_process "$old_monitor_pid" monitor
     [ "$old_runner_pid" = "$old_monitor_pid" ] || terminate_confirmed_old_process "$old_runner_pid" runner
