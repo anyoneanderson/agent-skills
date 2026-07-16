@@ -428,6 +428,331 @@ run_sync() {
   ' "$report" >/dev/null
 }
 
+pid_is_running() {
+  local state
+  state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d '[:space:]')"
+  [ -n "$state" ] && [[ "$state" != Z* ]]
+}
+
+wait_for_pid_stop() {
+  local pid="$1" deadline=$(( $(date -u +%s) + 10 ))
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    pid_is_running "$pid" || return 0
+  done
+  return 1
+}
+
+run_stale_detach_and_sync_owner() (
+  local root dir label handoff probe_handoff monitor rc owner_hash pid_hash barrier sync_pid peer old_run new_run deadline
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"
+  dir="$(new_work_dir)"
+  trap '[ -z "${sync_pid:-}" ] || kill -TERM "$sync_pid" 2>/dev/null || true
+    [ -z "${peer:-}" ] || kill -TERM "$peer" 2>/dev/null || true
+    rm -rf "$dir" "${handoff:-}" "${probe_handoff:-}"' EXIT TERM INT HUP
+  printf 'prompt\n' > "$dir/prompt.md"
+
+  label=stale-detach
+  monitor="$(absent_test_pid)"
+  handoff="$root/agent-delegate-handoff.101.missing"
+  rm -rf "$handoff"
+  jq -n --arg handoff "$handoff" --argjson monitor "$monitor" '
+    {run_id:"stale-detach-run",run_kind:"detach",runner_pid:$monitor,launcher_pid:101,
+     monitor_pid:$monitor,worker_pid:null,started_at:"2000-01-01T00:00:00Z",
+     lease_at:"2000-01-01T00:00:00Z",handoff_dir:$handoff,handoff_phase:"not_started"}
+  ' > "$dir/$label-owner.json"
+  printf 'pid: %s\nrun_id: stale-detach-run\n' "$monitor" > "$dir/$label.pid"
+  probe_handoff="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 700 "$probe_handoff"
+  set +e
+  AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$probe_handoff" \
+    AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" \
+      --out-dir "$dir" --label "$label" --target claude --detach > "$dir/$label.out" 2> "$dir/$label.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] && [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] || return 1
+  rm -rf "$probe_handoff"; probe_handoff=""
+
+  label=stale-detach-negative
+  handoff="$root/agent-delegate-handoff.101.owner-mismatch"
+  rm -rf "$handoff"
+  jq -n --arg handoff "$handoff" --argjson monitor "$monitor" '
+    {run_id:"negative-detach-run",run_kind:"detach",runner_pid:$monitor,launcher_pid:102,
+     monitor_pid:$monitor,worker_pid:null,started_at:"2000-01-01T00:00:00Z",
+     lease_at:"2000-01-01T00:00:00Z",handoff_dir:$handoff,handoff_phase:"not_started"}
+  ' > "$dir/$label-owner.json"
+  printf 'pid: %s\nrun_id: negative-detach-run\n' "$monitor" > "$dir/$label.pid"
+  owner_hash="$(sha256_file "$dir/$label-owner.json")"; pid_hash="$(sha256_file "$dir/$label.pid")"
+  probe_handoff="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 700 "$probe_handoff"
+  set +e
+  AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$probe_handoff" \
+    AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" \
+      --out-dir "$dir" --label "$label" --target claude --detach > "$dir/$label.out" 2> "$dir/$label.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] && [ "$(sha256_file "$dir/$label-owner.json")" = "$owner_hash" ] &&
+    [ "$(sha256_file "$dir/$label.pid")" = "$pid_hash" ] || return 1
+  rm -rf "$probe_handoff"; probe_handoff=""
+
+  label=stale-sync; barrier="$dir/sync-barrier"; mkdir "$barrier"; mkfifo "$barrier/release.fifo"
+  PATH="$STUB_DIR:$PATH" AGENT_DELEGATE_STUB_BARRIER_DIR="$barrier" bash "$SCRIPT" --mode delegate \
+    --prompt-file "$dir/prompt.md" --out-dir "$dir" --label "$label" --target claude --sandbox workspace-write \
+    > "$dir/$label-old.out" 2> "$dir/$label-old.err" &
+  sync_pid=$!; deadline=$(( $(date -u +%s) + 10 ))
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    [ -f "$barrier/claude.ready" ] && [ -f "$dir/$label-owner.json" ] && break
+    pid_is_running "$sync_pid" || break
+  done
+  [ -f "$dir/$label-owner.json" ] && [ -f "$barrier/claude.pid" ] || return 1
+  peer="$(cat "$barrier/claude.pid")"; old_run="$(jq -r '.run_id' "$dir/$label-owner.json")"
+  kill -KILL "$sync_pid"; wait "$sync_pid" 2>/dev/null || true
+  jq '.lease_at="2000-01-01T00:00:00Z"' "$dir/$label-owner.json" > "$dir/$label-owner.tmp"
+  mv "$dir/$label-owner.tmp" "$dir/$label-owner.json"
+  run_sync "$dir" "$label" claude delegate done
+  new_run="$(jq -r '.meta.run_id' "$dir/$label-report.json")"
+  [ "$new_run" != "$old_run" ] && [ ! -e "$dir/$label-owner.json" ] || return 1
+  if pid_is_running "$peer"; then printf 'release\n' > "$barrier/release.fifo"; fi
+  wait_for_pid_stop "$peer" || kill -KILL "$peer" 2>/dev/null || true
+)
+
+run_live_sync_collision() (
+  local dir label=live-sync barrier owner run pid peer deadline rc owner_hash report_hash stdout_hash last_hash
+  dir="$(new_work_dir)"
+  trap '[ -z "${pid:-}" ] || kill -TERM "$pid" 2>/dev/null || true
+    [ -z "${peer:-}" ] || kill -TERM "$peer" 2>/dev/null || true
+    rm -rf "$dir"' EXIT TERM INT HUP
+  barrier="$dir/barrier"; mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'prompt\n' > "$dir/prompt.md"
+  PATH="$STUB_DIR:$PATH" AGENT_DELEGATE_STUB_BARRIER_DIR="$barrier" bash "$SCRIPT" --mode delegate \
+    --prompt-file "$dir/prompt.md" --out-dir "$dir" --label "$label" --target claude --sandbox workspace-write \
+    > "$dir/first.out" 2> "$dir/first.err" &
+  pid=$!; deadline=$(( $(date -u +%s) + 10 )); owner="$dir/$label-owner.json"
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    [ -f "$barrier/claude.ready" ] && [ -f "$owner" ] && break
+    pid_is_running "$pid" || break
+  done
+  [ -f "$owner" ] || return 1
+  run="$(jq -r '.run_id' "$owner")"; peer="$(cat "$barrier/claude.pid")"
+  printf '{"protected":"report"}\n' > "$dir/$label-report.json"
+  printf '{"protected":"stdout"}\n' > "$dir/$label-stdout.json"
+  printf 'protected last\n' > "$dir/$label-last.txt"
+  owner_hash="$(sha256_file "$owner")"; report_hash="$(sha256_file "$dir/$label-report.json")"
+  stdout_hash="$(sha256_file "$dir/$label-stdout.json")"; last_hash="$(sha256_file "$dir/$label-last.txt")"
+  set +e
+  PATH="$STUB_DIR:$PATH" bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" \
+    --label "$label" --target claude > "$dir/collision.out" 2> "$dir/collision.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] && grep -q "live sync run for label '$label'" "$dir/collision.err" || return 1
+  [ "$(sha256_file "$owner")" = "$owner_hash" ] && [ "$(sha256_file "$dir/$label-report.json")" = "$report_hash" ] &&
+    [ "$(sha256_file "$dir/$label-stdout.json")" = "$stdout_hash" ] && [ "$(sha256_file "$dir/$label-last.txt")" = "$last_hash" ] || return 1
+  jq -e --arg run "$run" '.run_id==$run and .run_kind=="sync"' "$owner" >/dev/null || return 1
+  [ ! -e "$dir/$label.pid" ] && [ ! -e "$dir/$label-heartbeat.json" ] || return 1
+  printf 'release\n' > "$barrier/release.fifo"; wait "$pid"
+  jq -e --arg run "$run" '.meta.run_id==$run and .status=="done"' "$dir/$label-report.json" >/dev/null
+)
+
+run_stale_reaper_lock_timeout() (
+  local dir label=lock-timeout rc
+  dir="$(new_work_dir)"; trap 'rm -rf "$dir"' EXIT TERM INT HUP
+  printf 'prompt\n' > "$dir/prompt.md"; mkdir "$dir/$label-owner.lock"
+  printf 'pid: %s\nrun_id: live-lock-holder\n' "${BASHPID:-$$}" > "$dir/$label-owner.lock/holder"
+  set +e
+  PATH="$STUB_DIR:$PATH" bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" \
+    --label "$label" --target claude > "$dir/launch.out" 2> "$dir/launch.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] && grep -q 'stale-reaper could not acquire the owner lock' "$dir/launch.err" || return 1
+  [ -d "$dir/$label-owner.lock" ] && [ -f "$dir/$label-owner.lock/holder" ] || return 1
+  [ ! -e "$dir/$label-report.json" ] && [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] &&
+    [ ! -e "$dir/$label-heartbeat.json" ] && [ ! -e "$dir/$label-stdout.json" ] && [ ! -e "$dir/$label-last.txt" ]
+)
+
+run_force_orphan_peer_isolation() (
+  local dir label=force-orphan barrier owner monitor worker peer handoff old_run new_run before_stdout before_last
+  dir="$(new_work_dir)"; barrier="$dir/barrier"
+  trap 'cleanup_detach_stub_fixture "$dir" "$label"' EXIT TERM INT HUP
+  mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'prompt\n' > "$dir/prompt.md"
+  launch_detach_review_stub "$dir" "$label" "$barrier" || return 1
+  wait_for_detach_stub_runtime "$dir" "$label" "$barrier" || return 1
+  owner="$dir/$label-owner.json"; monitor="$(jq -r '.monitor_pid' "$owner")"; worker="$(jq -r '.worker_pid' "$owner")"
+  peer="$(cat "$barrier/claude.pid")"; handoff="$(jq -r '.handoff_dir' "$owner")"; old_run="$(jq -r '.run_id' "$owner")"
+  [ "$(process_group_of "$monitor")" = "$monitor" ] && pid_is_running "$peer" || return 1
+  kill -KILL "$worker" "$monitor" 2>/dev/null || return 1
+  wait_for_pid_stop "$worker" || return 1; wait_for_pid_stop "$monitor" || return 1
+  pid_is_running "$peer" || return 1
+  jq '.lease_at="2000-01-01T00:00:00Z"' "$owner" > "$owner.tmp"; mv "$owner.tmp" "$owner"
+  rm -rf "$handoff"
+  run_sync "$dir" "$label" claude delegate done --force
+  new_run="$(jq -r '.meta.run_id' "$dir/$label-report.json")"
+  [ "$new_run" != "$old_run" ] && wait_for_pid_stop "$peer" || return 1
+  jq -e --arg run "$new_run" '.meta.run_id==$run and .status=="done"' "$dir/$label-report.json" >/dev/null || return 1
+  jq -e '.session_id=="stub-claude-session" and .result=="stub claude completed"' "$dir/$label-stdout.json" >/dev/null || return 1
+  [ "$(cat "$dir/$label-last.txt")" = 'stub claude completed' ] || return 1
+  before_stdout="$(sha256_file "$dir/$label-stdout.json")"; before_last="$(sha256_file "$dir/$label-last.txt")"
+  [ "$(sha256_file "$dir/$label-stdout.json")" = "$before_stdout" ] &&
+    [ "$(sha256_file "$dir/$label-last.txt")" = "$before_last" ]
+)
+
+check_readiness_timeout_sentinel() {
+  local sentinel="$1" owner="$2"
+  jq -e --slurpfile owner "$owner" '
+    .state=="setup_failed" and .failure_stage=="readiness_timeout" and
+    .handoff_phase=="not_started" and .run_id==$owner[0].run_id and
+    .launcher_pid==$owner[0].launcher_pid and .monitor_pid==$owner[0].monitor_pid and
+    (.created_fifos|type)=="array"
+  ' "$sentinel" >/dev/null
+}
+
+run_setup_term_readiness_sentinel() (
+  local root dir label=setup-term handoff barrier bin real_mkfifo launcher monitor deadline rc sentinel owner bad
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"; dir="$(new_work_dir)"; barrier="$dir/barrier"; bin="$dir/bin"
+  handoff="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 700 "$handoff"
+  trap '[ -z "${monitor:-}" ] || kill -TERM "$monitor" 2>/dev/null || true
+    [ -z "${launcher:-}" ] || kill -TERM "$launcher" 2>/dev/null || true
+    rm -rf "$dir" "$handoff"' EXIT TERM INT HUP
+  mkdir "$barrier" "$bin"; mkfifo "$barrier/release.fifo"; printf 'prompt\n' > "$dir/prompt.md"
+  real_mkfifo="$(command -v mkfifo)"
+  cat > "$bin/mkfifo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+"$AGENT_DELEGATE_REAL_MKFIFO" "$@"
+if mkdir "$AGENT_DELEGATE_MKFIFO_ONCE" 2>/dev/null; then
+  printf 'ready\n' > "$AGENT_DELEGATE_MKFIFO_READY"
+  IFS= read -r _ < "$AGENT_DELEGATE_MKFIFO_RELEASE"
+fi
+EOF
+  chmod +x "$bin/mkfifo"
+  PATH="$bin:$STUB_DIR:$PATH" AGENT_DELEGATE_REAL_MKFIFO="$real_mkfifo" \
+    AGENT_DELEGATE_MKFIFO_ONCE="$barrier/once" AGENT_DELEGATE_MKFIFO_READY="$barrier/mkfifo.ready" \
+    AGENT_DELEGATE_MKFIFO_RELEASE="$barrier/release.fifo" AGENT_DELEGATE_TEST_MODE=heartbeat \
+    AGENT_DELEGATE_TEST_HANDOFF_DIR="$handoff" bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" \
+      --out-dir "$dir" --label "$label" --target claude --detach > "$dir/launch.out" 2> "$dir/launch.err" &
+  launcher=$!; deadline=$(( $(date -u +%s) + 10 )); owner="$dir/$label-owner.json"
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    [ -f "$owner" ] && [ -f "$barrier/mkfifo.ready" ] && break
+    pid_is_running "$launcher" || break
+  done
+  [ -f "$owner" ] && [ -f "$barrier/mkfifo.ready" ] || return 1
+  monitor="$(jq -r '.monitor_pid' "$owner")"; kill -TERM "$monitor"
+  printf 'release\n' > "$barrier/release.fifo"
+  set +e; wait "$launcher"; rc=$?; set -e
+  [ "$rc" -eq 0 ] || return 1
+  sentinel="$dir/$label-handoff-sentinel-final.json"; owner="$dir/$label-owner-final.json"
+  check_readiness_timeout_sentinel "$sentinel" "$owner" || return 1
+  jq -e '.status=="blocked" and .blocker_category=="env_error"' "$dir/$label-report.json" >/dev/null || return 1
+  bad="$dir/$label-handoff-sentinel.negative.json"; jq '.run_id="corrupted-run"' "$sentinel" > "$bad"
+  if check_readiness_timeout_sentinel "$bad" "$owner"; then return 1; fi
+  [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] && [ ! -d "$handoff" ]
+)
+
+write_stale_detach_records() {
+  local dir="$1" label="$2" handoff="$3" run="$4" launcher="$5" monitor="$6"
+  jq -n --arg run "$run" --arg handoff "$handoff" --argjson launcher "$launcher" --argjson monitor "$monitor" '
+    {run_id:$run,run_kind:"detach",runner_pid:$monitor,launcher_pid:$launcher,monitor_pid:$monitor,
+     worker_pid:null,started_at:"2000-01-01T00:00:00Z",lease_at:"2000-01-01T00:00:00Z",
+     handoff_dir:$handoff,handoff_phase:"not_started"}
+  ' > "$dir/$label-owner.json"
+  printf 'pid: %s\nrun_id: %s\n' "$monitor" "$run" > "$dir/$label.pid"
+}
+
+write_stale_sentinel() {
+  local path="$1" run="$2" launcher="$3" monitor="$4" handoff="$5"
+  jq -n --arg run "$run" --arg handoff "$handoff" --argjson launcher "$launcher" --argjson monitor "$monitor" '
+    {run_id:$run,launcher_pid:$launcher,monitor_pid:$monitor,handoff_dir:$handoff,
+     created_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]}
+  ' > "$path"
+}
+
+run_partial_handoff_safe_cleanup() (
+  local root variant dir label handoff target probe monitor run rc expected owner_hash pid_hash
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"; monitor="$(absent_test_pid)"
+  trap 'rm -rf "${probe:-}" "${handoff:-}" "${target:-}" "${dir:-}"' EXIT TERM INT HUP
+  for variant in missing-listed-fifo outside-root symlink unknown-entry sentinel-run-mismatch fifo-type-mismatch; do
+    dir="$(new_work_dir)"; label="partial-$variant"; run="run-$variant"; printf 'prompt\n' > "$dir/prompt.md"
+    target=""; expected=retain
+    case "$variant" in
+      missing-listed-fifo)
+        handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
+        mkfifo "$handoff/launcher-to-monitor.fifo"; expected=remove ;;
+      outside-root)
+        handoff="$dir/agent-delegate-handoff.101.outside"; mkdir -m 700 "$handoff"
+        mkfifo "$handoff/launcher-to-monitor.fifo" ;;
+      symlink)
+        target="$dir/symlink-target"; mkdir -m 700 "$target"; mkfifo "$target/launcher-to-monitor.fifo"
+        handoff="$root/agent-delegate-handoff.101.symlink"; rm -f "$handoff"; ln -s "$target" "$handoff" ;;
+      unknown-entry)
+        handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
+        mkfifo "$handoff/launcher-to-monitor.fifo"; printf 'protected\n' > "$handoff/unknown-entry" ;;
+      sentinel-run-mismatch)
+        handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
+        mkfifo "$handoff/launcher-to-monitor.fifo" ;;
+      fifo-type-mismatch)
+        handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
+        printf 'not a fifo\n' > "$handoff/launcher-to-monitor.fifo" ;;
+    esac
+    write_stale_sentinel "$handoff/handoff-sentinel.json" "$run" 101 "$monitor" "$handoff"
+    if [ "$variant" = sentinel-run-mismatch ]; then
+      jq '.run_id="corrupted-run"' "$handoff/handoff-sentinel.json" > "$handoff/s.tmp"
+      mv "$handoff/s.tmp" "$handoff/handoff-sentinel.json"
+    fi
+    write_stale_detach_records "$dir" "$label" "$handoff" "$run" 101 "$monitor"
+    owner_hash="$(sha256_file "$dir/$label-owner.json")"; pid_hash="$(sha256_file "$dir/$label.pid")"
+    probe="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 700 "$probe"
+    set +e
+    AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$probe" AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid \
+      bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label "$label" \
+        --target claude --detach > "$dir/launch.out" 2> "$dir/launch.err"
+    rc=$?
+    set -e
+    [ "$rc" -eq 2 ] || return 1
+    if [ "$expected" = remove ]; then
+      [ ! -e "$handoff" ] && [ ! -L "$handoff" ] && [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] || return 1
+    else
+      { [ -d "$handoff" ] || [ -L "$handoff" ]; } && [ "$(sha256_file "$dir/$label-owner.json")" = "$owner_hash" ] &&
+        [ "$(sha256_file "$dir/$label.pid")" = "$pid_hash" ] || return 1
+      case "$variant" in
+        outside-root) grep -q 'retained unsafe handoff path' "$dir/launch.err" || return 1 ;;
+        symlink) [ -L "$handoff" ] && [ "$(readlink "$handoff")" = "$target" ] || return 1 ;;
+        unknown-entry) [ "$(cat "$handoff/unknown-entry")" = protected ] || return 1 ;;
+        sentinel-run-mismatch) grep -q 'retained invalid_sentinel' "$dir/launch.err" || return 1 ;;
+        fifo-type-mismatch) [ -f "$handoff/launcher-to-monitor.fifo" ] || return 1 ;;
+      esac
+    fi
+    rm -rf "$probe"; [ -L "$handoff" ] && rm -f "$handoff" || rm -rf "$handoff"; rm -rf "$target" "$dir"
+  done
+)
+
+check_abnormal_cleanup_fixture() {
+  local file="$1" id expected count=0
+  while IFS=$'\t' read -r id expected; do
+    [ "$id" = case_id ] && continue
+    count=$((count + 1)); [ -n "$expected" ] || return 1
+    case "$id" in
+      stale-detach-and-sync-owner|live-sync-collision|stale-reaper-lock-timeout|force-orphan-peer-isolation|setup-term-readiness-sentinel|partial-handoff-safe-cleanup) : ;;
+      *) return 1 ;;
+    esac
+  done < "$file"
+  [ "$count" -eq 6 ]
+}
+
+case_abnormal_cleanup_real_filesystem() {
+  local fixture="$FIXTURE_DIR/abnormal-cleanup-cases.tsv" id expected bad
+  check_abnormal_cleanup_fixture "$fixture" || die 'abnormal cleanup fixture rejected'
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-abnormal.XXXXXX")"
+  awk 'BEGIN{FS=OFS="\t"} NR==2{$NF=""} {print}' "$fixture" > "$bad"
+  if check_abnormal_cleanup_fixture "$bad"; then rm -f "$bad"; die 'abnormal cleanup checker accepted an empty expectation'; fi
+  rm -f "$bad"
+  while IFS=$'\t' read -r id expected; do
+    [ "$id" = case_id ] && continue
+    case "$id" in
+      stale-detach-and-sync-owner) run_stale_detach_and_sync_owner || die "$id failed" ;;
+      live-sync-collision) run_live_sync_collision || die "$id failed" ;;
+      stale-reaper-lock-timeout) run_stale_reaper_lock_timeout || die "$id failed" ;;
+      force-orphan-peer-isolation) run_force_orphan_peer_isolation || die "$id failed" ;;
+      setup-term-readiness-sentinel) run_setup_term_readiness_sentinel || die "$id failed" ;;
+      partial-handoff-safe-cleanup) run_partial_handoff_safe_cleanup || die "$id failed" ;;
+    esac
+  done < "$fixture"
+}
+
 case_heartbeat_schema_and_pids() { run_basic_harness_case "$1" done done 2; }
 
 case_heartbeat_timing_contract() {
@@ -1201,9 +1526,9 @@ write_repeat_manifest() {
     --arg fixture "$fixture_hash" --arg harness "$harness_hash" --argjson beats "$CURRENT_HEARTBEATS" \
     --argjson terminals "$CURRENT_TERMINALS" '
     {iteration:$iteration,commit:$commit,hashes:{runner:$runner,fixture:$fixture,harness:$harness},
-     case_count:24,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
+     case_count:25,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
   ' > "$out"
-  jq -e '.case_count==24 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
+  jq -e '.case_count==25 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
 }
 
 if [ -n "$RUN_CASE" ]; then
@@ -1235,12 +1560,12 @@ done
 if [ "$REPEAT" -eq 3 ]; then
   aggregate="$repeat_root/aggregate.json"
   jq -n --argjson repeats "$REPEAT" --arg commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" \
-    '{commit:$commit,repeats:$repeats,registered_cases:25,passed_cases:25,failed_cases:0,
+    '{commit:$commit,repeats:$repeats,registered_cases:26,passed_cases:26,failed_cases:0,
       meta_cases:["readonly-gate-evidence","all-repeat-3"]}' > "$aggregate"
-  jq -e '.repeats==3 and .registered_cases==25 and .passed_cases==25 and .failed_cases==0' "$aggregate" >/dev/null
+  jq -e '.repeats==3 and .registered_cases==26 and .passed_cases==26 and .failed_cases==0' "$aggregate" >/dev/null
   printf 'PASS\tall-repeat-3\n'
   printf 'AGGREGATE\t%s\n' "$(jq -c . "$aggregate")"
-  printf 'ALL_PASS\trepeats=%s\tcases=25/25\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=26/26\n' "$REPEAT"
 else
-  printf 'ALL_PASS\trepeats=%s\tcases=24/25\tmeta=all-repeat-3-deferred\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=25/26\tmeta=all-repeat-3-deferred\n' "$REPEAT"
 fi

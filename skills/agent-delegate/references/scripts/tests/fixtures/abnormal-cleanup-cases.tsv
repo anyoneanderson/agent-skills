@@ -1,0 +1,7 @@
+case_id	expected_behavior
+stale-detach-and-sync-owner	stale owners are reclaimed only when owner run path and type relations are valid
+live-sync-collision	live owner and shared outputs remain unchanged and the colliding run exits 2
+stale-reaper-lock-timeout	lock timeout exits 2 without publishing shared runtime artifacts
+force-orphan-peer-isolation	force stops the stale monitor process group before the new run publishes artifacts
+setup-term-readiness-sentinel	TERM before FIFO readiness records failure_stage readiness_timeout
+partial-handoff-safe-cleanup	missing listed FIFOs are tolerated while unsafe paths symlinks and unknown entries are retained

@@ -203,12 +203,22 @@ heartbeat を公開するたびに、monitor は同じ owner lock 区間で `lea
 launcher は owner と pid の run id と monitor PID が一致した後にだけ、owner の `run_id` を expected run として採用する。
 launcher はその値を出力し、呼び出し側は sentinel から expected run を導出しない。
 
-同じ label の次回起動では、preflight stale-reaper が放棄済みの handoff を検査する。
-owner と pid が同じ不在 monitor を指し、lease が90秒より古い場合に限り削除候補とする。
-handoff のパスは設定 root の直下にある非 symlink の mode 0700 ディレクトリであり、実行ユーザーが所有し、basename の launcher PID と device/inode が検査中に変わらないことを要求する。
+同じ label の次回起動では、preflight stale-reaper が、形式が正しく、lease の更新から90秒を超えた owner を検査する。
+sync owner は、`monitor_pid` と `handoff_dir` が null、runner、launcher、worker の PID が一致、pid ファイルのパスが不在、runner のプロセスが不在という条件をすべて満たす場合に限り削除する。
+
+detach owner では monitor が不在でなければならず、pid ファイルのパスが残っている場合は run id と monitor PID も owner と一致しなければならない。
+handoff ディレクトリがすでに消失している場合、stale-reaper は保存済みパスが設定 root の直下にある絶対パスで、basename に想定する launcher PID が含まれることを確認してから、owner と残っている pid record を削除する。
+handoff ディレクトリが残っている場合、実行ユーザーが所有する非 symlink の mode 0700 のディレクトリであり、検査中に device と inode が変わらないことを要求する。
 sentinel があれば JSON の識別情報も一致しなければならない。
-列挙済みの FIFO、一致する一時ファイル、sentinel だけを削除でき、未知の項目や不一致があれば保持して診断を残す。
+stale-reaper が削除できるのは、列挙済みの FIFO、一致する一時ファイル、sentinel だけである。
+未知の項目や識別情報の不一致があれば handoff ディレクトリを残し、診断を出力する。
+
+stale な detach owner を `--force` で引き継ぐ場合、stale-reaper は owner を削除する前に旧 monitor のプロセスグループを停止する。
+保存済み monitor PID が現在のプロセスグループと異なり、旧プロセスグループに `agent-delegate`、`codex`、`claude` のいずれかが残っている場合に限り、プロセスグループへシグナルを送る。
+stale-reaper は `TERM` を送り、最大1秒待ってもプロセスグループが残っていれば `KILL` を送る。
 terminal report と terminal heartbeat は残す。
+
+stale-reaper が期限内に owner lock を取得できない場合、新しい run は peer を起動せず exit 2 で終了し、`report.json` を書かない。
 
 ## review モード
 
