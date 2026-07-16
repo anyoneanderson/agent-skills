@@ -21,7 +21,7 @@ description: |
 license: MIT
 ---
 
-# Spec Generator
+# spec-generator — Specification Generator
 
 Generate structured project specifications: requirements, design documents, and task lists.
 
@@ -29,7 +29,8 @@ Generate structured project specifications: requirements, design documents, and 
 
 **Auto mode short-circuit**: If invoked with `--auto --issue <n>`, skip the
 interactive decision flow below and follow `references/auto-mode.md` (`.ja.md`)
-instead. Auto mode never calls AskUserQuestion.
+instead. Auto mode never calls AskUserQuestion, but its Japanese init and design
+steps still execute the specification-writing procedure in Step 1.5.
 
 **BEFORE asking any questions or showing options, you MUST execute these steps:**
 
@@ -253,6 +254,14 @@ options:
   - "Task list (tasks.md)" → tasks
   - "All three documents" → full
 ```
+
+### 1.5. Specification Writing for Japanese Init and Design
+
+Before generating or revising a Japanese `requirement.md` or `design.md`—including init and design steps inside full and auto modes—resolve `spec-writing` by name from the currently available skills.
+If found, read its complete `SKILL.md`, `references/writing-rules.ja.md`, and `references/abstract-verbs.ja.md`.
+Apply those rules during generation or revision and run their self-check before saving.
+If the skill or a selected reference is unavailable, report the missing item and apply `## Specification writing fallback` from the selected Japanese phase reference without stopping the phase.
+Never depend on a machine-specific absolute path or provider-specific tool name when resolving the skill.
 
 ### 2. Project Context Gathering
 
