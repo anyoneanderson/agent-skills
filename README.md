@@ -9,6 +9,7 @@ Reusable AI agent skills for specification-driven and autonomous (harness) devel
 | Skill | Description |
 |-------|-------------|
 | [spec-generator](skills/spec-generator/) | Generate project requirements, design documents, and task lists from conversations or prompts |
+| [spec-writing](skills/spec-writing/) | Write and revise specifications with concrete process descriptions and a shared abstract-verb vocabulary |
 | [handover](skills/handover/) | Create local session handovers and boot future AI agent sessions from verified context |
 | [mcp-convert](skills/mcp-convert/) | Convert Claude Code MCP settings into Codex CLI MCP configuration |
 | [spec-inspect](skills/spec-inspect/) | Validate specification quality and detect issues before implementation |
@@ -38,6 +39,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 
 # Install a specific skill
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-writing -g -y
 npx skills add anyoneanderson/agent-skills --skill handover -g -y
 npx skills add anyoneanderson/agent-skills --skill mcp-convert -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y
