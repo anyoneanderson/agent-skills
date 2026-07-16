@@ -59,12 +59,13 @@ coding_rules = Read("docs/coding-rules.md") or None
 # Also check CLAUDE.md / AGENTS.md for alternative path
 ```
 
+Detect the specification language, resolve `spec-writing` by name from the currently available skills, and read its complete `SKILL.md` plus the matching `references/abstract-verbs.md` or `references/abstract-verbs.ja.md` once as the primary vocabulary source. Read [abstract-process-check.md](references/abstract-process-check.md) or [abstract-process-check.ja.md](references/abstract-process-check.ja.md) for the same language. If the skill, vocabulary, required columns, or IDs cannot be read, follow that reference's vocabulary-error procedure without inferring a pattern list; Checks 1 through 17 must continue.
+
 ### Step 3: Run Quality Checks
 
 Execute the following checks sequentially. Add detected issues to an issues list.
 
 #### Check 1: Requirement ID Consistency [CRITICAL]
-
 **Purpose**: Verify that requirement IDs defined in requirement.md are correctly referenced in design.md and tasks.md.
 
 **Procedure**:
@@ -103,7 +104,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
   ```
 
 #### Check 2: Required Section Validation [WARNING]
-
 **Purpose**: Confirm each spec has the expected structure.
 
 **Required sections**:
@@ -127,7 +127,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
   ```
 
 #### Check 3: Contradiction Detection [WARNING]
-
 **Purpose**: Detect contradictory statements across specification documents.
 
 **Detection examples**:
@@ -153,7 +152,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
   ```
 
 #### Check 4: Ambiguous Expression Detection [INFO]
-
 **Purpose**: Detect vague expressions that lack the specificity needed for implementation.
 
 **Detection keywords** (English):
@@ -182,7 +180,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
   ```
 
 #### Check 5: Terminology Consistency [WARNING]
-
 **Purpose**: Ensure consistent terminology usage across all specifications.
 
 **Detection patterns**:
@@ -198,7 +195,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `WARNING-{seq}` "Terminology inconsistency: '{term1}' vs '{term2}'" + recommendation to unify
 
 #### Check 6: Design-to-Task Coverage [WARNING]
-
 **Purpose**: Verify that design.md components have corresponding implementation tasks in tasks.md.
 
 **Detection patterns**:
@@ -214,7 +210,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `WARNING-{seq}` "Design element '{component}' has no corresponding task"
 
 #### Check 7: Dependency Validation [WARNING]
-
 **Purpose**: Verify that task dependencies are logically correct.
 
 **Detection patterns**:
@@ -230,7 +225,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `WARNING-{seq}` "Circular dependency: {taskA} ⇄ {taskB}" or "Illogical dependency order"
 
 #### Check 8: Infeasible Requirement Warning [WARNING]
-
 **Purpose**: Detect technically difficult or contradictory requirements.
 
 **Detection patterns**:
@@ -241,7 +235,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `WARNING-{seq}` "Potentially infeasible: {requirement}" + alternative suggestion
 
 #### Check 9: Missing Requirement Detection [WARNING]
-
 **Purpose**: Detect clearly necessary but undocumented requirements.
 
 **Detection patterns**:
@@ -258,7 +251,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `WARNING-{seq}` "Possible missing requirement: {requirement_type} for {feature} is undefined"
 
 #### Check 10: Naming Convention Consistency [INFO]
-
 **Purpose**: Verify consistent naming conventions across specifications.
 
 **Detection patterns**:
@@ -273,7 +265,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `INFO-{seq}` "Naming convention inconsistency: {pattern1} ({count1} occurrences) vs {pattern2} ({count2} occurrences)"
 
 #### Check 11: Directory Structure Consistency [INFO]
-
 **Purpose**: Verify consistent directory structure and placement rules.
 
 **Detection patterns**:
@@ -284,7 +275,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `INFO-{seq}` "Directory structure inconsistency: {pattern description}"
 
 #### Check 12: Reinvention Detection [INFO]
-
 **Purpose**: Detect custom implementations of functionality already available in declared libraries.
 
 **Detection patterns**:
@@ -300,7 +290,6 @@ Execute the following checks sequentially. Add detected issues to an issues list
 **Output**: `INFO-{seq}` "Possible reinvention: {task} could be handled by {library_name}"
 
 #### Check 13: Project Rule Compliance [WARNING]
-
 **Purpose**: Check that specifications comply with project-specific rules defined in CLAUDE.md / AGENTS.md and coding-rules.md.
 
 **Procedure**:
@@ -406,6 +395,14 @@ to *read* is untracked, or is a symlink that git tree resolution will not follow
 **Outputs**:
 - **[CRITICAL]** `CRITICAL-{seq}` "Referenced path {path} is not tracked by git" + "Track the file, or point the spec at the real tracked path"
 - **[CRITICAL]** `CRITICAL-{seq}` "Referenced path {path} is a symlink (mode 120000) used as a content source" + "Point the spec at the symlink's target (the real file path)"
+
+#### Check 18: Abstract Process Description [WARNING]
+
+**Purpose**: Report a process description only when a primary-vocabulary candidate lacks evidence needed to determine its concrete behavior.
+
+**Procedure**: Run the selected abstract-process-check reference with the selected `spec-writing` vocabulary. Keep the vocabulary's Pattern list in `spec-writing` only.
+
+**Output**: `WARNING-{seq}` with file, line, missing process elements, a concrete rewrite, and the matching `AV-*` source rule.
 
 ### Step 4: Generate Summary
 

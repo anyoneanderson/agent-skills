@@ -9,6 +9,7 @@
 | スキル | 説明 |
 |-------|------|
 | [spec-generator](skills/spec-generator/) | 会話やプロンプトからプロジェクトの要件定義書・設計書・タスクリストを生成 |
+| [spec-writing](skills/spec-writing/) | 具体的な処理説明と共通の抽象動詞語彙を使って仕様書を生成・修正 |
 | [handover](skills/handover/) | ローカルのセッション引き継ぎを作成し、次のAIエージェントセッションを検証済み文脈から開始 |
 | [mcp-convert](skills/mcp-convert/) | Claude Code の MCP 設定を Codex CLI 向けに変換 |
 | [spec-inspect](skills/spec-inspect/) | 仕様書の品質を検証し、実装前に問題を検出 |
@@ -38,6 +39,7 @@ npx skills add anyoneanderson/agent-skills -g -y
 
 # 個別にインストール
 npx skills add anyoneanderson/agent-skills --skill spec-generator -g -y
+npx skills add anyoneanderson/agent-skills --skill spec-writing -g -y
 npx skills add anyoneanderson/agent-skills --skill handover -g -y
 npx skills add anyoneanderson/agent-skills --skill mcp-convert -g -y
 npx skills add anyoneanderson/agent-skills --skill spec-inspect -g -y

@@ -1,0 +1,13 @@
+case_id	language	input	expected_severity	missing_elements	av_id	category
+APC-EN-WARN-001	en	Map the AI SDK step to Run.steps.	WARNING	actor,trigger,observable action	AV-001	warning
+APC-JA-WARN-001	ja	AI SDK の step を Run.steps へ写像する。	WARNING	主体,開始条件,具体的な動作	AV-001	warning
+APC-EN-PASS-FOUR-001	en	When the AI SDK reports a started step, the orchestrator stores progress in Run.steps and sends it to the client in an agent-step event.	NONE	-	AV-001	pass-four-elements
+APC-JA-PASS-FOUR-001	ja	AI SDK が step 開始を通知したら、orchestrator は進捗を Run.steps へ保存し、同じ進捗を agent-step イベントとしてクライアントへ送信する。	NONE	-	AV-001	pass-four-elements
+APC-EN-PASS-MULTI-001	en	The AI SDK reports a started step.\nThe orchestrator maps the input to a progress record, stores it in Run.steps, and sends it to the client.	NONE	-	AV-001	pass-multi-sentence
+APC-JA-PASS-MULTI-001	ja	AI SDK が step 開始を通知する。\norchestrator は入力を進捗レコードへ写像し、Run.steps へ保存してクライアントへ送信する。	NONE	-	AV-001	pass-multi-sentence
+APC-EN-PASS-MATH-001	en	The function maps each integer x in the input set to x + 1 under the stated rule, and the output set is the integers.	NONE	-	AV-001	pass-mathematical
+APC-JA-PASS-MATH-001	ja	関数 f は入力集合の整数 x を規則 x + 1 で写像し、出力集合を整数と定義する。	NONE	-	AV-001	pass-mathematical
+APC-EN-WARN-MERMAID-001	en	sequenceDiagram\nGenerator->>Inspector: Map specification paths to inspection input.	WARNING	trigger,observable action,result destination	AV-001	warning-mermaid
+APC-JA-WARN-MERMAID-001	ja	sequenceDiagram\nGenerator->>Inspector: 仕様書のパスを検査入力へ写像する。	WARNING	開始条件,具体的な動作,結果の渡し先	AV-001	warning-mermaid
+APC-EN-PASS-MERMAID-001	en	sequenceDiagram\nGenerator->>Inspector: After generation, map and send specification paths as inspection input.\nInspector->>Report: Validate the files and store findings in report.md.	NONE	-	AV-001	pass-mermaid
+APC-JA-PASS-MERMAID-001	ja	sequenceDiagram\nGenerator->>Inspector: 生成後、仕様書のパスを検査入力へ写像して送信する。\nInspector->>Report: ファイルを検査し、指摘を report.md へ保存する。	NONE	-	AV-001	pass-mermaid
