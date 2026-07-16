@@ -216,15 +216,31 @@ The launcher accepts the owner's `run_id` as the expected run only after owner
 and pid contain that same run id and monitor PID. It prints that value; callers
 must not derive the expected run from the sentinel.
 
-On the next launch for the same label, the preflight stale reaper removes an
-abandoned handoff only when the owner and pid identify the same absent monitor,
-the lease is more than 90 seconds old, and the handoff path is a non-symlink
-mode-0700 directory owned by the current user directly below the configured
-root with the expected launcher-PID basename and unchanged device/inode.
-When a sentinel exists, its JSON identity must also match. Only enumerated
-FIFOs, matching temporary files, and the sentinel may be removed; unknown or
-mismatched content is retained and diagnosed rather than removed. The terminal
-report and terminal heartbeat are retained.
+On the next launch for the same label, the preflight stale reaper examines a
+valid owner whose lease is more than 90 seconds old. A synchronous owner is
+removed only when it has the required null monitor and handoff fields, its
+runner, launcher, and worker PIDs are identical, no pid path exists, and the
+runner process is absent.
+
+A detached owner requires an absent monitor and, when the pid path exists, a
+matching run id and monitor PID. If the handoff directory is already absent,
+the reaper validates that the stored absolute path is directly below the
+configured root and that its basename contains the expected launcher PID before
+removing the owner and optional pid record. An existing handoff must be a
+non-symlink mode-0700 directory owned by the current user with an unchanged
+device/inode. When a sentinel exists, its JSON identity must also match. Only
+enumerated FIFOs, matching temporary files, and the sentinel may be removed;
+unknown or mismatched content is retained and diagnosed rather than removed.
+
+During a `--force` takeover of a stale detached owner, the reaper stops the old
+monitor process group before removing its owner record. It signals the group
+only when the stored monitor PID differs from the current process group and the
+group still contains an `agent-delegate`, `codex`, or `claude` process. The
+reaper sends `TERM`, waits up to one second, then sends `KILL` if the group still
+exists. The terminal report and terminal heartbeat are retained.
+
+If the stale reaper cannot acquire the owner lock within its timeout, the new
+launch exits 2 before starting a peer and does not write `report.json`.
 
 ## Review mode
 

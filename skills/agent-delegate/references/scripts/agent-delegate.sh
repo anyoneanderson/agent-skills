@@ -860,6 +860,7 @@ stale_reap_previous_run() {
       return 0
     fi
     if owner_matches_run "$run_id" && [ ! -e "$handoff" ] && [ ! -L "$handoff" ]; then
+      if [ "$FORCE" -eq 1 ]; then terminate_confirmed_old_monitor_group "$monitor_pid"; fi
       [ "$pid_present" -eq 0 ] || rm -f "$PID_FILE"
       rm -f "$OWNER_FILE"
     fi
@@ -926,6 +927,7 @@ stale_reap_previous_run() {
   production_handoff_path_is_safe "$handoff" "$HANDOFF_ROOT" "$launcher_pid" "$initial_dev" "$initial_ino" || { release_owner_lock; return 0; }
   rmdir "$handoff" || { release_owner_lock; return 0; }
   if owner_matches_run "$run_id" && pid_matches_run "$run_id" "$monitor_pid"; then
+    if [ "$FORCE" -eq 1 ]; then terminate_confirmed_old_monitor_group "$monitor_pid"; fi
     rm -f "$PID_FILE" "$OWNER_FILE"
   fi
   release_owner_lock
