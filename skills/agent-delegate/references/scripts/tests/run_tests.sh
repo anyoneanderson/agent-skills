@@ -197,6 +197,17 @@ check_state_fixture() {
   [ "$count" -gt 0 ]
 }
 
+check_unknown_monitor_contract_docs() {
+  grep -Fq '| heartbeat not generated, monitor alive or unknown, launch age at most 90 seconds | `STARTING` |' \
+    "$REPO_ROOT/skills/agent-delegate/references/contract.md" &&
+    grep -Fq '| heartbeat not generated after 90 seconds, monitor alive or unknown | `DEGRADED_NO_HEARTBEAT` |' \
+      "$REPO_ROOT/skills/agent-delegate/references/contract.md" &&
+    grep -Fq '| heartbeat が未生成、monitor が生存または不明、起動から90秒以内 | `STARTING` |' \
+      "$REPO_ROOT/skills/agent-delegate/references/contract.ja.md" &&
+    grep -Fq '| 起動から90秒を超えて heartbeat が未生成、monitor が生存または不明 | `DEGRADED_NO_HEARTBEAT` |' \
+      "$REPO_ROOT/skills/agent-delegate/references/contract.ja.md"
+}
+
 wait_decision() {
   local elapsed="$1" state="$2" owner="$3" monitor="$4" stop_age="$5" terminal="$6"
   case "$terminal" in done) printf TERMINAL_DONE; return ;; blocked) printf TERMINAL_BLOCKED; return ;; esac
@@ -822,7 +833,14 @@ case_invalid_terminal_report() {
 case_caller_state_machine() {
   local bad
   check_state_fixture "$FIXTURE_DIR/caller-states.tsv" || die "state fixture rejected"
+  check_unknown_monitor_contract_docs || die "public unknown-monitor state contract is incomplete"
   bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-states.XXXXXX")"
+  corrupt_fixture_expectation "$FIXTURE_DIR/caller-states.tsv" starting-monitor-unknown \
+    DEGRADED_NO_HEARTBEAT "$bad"
+  if check_state_fixture "$bad"; then rm -f "$bad"; die "state checker accepted a corrupted unknown-monitor STARTING expectation"; fi
+  corrupt_fixture_expectation "$FIXTURE_DIR/caller-states.tsv" no-heartbeat-monitor-unknown \
+    STARTING "$bad"
+  if check_state_fixture "$bad"; then rm -f "$bad"; die "state checker accepted a corrupted unknown-monitor DEGRADED_NO_HEARTBEAT expectation"; fi
   corrupt_fixture_expectation "$FIXTURE_DIR/caller-states.tsv" invalid-both-absent-dead \
     REPORT_INVALID_PENDING "$bad"
   if check_state_fixture "$bad"; then rm -f "$bad"; die "state checker accepted a corrupted expectation"; fi
