@@ -62,6 +62,9 @@ the app and operates a browser, it needs write access:
 - Use explicit `--detach`, retain the expected run id and launch time, and poll
   every 15 seconds (never less often than every 30 seconds). Re-evaluate at
   30-minute intervals and apply the public contract's controlled stop at 2 hours.
+- Before launch, register the exact result path, a caller-generated correlation
+  value required in that result, its freshness baseline, and the existing Step 5
+  machine validator. These values are the artifact recovery contract.
 
 ```bash
 # Compose: evaluator-prompt.md + runtime context → one prompt file
@@ -85,7 +88,12 @@ report="$(printf '%s\n' "$launch" | tail -1)"
   report; otherwise stop waiting and escalate diagnostics without `--force`.
 - `status == done` → read the result file the evaluator wrote; hand it to
   spec-evaluate Step 5 (machine-verify evidence).
-- `status == blocked` → the run did not complete cleanly. Record the
+- Expected-run `status == blocked` with `blocker_category == env_error` → run
+  fail-closed artifact recovery before declaring evaluation failure. Accept only
+  the predeclared result when it is new or changed after launch, carries the
+  correlation value, and passes the normal Step 5 machine verification. Keep
+  the blocked report as a runtime diagnostic.
+- Every other `status == blocked`, or failed artifact recovery → record the
   `blocker` / `blocker_category` and treat it as an evaluation failure, never a
   silent pass.
 

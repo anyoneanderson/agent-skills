@@ -292,6 +292,7 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
     - 機械可読な `report.json` を返す（stdout の最終行は従来どおりそのパス。detach 起動では expected run id も出力）
     - 書き込みを伴う delegate は明示的な `--detach` を既定とし、同期実行は5分以内という具体的根拠がある read-only 作業に限る
     - detach 実行は15秒間隔（最大30秒）で expected-run report、owner、pid、heartbeat、プロセス状態の順に確認し、実行が生存中なら report の未生成だけで失敗にしない
+    - expected-run の `env_error` をタスク失敗とする前に、起動前に宣言したパス、鮮度、相関、mode 固有の検証を使って fail-closed な `env_error` の成果物復旧を試す。monitor の消失だけでは失敗にしない
     - detach待機は30分ごとに状態を再確認し、2時間でexpected monitorへ`TERM`を送る。terminal reportを最大90秒待っても公開されなければ、自動で`--force`を使わず、診断情報を人間へ渡して待機を終了する
     - `--resume <thread_id>` でセッション継続 — 多ラウンドのレビューを1つの文脈で回せる
 

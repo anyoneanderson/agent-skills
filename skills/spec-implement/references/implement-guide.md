@@ -818,6 +818,11 @@ role as `--target` explicitly. Retain the expected run id and launch time, poll 
 (never less often than every 30 seconds), re-evaluate at 30-minute intervals,
 and apply the public contract's controlled stop at 2 hours.
 
+Before launch, record the phase-start git snapshot, the task's exact target
+paths, a caller-generated correlation value included in the prompt, and the
+machine-checkable Done criteria. Together they form the task-specific artifact
+recovery validator; do not invent a validator after a failed run.
+
 ```bash
 OUT=".specs/{feature}/delegate/{task-id}"; mkdir -p "$OUT"
 PROMPT="$(mktemp)"
@@ -846,8 +851,13 @@ report="$(printf '%s\n' "$launch" | tail -1)"
   report; otherwise stop waiting and escalate diagnostics without `--force`.
 - `status == done` → the peer finished. Mark the checkbox and commit (the orchestrator,
   not the peer, owns commits — the peer is told to commit nothing).
-- `status == blocked` → read `blocker` / `blocker_category`; feed into the fix loop
-  (see below) or surface to the caller.
+- Expected-run `status == blocked` with `blocker_category == env_error` → apply
+  fail-closed artifact recovery before entering the fix loop. Continue only when
+  the phase-start diff stays within the declared target paths, the correlation
+  evidence is present, and the predeclared Done-criteria validator passes. Keep
+  the blocked report as a runtime diagnostic.
+- Every other `status == blocked`, or failed artifact recovery → read `blocker` /
+  `blocker_category`; feed into the fix loop (see below) or surface to the caller.
 
 ### Preferred Reviewer and Backend Resolution
 
@@ -868,6 +878,10 @@ review independence is the invariant that must always hold.
 Review mode is always read-only per the contract. Run synchronously only when
 there is a concrete basis for completion within 5 minutes. Otherwise add
 `--detach`, retain the expected run id, and use the same 15–30-second state wait.
+Before launch, record the review file's freshness baseline, a caller-generated
+correlation value required in the review context, and a git snapshot of the
+workspace excluding the review out-dir. Use the agent-delegate contract's
+content-level fingerprint, not a path or status list.
 
 ```bash
 OUT=".specs/{feature}/review/{task-id}"; mkdir -p "$OUT"
@@ -889,6 +903,15 @@ gate="$(grep -m1 '^Gate:' "$review_file")"    # Gate: PASS | Gate: FAIL
 The review file carries the same severity sections (`### Critical`, `### Improvement`,
 `### Minor`) and `Gate: PASS|FAIL` line as spec-review output, so the existing gate logic
 in "Review Gate Details" consumes it with no change.
+
+For an expected-run `blocked` report with `blocker_category: env_error`, apply
+the public contract's fail-closed artifact recovery before retrying or blocking.
+Adopt the declared review file only when it is fresh and correlated, passes the
+four structural checks, gives every Critical and Improvement finding a valid
+`fix_before`, matches the recomputed Gate, and the post-run workspace snapshot
+matches the pre-launch snapshot after excluding the declared out-dir. Keep the
+blocked report as a runtime diagnostic. Other blocked categories and failed
+recovery follow the normal blocked path.
 
 ### Independent Native Review Fallback
 

@@ -61,6 +61,8 @@ evaluator を agent-delegate 経由で走らせる。受け入れ試験はアプ
 - 明示的な `--detach` を使い、expected run id と起動時刻を保持する。
   15秒を標準、30秒を上限としてポーリングし、30分ごとに状態を再確認する。
   起動から2時間に達したら、公開契約の停止手順を適用する。
+- 起動前に、結果ファイルの正確なパス、結果へ含める呼び出し側生成の相関値、鮮度の基準、既存の Step 5 機械 validator を登録する。
+  この4項目を成果物復旧の契約として扱う。
 
 ```bash
 # 合成: evaluator-prompt.ja.md + 実行時コンテキスト → 1つの prompt ファイル
@@ -83,8 +85,10 @@ report="$(printf '%s\n' "$launch" | tail -1)"
   terminal reportを最大90秒待ち、公開されなければ`--force`を実行せず、診断情報を人間へ渡して待機を終了する。
 - `status == done` → evaluator が書いた結果ファイルを読み、spec-evaluate の
   Step 5（証跡の機械検証）に渡す。
-- `status == blocked` → 実行が正常に完了していない。`blocker` /
-  `blocker_category` を記録し、黙って合格にせず評価失敗として扱う。
+- expected-run の `status == blocked` かつ `blocker_category == env_error` → 評価失敗と決める前に、fail-closed な成果物復旧を適用する。
+  起動後に新規作成または更新された宣言済み結果が相関値を持ち、通常の Step 5 機械検証に合格した場合だけ採用する。
+  blocked report は実行時の診断として残す。
+- ほかの `status == blocked`、または成果物復旧の不合格 → `blocker` と `blocker_category` を記録し、黙って合格にせず評価失敗として扱う。
 
 ## 契約の境界
 

@@ -84,6 +84,14 @@ expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
 report="$(printf '%s\n' "$launch" | tail -1)"
 ```
 
+Before launch, the phase owner records each expected artifact's exact path,
+freshness baseline, caller-generated correlation value, and phase-specific
+validator. This predeclared set is the only artifact recovery contract; a
+validator created after failure cannot authorize recovery. For review and other
+read-only phases, it also records a pre-launch git snapshot of the workspace,
+excluding only the declared out-dir. The snapshot uses the content-level
+fingerprint defined by the agent-delegate contract, not a path or status list.
+
 **The wait must survive the waiter's turn.** A bare in-turn polling loop dies the
 moment the waiting agent ends its turn, leaving no one to observe the expected run.
 There is exactly one standard way to wait, plus a backup rule:
@@ -119,6 +127,18 @@ If the monitor is absent or unknown, or the grace period expires, the watcher
 clears `waiting_report`, stops waiting, and reports the saved diagnostics to the
 human operator. This path never invokes `--force` or signals an unidentified
 process.
+
+When the expected-run terminal report is `blocked` with
+`blocker_category: env_error`, the watcher runs fail-closed artifact recovery
+before dispatching a blocked result. It adopts a task result only when the
+predeclared artifact is fresh, correlated, and passes the phase validator; the
+blocked report remains a runtime diagnostic. Other blocked categories and
+failed recovery remain blocked. A host that reaps detached monitors may use a
+synchronous bounded `until` loop over the same validator and original launch
+deadline. That loop does not relax eligibility: if a valid expected-run
+`env_error` report never appears, recovery is rejected and the watcher
+escalates diagnostics at the deadline. Monitor loss or a missing idle signal
+alone is not failure.
 
 ## Phase-Specific Resolution
 
