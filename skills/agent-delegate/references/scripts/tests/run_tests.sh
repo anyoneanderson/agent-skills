@@ -1192,7 +1192,23 @@ check_contract_section() {
       while (substr(line, count + 1, 1) == marker) count++
       return count
     }
+    function opening_fence_indent_ok(line, i, char, spaces) {
+      spaces=0
+      for (i=1; i<=length(line); i++) {
+        char=substr(line, i, 1)
+        if (char == " ") {
+          spaces++
+          if (spaces > 3) return 0
+        } else if (char == "\t") {
+          return 0
+        } else {
+          break
+        }
+      }
+      return 1
+    }
     {
+      opening_indent_ok=opening_fence_indent_ok($0)
       trimmed=$0
       sub(/^[[:space:]]*/, "", trimmed)
       marker=substr(trimmed, 1, 1)
@@ -1203,7 +1219,7 @@ check_contract_section() {
         if (marker == fence_marker && run_length >= fence_length && rest ~ /^[[:space:]]*$/) {
           in_fence=0
         }
-      } else if ((marker == "`" || marker == "~") && run_length >= 3) {
+      } else if (opening_indent_ok && (marker == "`" || marker == "~") && run_length >= 3) {
         in_fence=1
         fence_marker=marker
         fence_length=run_length
@@ -1221,19 +1237,38 @@ check_contract_section() {
 }
 
 check_contract_section_fence_regression() {
-  local dir positive negative
+  local dir positive three_space_positive negative long_closing_negative indented_negative
+  local tab_indented_negative candidate
   dir="$(new_work_dir)"
   positive="$dir/fenced-comments.md"
+  three_space_positive="$dir/three-space-opening.md"
   negative="$dir/real-heading.md"
+  long_closing_negative="$dir/long-closing-fence.md"
+  indented_negative="$dir/indented-code-block.md"
+  tab_indented_negative="$dir/tab-indented-code-block.md"
   cat > "$positive" <<'EOF'
 # Contract
 write-delegate
-```sh
-# This shell comment is not a Markdown heading.
-```
-~~~sh
-# This shell comment is also not a Markdown heading.
+   ```sh
 ~~~
+# This shell comment is not a Markdown heading.
+```js
+# A fence marker with trailing content does not close the block.
+   ````
+~~~sh
+```
+# This shell comment is also not a Markdown heading.
+~~~js
+# A tilde fence marker with trailing content does not close the block.
+~~~~
+delegate request
+EOF
+  cat > "$three_space_positive" <<'EOF'
+# Contract
+write-delegate
+   ```sh
+# This shell comment is not a Markdown heading.
+   ```
 delegate request
 EOF
   cat > "$negative" <<'EOF'
@@ -1242,14 +1277,39 @@ write-delegate
 # Separate contract
 delegate request
 EOF
+  cat > "$long_closing_negative" <<'EOF'
+# Contract
+write-delegate
+```sh
+# This shell comment is not a Markdown heading.
+````
+# Separate contract
+delegate request
+EOF
+  cat > "$indented_negative" <<'EOF'
+# Contract
+write-delegate
+    ```sh
+# Separate contract
+delegate request
+EOF
+  printf '# Contract\nwrite-delegate\n\t```sh\n# Separate contract\ndelegate request\n' \
+    > "$tab_indented_negative"
   check_contract_section "$positive" write-delegate 'delegate request' || {
     rm -rf "$dir"
     return 1
   }
-  if check_contract_section "$negative" write-delegate 'delegate request'; then
+  check_contract_section "$three_space_positive" write-delegate 'delegate request' || {
     rm -rf "$dir"
     return 1
-  fi
+  }
+  for candidate in "$negative" "$long_closing_negative" "$indented_negative" \
+    "$tab_indented_negative"; do
+    if check_contract_section "$candidate" write-delegate 'delegate request'; then
+      rm -rf "$dir"
+      return 1
+    fi
+  done
   rm -rf "$dir"
 }
 
