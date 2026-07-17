@@ -985,28 +985,122 @@ case_heartbeat_testmode_both_directions() {
   [ ! -e "$dir/plan-owner.json" ]; rm -rf "$dir"
 }
 
+document_contract_targets() {
+  cat <<'EOF'
+T-A13	en	README.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
+T-A13	ja	README.ja.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
+T-A11	en	skills/agent-delegate/SKILL.md	write-delegate
+T-A12	en	skills/agent-delegate/references/contract.md	sync-scope,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
+T-A12	ja	skills/agent-delegate/references/contract.ja.md	sync-scope,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
+T-A13	en	skills/spec-orchestrate/SKILL.md	watchdog
+T-A12	en	skills/spec-orchestrate/references/role-dispatch.md	sync-scope,polling,reevaluation,hard-stop,termination-grace,automatic-force
+T-A12	ja	skills/spec-orchestrate/references/role-dispatch.ja.md	sync-scope,polling,reevaluation,hard-stop,termination-grace,automatic-force
+T-A11	en	skills/spec-orchestrate/references/phases/spec_generate.md	write-delegate
+T-A11	ja	skills/spec-orchestrate/references/phases/spec_generate.ja.md	write-delegate
+T-A12	en	skills/spec-orchestrate/references/phases/spec_review.md	write-delegate
+T-A12	ja	skills/spec-orchestrate/references/phases/spec_review.ja.md	write-delegate
+T-A11	en	skills/spec-orchestrate/references/phases/evaluate.md	write-delegate
+T-A11	ja	skills/spec-orchestrate/references/phases/evaluate.ja.md	write-delegate
+T-A13	en	skills/spec-orchestrate/references/phases/intake.md	runtime-records
+T-A13	ja	skills/spec-orchestrate/references/phases/intake.ja.md	runtime-records
+T-A13	en	skills/spec-orchestrate/references/pipeline-config.md	runtime-record-files
+T-A13	ja	skills/spec-orchestrate/references/pipeline-config.ja.md	runtime-record-files
+T-A11	en	skills/spec-implement/SKILL.md	write-delegate
+T-A11	en	skills/spec-implement/references/implement-guide.md	write-delegate
+T-A11	ja	skills/spec-implement/references/implement-guide.ja.md	write-delegate
+T-A11	en	skills/spec-evaluate/SKILL.md	write-delegate
+T-A11	en	skills/spec-evaluate/references/execution-backend.md	write-delegate
+T-A11	ja	skills/spec-evaluate/references/execution-backend.ja.md	write-delegate
+EOF
+}
+
+contract_fixture_row() {
+  local file="$1" wanted="$2"
+  awk -F '\t' -v wanted="$wanted" '
+    NR>1 && $1==wanted {print; count++}
+    END {if (count != 1) exit 1}
+  ' "$file"
+}
+
 check_contract_fixture() {
-  local file="$1" id en ja expected
+  local file="$1" id en ja expected count=0
+  [ "$(awk -F '\t' 'NR==1 {print NF}' "$file")" -eq 4 ] || return 1
   while IFS=$'\t' read -r id en ja expected; do
     [ "$id" = contract_id ] && continue
-    [ -n "$en" ] && [ -n "$ja" ] && [ -n "$expected" ] || return 1
+    count=$((count + 1))
+    [ -n "$id" ] && [ -n "$en" ] && [ -n "$ja" ] && [ -n "$expected" ] || return 1
+    [ "$(awk -F '\t' -v wanted="$id" 'NR>1 && $1==wanted {count++} END {print count+0}' "$file")" -eq 1 ] || return 1
   done < "$file"
+  [ "$count" -gt 0 ]
+}
+
+check_document_contract_targets() {
+  local fixture="$1" test_id language relative ids row id en ja expected token count=0
+  document_contract_targets | awk -F '\t' '
+    NF!=4 || ($1!="T-A11" && $1!="T-A12" && $1!="T-A13") || ($2!="en" && $2!="ja") || seen[$3]++ {exit 1}
+    END {if (NR!=24) exit 1}
+  ' || return 1
+  while IFS=$'\t' read -r test_id language relative ids; do
+    count=$((count + 1))
+    [ -f "$REPO_ROOT/$relative" ] || return 1
+    while [ -n "$ids" ]; do
+      case "$ids" in *,*) id="${ids%%,*}"; ids="${ids#*,}" ;; *) id="$ids"; ids="" ;; esac
+      row="$(contract_fixture_row "$fixture" "$id")" || return 1
+      IFS=$'\t' read -r id en ja expected <<EOF
+$row
+EOF
+      if [ "$language" = en ]; then token="$en"; else token="$ja"; fi
+      grep -Fq -- "$token" "$REPO_ROOT/$relative" || return 1
+      grep -Fq -- "$expected" "$REPO_ROOT/$relative" || return 1
+    done
+  done < <(document_contract_targets)
+  [ "$count" -eq 24 ]
+}
+
+check_ordered_tokens() {
+  local file="$1" content token
+  shift
+  content="$(tr '\n' ' ' < "$file")"
+  for token in "$@"; do
+    case "$content" in *"$token"*) content="${content#*"$token"}" ;; *) return 1 ;; esac
+  done
+}
+
+check_runtime_record_order() {
+  local relative
+  for relative in \
+    skills/spec-orchestrate/references/phases/intake.md \
+    skills/spec-orchestrate/references/phases/intake.ja.md; do
+    check_ordered_tokens "$REPO_ROOT/$relative" \
+      '*/*-heartbeat.json' '*/*-owner.json' '*/*-owner.lock/' '*/*-report.candidate.*.json' || return 1
+  done
+  for relative in \
+    skills/spec-orchestrate/references/pipeline-config.md \
+    skills/spec-orchestrate/references/pipeline-config.ja.md; do
+    check_ordered_tokens "$REPO_ROOT/$relative" \
+      '*-heartbeat.json' '*-owner.json' '*-owner.lock/' '*-report.candidate.*.json' || return 1
+  done
+}
+
+check_document_contracts() {
+  local fixture="$1"
+  check_contract_fixture "$fixture" &&
+    check_document_contract_targets "$fixture" &&
+    check_runtime_record_order
 }
 
 check_contract_positive_and_negative() {
-  local bad
-  check_contract_fixture "$FIXTURE_DIR/document-contract.tsv" || return 1
+  local mutation_id="$1" fixture="$FIXTURE_DIR/document-contract.tsv" bad
+  check_document_contracts "$fixture" || return 1
   bad="$(mktemp "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-contract.XXXXXX")"
-  awk 'BEGIN{FS=OFS="\t"} NR==2{$NF=""} {print}' "$FIXTURE_DIR/document-contract.tsv" > "$bad"
-  if check_contract_fixture "$bad"; then rm -f "$bad"; return 1; fi
+  awk -v wanted="$mutation_id" 'BEGIN{FS=OFS="\t"} $1==wanted{$NF="__missing_contract_value__"} {print}' \
+    "$fixture" > "$bad"
+  if check_document_contracts "$bad"; then rm -f "$bad"; return 1; fi
   rm -f "$bad"
 }
-case_write_delegate_docs_use_detach() { check_contract_positive_and_negative; }
-case_caller_sync_poll_timeout_contract() { check_contract_positive_and_negative; }
-case_bilingual_contract_and_runtime_records() {
-  check_contract_positive_and_negative
-  [ -f "$REPO_ROOT/skills/agent-delegate/references/contract.md" ] && [ -f "$REPO_ROOT/skills/agent-delegate/references/contract.ja.md" ]
-}
+case_write_delegate_docs_use_detach() { check_contract_positive_and_negative write-delegate; }
+case_caller_sync_poll_timeout_contract() { check_contract_positive_and_negative polling; }
+case_bilingual_contract_and_runtime_records() { check_contract_positive_and_negative runtime-record-files; }
 
 check_compatibility_fixture() {
   local file="$1" id path ref mode target sandbox stub expected_exit expected_status artifact count=0
@@ -1323,7 +1417,7 @@ case_spec_id_semantic_coverage() {
   for file in requirement.md design.md tasks.md test.md; do cp "$spec_dir/$file" "$bad_dir/$file"; done
   sed 's/REQ-001/REQ-CORRUPTED/g' "$bad_dir/design.md" > "$bad_dir/design.md.tmp"; mv "$bad_dir/design.md.tmp" "$bad_dir/design.md"
   if check_spec_ids "$FIXTURE_DIR/spec-ids.tsv" "$bad_dir"; then rm -rf "$bad_dir"; die "spec checker accepted corrupted semantic coverage"; fi
-  [ "$(rg -c '^## T-A[0-9]+:' "$REPO_ROOT/.specs/agent-delegate-heartbeat/test.md")" -eq 22 ]
+  [ "$(grep -Ec '^## T-A[0-9]+:' "$REPO_ROOT/.specs/agent-delegate-heartbeat/test.md")" -eq 22 ]
   rm -rf "$bad_dir"
 }
 
