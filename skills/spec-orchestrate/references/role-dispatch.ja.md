@@ -82,6 +82,11 @@ expected_run_id="$(printf '%s\n' "$launch" | sed -n 's/^run_id: //p')"
 report="$(printf '%s\n' "$launch" | tail -1)"
 ```
 
+起動前に、phase owner は期待する各成果物の正確なパス、鮮度の基準、呼び出し側生成の相関値、phase 固有 validator を記録する。
+この宣言済み情報だけを成果物復旧の契約とし、失敗後に作った validator で復旧を許可しない。
+review などの read-only phase では、宣言済み out-dir だけを除外したワークスペースの起動前 git snapshot も記録する。
+snapshot には agent-delegate 契約で定義した内容 fingerprint を使い、path または status の一覧だけで済ませない。
+
 **待ちは待つ側の turn を跨いで生き残らせる。** turn 内の素朴なポーリングは turn
 終了とともに消え、expected run を誰も監視しなくなる。待ち方の標準は1つだけで、
 バックアップ規則がそれに加わる:
@@ -114,6 +119,15 @@ report="$(printf '%s\n' "$launch" | tail -1)"
 それ以外でexpected runのownerが変わっておらずmonitorが生存している場合は、監視がmonitorへ`TERM`を送り、expected runのterminal reportを最大90秒待つ。
 monitorが不在または生存不明の場合、あるいは90秒以内にterminal reportが公開されない場合は、監視が`waiting_report`を消して待機を終了し、保存した診断情報を人間へ渡す。
 この停止手順では`--force`を実行せず、expected runのものと確認できないプロセスへシグナルを送らない。
+
+expected-run の terminal report が `status: blocked` かつ `blocker_category: env_error` の場合、監視は blocked を通知する前に fail-closed な成果物復旧を適用する。
+宣言済み成果物が起動後に新規作成または更新され、相関値を持ち、phase validator に合格した場合だけタスク結果を採用する。
+blocked report は実行時の診断として残す。
+ほかの blocked 分類と成果物復旧の不合格は blocked のまま扱う。
+detach monitor が回収される host では、同じ validator と元の起動期限を使う同期的な上限付き `until` loop を使ってもよい。
+loop は復旧条件を緩めない。
+valid な expected-run の `env_error` report が現れない場合は復旧を拒否し、期限到達時に診断情報を上位へ渡す。
+monitor の消失または idle 通知の欠落だけでは失敗にしない。
 
 ## フェーズ別の解決
 

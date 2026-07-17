@@ -247,6 +247,71 @@ check_wait_fixture() {
   [ "$count" -gt 0 ]
 }
 
+artifact_recovery_decision() {
+  local report="$1" status="$2" blocker_category="$3" run_relation="$4" mode="$5"
+  local artifact_path="$6" fresh="$7" correlation="$8" structure="$9" tags="${10}"
+  local gate="${11}" readonly_evidence="${12}" validator="${13}"
+  if [ "$report" != valid ] || [ "$status" != blocked ] || [ "$blocker_category" != env_error ] ||
+     [ "$run_relation" != expected ] || [ "$artifact_path" != declared ] ||
+     [ "$fresh" != yes ] || [ "$correlation" != yes ]; then
+    printf REJECT_RECOVERY
+    return
+  fi
+  case "$mode" in
+    review)
+      if [ "$structure" = valid ] && [ "$tags" = valid ] && [ "$gate" = consistent ] &&
+         [ "$readonly_evidence" = clean ]; then
+        printf ACCEPT_RECOVERY
+      else
+        printf REJECT_RECOVERY
+      fi
+      ;;
+    delegate)
+      [ "$validator" = pass ] && printf ACCEPT_RECOVERY || printf REJECT_RECOVERY
+      ;;
+    *) printf REJECT_RECOVERY ;;
+  esac
+}
+
+check_artifact_recovery_fixture() {
+  local file="$1" case_id report status blocker_category run_relation mode artifact_path fresh
+  local correlation structure tags gate readonly_evidence validator expected actual count=0
+  while IFS=$'\t' read -r case_id report status blocker_category run_relation mode artifact_path fresh \
+    correlation structure tags gate readonly_evidence validator expected; do
+    [ "$case_id" = case_id ] && continue
+    count=$((count + 1))
+    case "$report" in valid|absent|invalid) : ;; *) return 1 ;; esac
+    case "$status" in done|blocked|none) : ;; *) return 1 ;; esac
+    case "$blocker_category" in env_error|timeout|none) : ;; *) return 1 ;; esac
+    case "$run_relation" in expected|wrong) : ;; *) return 1 ;; esac
+    case "$mode" in review|delegate) : ;; *) return 1 ;; esac
+    case "$artifact_path" in declared|other) : ;; *) return 1 ;; esac
+    case "$fresh" in yes|no) : ;; *) return 1 ;; esac
+    case "$correlation" in yes|no) : ;; *) return 1 ;; esac
+    actual="$(artifact_recovery_decision "$report" "$status" "$blocker_category" "$run_relation" \
+      "$mode" "$artifact_path" "$fresh" "$correlation" "$structure" "$tags" "$gate" \
+      "$readonly_evidence" "$validator")"
+    [ "$actual" = "$expected" ] || return 1
+  done < "$file"
+  [ "$count" -ge 20 ]
+}
+
+check_artifact_recovery_docs() {
+  local file="$1" case_id relative token expected count=0
+  awk -F '\t' '
+    NR==1 {if ($0!="case_id\trelative_path\ttoken\texpected") exit 1; next}
+    NF!=4 || $1=="" || $2=="" || $3=="" || $4=="" || seen[$1]++ {exit 1}
+    END {if (NR<2) exit 1}
+  ' "$file" || return 1
+  while IFS=$'\t' read -r case_id relative token expected; do
+    [ "$case_id" = case_id ] && continue
+    count=$((count + 1))
+    [ -f "$REPO_ROOT/$relative" ] || return 1
+    check_contract_section "$REPO_ROOT/$relative" "$token" "$expected" || return 1
+  done < "$file"
+  [ "$count" -ge 16 ]
+}
+
 corrupt_fixture_expectation() {
   local source="$1" case_id="$2" replacement="$3" destination="$4"
   awk -v id="$case_id" -v replacement="$replacement" 'BEGIN{FS=OFS="\t"} $1==id{$NF=replacement} {print}' \
@@ -905,6 +970,32 @@ case_caller_wait_upper_bound() {
   check_wait_contract_docs || die "public wait-bound contract is incomplete"
   run_detach_review_lifecycle_stub monitor-termination ||
     die "TERM did not produce a blocked terminal report and process cleanup"
+}
+
+case_artifact_recovery_contract() {
+  local fixture="$FIXTURE_DIR/artifact-recovery.tsv" docs_fixture="$FIXTURE_DIR/artifact-recovery-docs.tsv" bad bad_docs
+  check_artifact_recovery_fixture "$fixture" || die "artifact recovery fixture rejected"
+  check_artifact_recovery_docs "$docs_fixture" || die "public artifact recovery contract is incomplete"
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-artifact-recovery.XXXXXX")"
+  corrupt_fixture_expectation "$fixture" review-stale-artifact ACCEPT_RECOVERY "$bad"
+  if check_artifact_recovery_fixture "$bad"; then
+    rm -f "$bad"
+    die "artifact recovery checker accepted a stale review artifact"
+  fi
+  corrupt_fixture_expectation "$fixture" delegate-no-validator ACCEPT_RECOVERY "$bad"
+  if check_artifact_recovery_fixture "$bad"; then
+    rm -f "$bad"
+    die "artifact recovery checker accepted a delegate without a task validator"
+  fi
+  rm -f "$bad"
+  bad_docs="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-artifact-recovery-docs.XXXXXX")"
+  awk 'BEGIN{FS=OFS="\t"} $1=="contract-en"{$4="__missing_recovery_requirement__"} {print}' \
+    "$docs_fixture" > "$bad_docs"
+  if check_artifact_recovery_docs "$bad_docs"; then
+    rm -f "$bad_docs"
+    die "artifact recovery docs checker accepted a corrupted requirement"
+  fi
+  rm -f "$bad_docs"
 }
 
 case_run_ownership_force_resume() {
@@ -1753,9 +1844,9 @@ write_repeat_manifest() {
     --arg fixture "$fixture_hash" --arg harness "$harness_hash" --argjson beats "$CURRENT_HEARTBEATS" \
     --argjson terminals "$CURRENT_TERMINALS" '
     {iteration:$iteration,commit:$commit,hashes:{runner:$runner,fixture:$fixture,harness:$harness},
-     case_count:25,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
+     case_count:26,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
   ' > "$out"
-  jq -e '.case_count==25 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
+  jq -e '.case_count==26 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
 }
 
 if [ -n "$RUN_CASE" ]; then
@@ -1787,12 +1878,12 @@ done
 if [ "$REPEAT" -eq 3 ]; then
   aggregate="$repeat_root/aggregate.json"
   jq -n --argjson repeats "$REPEAT" --arg commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" \
-    '{commit:$commit,repeats:$repeats,registered_cases:26,passed_cases:26,failed_cases:0,
+    '{commit:$commit,repeats:$repeats,registered_cases:27,passed_cases:27,failed_cases:0,
       meta_cases:["readonly-gate-evidence","all-repeat-3"]}' > "$aggregate"
-  jq -e '.repeats==3 and .registered_cases==26 and .passed_cases==26 and .failed_cases==0' "$aggregate" >/dev/null
+  jq -e '.repeats==3 and .registered_cases==27 and .passed_cases==27 and .failed_cases==0' "$aggregate" >/dev/null
   printf 'PASS\tall-repeat-3\n'
   printf 'AGGREGATE\t%s\n' "$(jq -c . "$aggregate")"
-  printf 'ALL_PASS\trepeats=%s\tcases=26/26\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=27/27\n' "$REPEAT"
 else
-  printf 'ALL_PASS\trepeats=%s\tcases=25/26\tmeta=all-repeat-3-deferred\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=26/27\tmeta=all-repeat-3-deferred\n' "$REPEAT"
 fi

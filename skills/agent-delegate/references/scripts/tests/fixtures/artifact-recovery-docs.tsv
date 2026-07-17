@@ -1,0 +1,17 @@
+case_id	relative_path	token	expected
+contract-en	skills/agent-delegate/references/contract.md	Artifact recovery after `env_error`	content-level fingerprint
+contract-en-until	skills/agent-delegate/references/contract.md	only a waiting mechanism	valid expected-run `env_error` report
+contract-ja	skills/agent-delegate/references/contract.ja.md	`env_error` 後の成果物復旧	tracked worktree と staged diff の内容
+contract-ja-until	skills/agent-delegate/references/contract.ja.md	loop は待機方法を置き換えるだけ	valid な expected-run の `env_error` report
+agent-skill	skills/agent-delegate/SKILL.md	fail-closed artifact recovery	pre-launch content fingerprint
+readme-en	README.md	`env_error` artifact recovery	mode-specific validation
+readme-ja	README.ja.md	`env_error` の成果物復旧	mode 固有の検証
+implement-delegate-en	skills/spec-implement/references/implement-guide.md	task-specific artifact	phase-start diff
+implement-delegate-ja	skills/spec-implement/references/implement-guide.ja.md	タスク固有の成果物復旧 validator	phase 開始時からの差分
+implement-review-en	skills/spec-implement/references/implement-guide.md	fail-closed artifact recovery	post-run workspace snapshot
+implement-review-ja	skills/spec-implement/references/implement-guide.ja.md	fail-closed な成果物復旧	ワークスペース snapshot
+evaluate-skill	skills/spec-evaluate/SKILL.md	fail-closed artifact recovery	Step 5 machine checks
+evaluate-backend-en	skills/spec-evaluate/references/execution-backend.md	artifact recovery contract	Step 5 machine verification
+evaluate-backend-ja	skills/spec-evaluate/references/execution-backend.ja.md	成果物復旧の契約	Step 5 機械検証
+orchestrate-en	skills/spec-orchestrate/references/role-dispatch.md	artifact recovery contract	pre-launch git snapshot
+orchestrate-ja	skills/spec-orchestrate/references/role-dispatch.ja.md	成果物復旧の契約	起動前 git snapshot

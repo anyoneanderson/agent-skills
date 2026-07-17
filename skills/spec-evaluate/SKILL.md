@@ -142,7 +142,9 @@ testing launches the app and drives a browser, so it needs write access — use
 read-only and cannot launch or operate the app).
 
 1. Write a prompt file that is `references/evaluator-prompt.md` followed by the
-   runtime context block (Step 4).
+   runtime context block (Step 4). Before launch, record the exact result path,
+   a caller-generated correlation value, its freshness baseline, and the Step 5
+   evidence validator; require the evaluator result to carry that correlation.
 2. Invoke the delegate script with an explicit target and detached execution.
    Capture the expected run id and report path, then arm a durable watcher that
    polls every 15 seconds and never less often than every 30 seconds:
@@ -160,8 +162,13 @@ read-only and cannot launch or operate the app).
    30-minute intervals and apply the contract's controlled stop at 2 hours;
    report absence while the run is live is not failure.
 
-3. After a valid terminal report, read `status` from `report.json`. On `blocked`, treat the run as an
-   evaluation failure with the blocker recorded, not a silent pass.
+3. After a valid terminal report, read `status` from `report.json`. If the
+   expected run is `blocked` with `blocker_category: env_error`, apply the public
+   contract's fail-closed artifact recovery. Continue only when the predeclared
+   result is fresh, correlated, and passes the normal Step 5 machine checks;
+   retain the blocked report as a runtime diagnostic. Treat every other blocked
+   result, or failed artifact recovery, as an evaluation failure with the
+   blocker recorded, never a silent pass.
 
 Depend only on the agent-delegate public contract (arguments and `report.json`
 schema), never on the script's internals. Details:

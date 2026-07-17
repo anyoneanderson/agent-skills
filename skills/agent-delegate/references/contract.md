@@ -100,7 +100,9 @@ guarantee and claude `read-only` as best-effort policy.
 ## report.json schema
 
 Written atomically (to a `.tmp`, then `mv`). A valid terminal report for the
-expected run is the authoritative completion result. During a detached run,
+expected run is the authoritative completion result, except that an eligible
+`blocked` / `env_error` report can retain diagnostic authority while the caller
+adopts a task result through Artifact recovery below. During a detached run,
 the absence of `report.json` is not a failure signal; use the heartbeat and
 process state described below while waiting.
 
@@ -151,6 +153,55 @@ re-classify from the `blocker` text.
 | `sandbox_violation` | A `read-only` review modified files after excluding our own artifacts |
 | `env_error` | The run exited without producing a report; synthesized by the synchronous/worker safety net or the detach monitor |
 | `unclassified` | Non-zero exit with no matching pattern |
+
+### Artifact recovery after `env_error`
+
+A valid terminal report for the expected run remains the authoritative runtime
+diagnostic. A `blocked` report with `blocker_category: env_error` means the
+runner could not publish its normal completion result; it does not prove that a
+task artifact already written by that run is invalid. The caller must attempt
+artifact recovery before converting this one category to task failure. Monitor,
+pid, and heartbeat state are auxiliary during that decision and cannot veto an
+artifact that passes the checks below.
+
+Recovery is fail-closed and is available only when all of these conditions hold:
+
+1. **Eligibility.** The report is valid, `meta.run_id` matches the launcher's
+   expected run id, `status` is `blocked`, and `blocker_category` is exactly
+   `env_error`. Every other blocked category remains blocked.
+2. **Predeclared provenance.** Before launch, the caller records the exact
+   artifact path, its expected schema or validator, a correlation value, and
+   whether the path existed (or its content fingerprint). The recovered file
+   must be the path declared by `artifacts.review_file` or that pre-launch task
+   contract, must be new or changed since launch, and must contain the expected
+   label, correlation value, or equivalent run-specific evidence. A pre-existing,
+   foreign, or wrong-run file is rejected.
+3. **Mode-specific validation.** A review artifact must pass the four structural
+   checks from review mode, every Critical and Improvement finding must carry a
+   valid `fix_before`, and the caller must recompute Gate. The caller must also
+   compare its pre-launch and post-run git snapshots, excluding the declared
+   out-dir, to prove the read-only run did not modify the workspace. This
+   snapshot is a content-level fingerprint of tracked worktree and staged diffs,
+   plus every non-ignored untracked path and its content; a path or status list
+   is insufficient because it cannot detect a second edit to an already-dirty
+   file. An `env_error` report's synthesized empty `touchedFiles` is not that proof. A
+   delegate artifact must pass the task-specific validator and completion
+   criteria registered before launch. File existence, `last_message`, stdout,
+   or `touchedFiles` alone is never sufficient.
+4. **Recorded adoption.** The caller records the recovered artifact path,
+   correlation evidence, validator result, and, for review, the recomputed Gate.
+   It may then continue from the recovered task result while retaining the
+   original blocked report as a runtime diagnostic. It does not rewrite the
+   report to `done`. If any check fails, the result remains blocked.
+
+The durable waiter checks a declared artifact before surfacing an eligible
+`env_error` as failure. On hosts that reap detached monitors, a caller may use a
+synchronous bounded `until` loop that applies the same artifact validator. The
+loop is only a waiting mechanism: adoption still requires conditions 1 through
+4, including a valid expected-run `env_error` report. If no such report appears
+by the deadline measured from the original `launched_at`, the caller rejects recovery and
+escalates with diagnostics. Monitor disappearance or the absence of an idle
+notification alone is not a failure and does not reset the deadline.
 
 ## Detached runtime records
 

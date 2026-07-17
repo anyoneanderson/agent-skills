@@ -107,6 +107,18 @@ controlled stop: recheck the report, send `TERM` only to the verified expected
 monitor, wait up to 90 seconds for its terminal report, then stop waiting and
 escalate with diagnostics. Never use `--force` for this timeout path.
 
+Before launch, register each task artifact's exact path, correlation value,
+freshness baseline, and task-specific validator. For review, also record a
+pre-launch content fingerprint of tracked worktree and staged diffs plus every
+non-ignored untracked path and its content, excluding the declared out-dir. If the expected-run terminal
+report is `blocked` with `blocker_category: env_error`, run the contract's
+fail-closed artifact recovery before reporting task failure. Monitor loss or a
+missing idle signal alone does not decide completion. On hosts that reap
+detached monitors, the durable waiter may be a synchronous bounded `until` loop
+over the artifact validator, using the original launch deadline. The loop does
+not relax recovery eligibility: without a valid expected-run `env_error` report,
+it rejects recovery and escalates diagnostics at the deadline.
+
 ### Step 4: Run the script
 
 ```bash
@@ -153,7 +165,13 @@ Read `report.json` and summarize for the user in their language:
   3. Report the recomputed Gate, the Critical / Improvement / Minor counts,
      and the gate-blocking-stage count.
 - If `blocked`: report `blocker` and `blocker_category`, and suggest a next step
-  (e.g. resume, fix the trust setting, retry).
+  (e.g. resume, fix the trust setting, retry). For the expected run's
+  `env_error` only, first apply artifact recovery from `references/contract.md`:
+  prove freshness and correlation, then run the review checks above or the
+  task-specific delegate validator registered before launch. Review recovery
+  must also compare the pre-launch and post-run content fingerprints after
+  excluding the declared out-dir. Record an adopted
+  artifact separately and retain the blocked report as a runtime diagnostic.
 
 To continue a session, re-run with `--resume <thread_id>` from the prior report
 (same sandbox stage; see contract.md for the constraints).
@@ -169,7 +187,7 @@ To continue a session, re-run with `--resume <thread_id>` from the prior report
 | Not in a git repository | Warning; touchedFiles will be empty (delegate still runs) |
 | Review output malformed | `status: blocked`, `blocker_category: malformed_output`; retry or inspect `artifacts.last_message` |
 | read-only review touched files | `status: blocked`, `blocker_category: sandbox_violation`; the sandbox is misconfigured |
-| Detached run died | Monitor synthesizes a `blocked` report (`env_error`); inspect the stderr artifact |
+| Detached run died | Monitor synthesizes a `blocked` report (`env_error`); run fail-closed artifact recovery, then inspect stderr if recovery fails |
 
 ## Notes
 
