@@ -243,8 +243,8 @@ corrupt_fixture_expectation() {
 }
 
 check_wait_contract_docs() {
-  local fixture="$FIXTURE_DIR/document-contract.tsv" id en ja expected
-  while IFS=$'\t' read -r id en ja expected; do
+  local fixture="$FIXTURE_DIR/document-contract.tsv" id en ja en_expected ja_expected
+  while IFS=$'\t' read -r id en ja en_expected ja_expected; do
     case "$id" in
       reevaluation|hard-stop|termination-grace|automatic-force)
         grep -Fq -- "$en" "$REPO_ROOT/skills/agent-delegate/references/contract.md" || return 1
@@ -987,8 +987,8 @@ case_heartbeat_testmode_both_directions() {
 
 document_contract_targets() {
   cat <<'EOF'
-T-A13	en	README.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
-T-A13	ja	README.ja.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
+T-A13	en	README.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force
+T-A13	ja	README.ja.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force
 T-A11	en	skills/agent-delegate/SKILL.md	write-delegate
 T-A12	en	skills/agent-delegate/references/contract.md	sync-scope,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
 T-A12	ja	skills/agent-delegate/references/contract.ja.md	sync-scope,polling,reevaluation,hard-stop,termination-grace,automatic-force,heartbeat-interval
@@ -1023,38 +1023,70 @@ contract_fixture_row() {
 }
 
 check_contract_fixture() {
-  local file="$1" id en ja expected count=0
-  [ "$(awk -F '\t' 'NR==1 {print NF}' "$file")" -eq 4 ] || return 1
-  while IFS=$'\t' read -r id en ja expected; do
-    [ "$id" = contract_id ] && continue
-    count=$((count + 1))
-    [ -n "$id" ] && [ -n "$en" ] && [ -n "$ja" ] && [ -n "$expected" ] || return 1
-    [ "$(awk -F '\t' -v wanted="$id" 'NR>1 && $1==wanted {count++} END {print count+0}' "$file")" -eq 1 ] || return 1
-  done < "$file"
-  [ "$count" -gt 0 ]
+  local file="$1"
+  awk -F '\t' '
+    NR==1 {
+      if ($0 != "contract_id\tenglish_token\tjapanese_token\tenglish_expected\tjapanese_expected") exit 1
+      next
+    }
+    NF!=5 || $1=="" || $2=="" || $3=="" || $4=="" || $5=="" ||
+      $4~/^[0-9]+$/ || $5~/^[0-9]+$/ || seen[$1]++ {exit 1}
+    {count++}
+    END {if (count==0) exit 1}
+  ' "$file"
 }
 
 check_document_contract_targets() {
-  local fixture="$1" test_id language relative ids row id en ja expected token count=0
+  local fixture="$1" wanted_test="$2" test_id language relative ids row id
+  local en ja en_expected ja_expected token expected expected_count count=0
   document_contract_targets | awk -F '\t' '
     NF!=4 || ($1!="T-A11" && $1!="T-A12" && $1!="T-A13") || ($2!="en" && $2!="ja") || seen[$3]++ {exit 1}
     END {if (NR!=24) exit 1}
   ' || return 1
+  case "$wanted_test" in
+    T-A11) expected_count=11 ;;
+    T-A12) expected_count=6 ;;
+    T-A13) expected_count=7 ;;
+    *) return 1 ;;
+  esac
   while IFS=$'\t' read -r test_id language relative ids; do
+    [ "$test_id" = "$wanted_test" ] || continue
     count=$((count + 1))
     [ -f "$REPO_ROOT/$relative" ] || return 1
     while [ -n "$ids" ]; do
       case "$ids" in *,*) id="${ids%%,*}"; ids="${ids#*,}" ;; *) id="$ids"; ids="" ;; esac
       row="$(contract_fixture_row "$fixture" "$id")" || return 1
-      IFS=$'\t' read -r id en ja expected <<EOF
+      IFS=$'\t' read -r id en ja en_expected ja_expected <<EOF
 $row
 EOF
-      if [ "$language" = en ]; then token="$en"; else token="$ja"; fi
-      grep -Fq -- "$token" "$REPO_ROOT/$relative" || return 1
-      grep -Fq -- "$expected" "$REPO_ROOT/$relative" || return 1
+      if [ "$language" = en ]; then
+        token="$en"; expected="$en_expected"
+      else
+        token="$ja"; expected="$ja_expected"
+      fi
+      check_contract_section "$REPO_ROOT/$relative" "$token" "$expected" || return 1
     done
   done < <(document_contract_targets)
-  [ "$count" -eq 24 ]
+  [ "$count" -eq "$expected_count" ]
+}
+
+check_contract_section() {
+  local file="$1" token="$2" expected="$3"
+  awk -v token="$token" -v expected="$expected" '
+    function matches(section) {
+      gsub(/[[:space:]]+/, " ", section)
+      return index(section, token) && index(section, expected)
+    }
+    /^#+[[:space:]]/ {
+      if (matches(section)) found=1
+      section=""
+    }
+    {section=section " " $0}
+    END {
+      if (matches(section)) found=1
+      exit !found
+    }
+  ' "$file"
 }
 
 check_ordered_tokens() {
@@ -1083,24 +1115,51 @@ check_runtime_record_order() {
 }
 
 check_document_contracts() {
-  local fixture="$1"
+  local fixture="$1" test_id="$2"
   check_contract_fixture "$fixture" &&
-    check_document_contract_targets "$fixture" &&
-    check_runtime_record_order
+    check_document_contract_targets "$fixture" "$test_id" &&
+    { [ "$test_id" != T-A13 ] || check_runtime_record_order; }
+}
+
+check_contract_mutation_rejected() {
+  local fixture="$1" test_id="$2" mutation_id="$3" language="$4" kind="$5" replacement="$6"
+  local field bad
+  case "$language:$kind" in
+    en:token) field=2 ;;
+    ja:token) field=3 ;;
+    en:expected) field=4 ;;
+    ja:expected) field=5 ;;
+    *) return 1 ;;
+  esac
+  bad="$(mktemp "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-contract.XXXXXX")"
+  awk -v wanted="$mutation_id" -v field="$field" -v replacement="$replacement" '
+    BEGIN {FS=OFS="\t"}
+    $1==wanted {$field=replacement; changed++}
+    {print}
+    END {if (changed!=1) exit 1}
+  ' "$fixture" > "$bad" || { rm -f "$bad"; return 1; }
+  if check_document_contracts "$bad" "$test_id"; then rm -f "$bad"; return 1; fi
+  rm -f "$bad"
 }
 
 check_contract_positive_and_negative() {
-  local mutation_id="$1" fixture="$FIXTURE_DIR/document-contract.tsv" bad
-  check_document_contracts "$fixture" || return 1
-  bad="$(mktemp "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-contract.XXXXXX")"
-  awk -v wanted="$mutation_id" 'BEGIN{FS=OFS="\t"} $1==wanted{$NF="__missing_contract_value__"} {print}' \
-    "$fixture" > "$bad"
-  if check_document_contracts "$bad"; then rm -f "$bad"; return 1; fi
-  rm -f "$bad"
+  local test_id="$1" token_id="$2" token_language="$3" time_id="$4" time_language="$5" time_replacement="$6"
+  local fixture="$FIXTURE_DIR/document-contract.tsv"
+  check_document_contracts "$fixture" "$test_id" || return 1
+  check_contract_mutation_rejected "$fixture" "$test_id" "$token_id" "$token_language" token \
+    __missing_contract_token__ || return 1
+  [ -z "$time_id" ] || check_contract_mutation_rejected "$fixture" "$test_id" "$time_id" \
+    "$time_language" expected "$time_replacement"
 }
-case_write_delegate_docs_use_detach() { check_contract_positive_and_negative write-delegate; }
-case_caller_sync_poll_timeout_contract() { check_contract_positive_and_negative polling; }
-case_bilingual_contract_and_runtime_records() { check_contract_positive_and_negative runtime-record-files; }
+case_write_delegate_docs_use_detach() {
+  check_contract_positive_and_negative T-A11 write-delegate en '' '' ''
+}
+case_caller_sync_poll_timeout_contract() {
+  check_contract_positive_and_negative T-A12 polling en heartbeat-interval en '91 seconds'
+}
+case_bilingual_contract_and_runtime_records() {
+  check_contract_positive_and_negative T-A13 runtime-record-files ja polling ja '31秒'
+}
 
 check_compatibility_fixture() {
   local file="$1" id path ref mode target sandbox stub expected_exit expected_status artifact count=0

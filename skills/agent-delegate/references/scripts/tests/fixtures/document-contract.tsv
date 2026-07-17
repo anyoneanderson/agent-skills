@@ -1,12 +1,12 @@
-contract_id	english_token	japanese_token	expected_value
-write-delegate	--detach	--detach	--detach
-sync-scope	read-only	読み取り専用	5
-polling	15 seconds	15秒	30
-reevaluation	30 minutes	30分	2
-hard-stop	2 hours	2時間	TERM
-termination-grace	90 seconds	90秒	terminal report
-automatic-force	--force	--force	--force
-heartbeat-interval	30 seconds	30秒	90
-watchdog	expected-run	expected-run	heartbeat
-runtime-records	*/*-heartbeat.json	*/*-heartbeat.json	*/*-owner.lock/
-runtime-record-files	*-heartbeat.json	*-heartbeat.json	*-owner.lock/
+contract_id	english_token	japanese_token	english_expected	japanese_expected
+write-delegate	--detach	--detach	expected run	expected run
+sync-scope	read-only	読み取り専用	5 minutes	5分
+polling	15 seconds	15秒	30 seconds	30秒
+reevaluation	30 minutes	30分	2 hours	2時間
+hard-stop	2 hours	2時間	TERM	TERM
+termination-grace	90 seconds	90秒	terminal report	terminal report
+automatic-force	--force	--force	TERM	TERM
+heartbeat-interval	30 seconds	30秒	90 seconds	90秒
+watchdog	expected-run	expected-run	heartbeat	heartbeat
+runtime-records	*/*-heartbeat.json	*/*-heartbeat.json	*/*-owner.lock/	*/*-owner.lock/
+runtime-record-files	*-heartbeat.json	*-heartbeat.json	*-owner.lock/	*-owner.lock/
