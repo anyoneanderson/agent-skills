@@ -4,7 +4,9 @@ terminal-blocked	valid	blocked	expected	any	none	any	unpublished	0	0	TERMINAL_BL
 terminal-before-superseded	valid	done	other	any	none	absent	unpublished	0	30	TERMINAL_DONE
 superseded-before-process	invalid	unknown	other	fresh	heartbeat	absent	absent	120	30	SUPERSEDED
 starting	absent	none	expected	absent	none	alive	unpublished	90	0	STARTING
+starting-monitor-unknown	absent	none	expected	absent	none	unknown	unpublished	90	0	STARTING
 no-heartbeat-degraded	absent	none	expected	absent	none	alive	unpublished	91	0	DEGRADED_NO_HEARTBEAT
+no-heartbeat-monitor-unknown	absent	none	expected	absent	none	unknown	unpublished	91	0	DEGRADED_NO_HEARTBEAT
 heartbeat-unreadable	absent	none	expected	unreadable	heartbeat	alive	alive	120	0	DEGRADED_UNREADABLE
 running	absent	none	expected	fresh	heartbeat	alive	alive	120	0	RUNNING
 stale	absent	none	expected	stale	heartbeat	alive	alive	120	0	DEGRADED_STALE

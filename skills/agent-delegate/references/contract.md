@@ -334,8 +334,8 @@ seconds. At each poll, inspect the expected run in this order:
 | worker absent, monitor alive or unknown | `FINALIZING` |
 | monitor absent and worker absent, or monitor absent before any worker PID was published | `DEATH_CANDIDATE`; after 30 seconds, `DEAD` |
 | report exists but JSON, status, or run id is invalid while processes remain | `REPORT_INVALID_PENDING` |
-| heartbeat not generated, monitor alive, launch age at most 90 seconds | `STARTING` |
-| heartbeat not generated after 90 seconds, monitor alive | `DEGRADED_NO_HEARTBEAT` |
+| heartbeat not generated, monitor alive or unknown, launch age at most 90 seconds | `STARTING` |
+| heartbeat not generated after 90 seconds, monitor alive or unknown | `DEGRADED_NO_HEARTBEAT` |
 | heartbeat temporarily unreadable, processes alive or unknown | `DEGRADED_UNREADABLE` |
 | fresh heartbeat, processes alive or unknown | `RUNNING` |
 | heartbeat older than 90 seconds, processes alive or unknown | `DEGRADED_STALE` |
