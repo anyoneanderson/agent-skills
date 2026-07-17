@@ -986,6 +986,7 @@ case_heartbeat_testmode_both_directions() {
 }
 
 document_contract_targets() {
+  # README files omit heartbeat-interval because they define neither the heartbeat interval nor its freshness contract; including it would accidentally match unrelated 30-second and 90-second contracts.
   cat <<'EOF'
 T-A13	en	README.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force
 T-A13	ja	README.ja.md	write-delegate,polling,reevaluation,hard-stop,termination-grace,automatic-force
@@ -1077,16 +1078,70 @@ check_contract_section() {
       gsub(/[[:space:]]+/, " ", section)
       return index(section, token) && index(section, expected)
     }
-    /^#+[[:space:]]/ {
-      if (matches(section)) found=1
-      section=""
+    function marker_length(line, marker, count) {
+      count=0
+      while (substr(line, count + 1, 1) == marker) count++
+      return count
     }
-    {section=section " " $0}
+    {
+      trimmed=$0
+      sub(/^[[:space:]]*/, "", trimmed)
+      marker=substr(trimmed, 1, 1)
+      run_length=0
+      if (marker == "`" || marker == "~") run_length=marker_length(trimmed, marker)
+      if (in_fence) {
+        rest=substr(trimmed, run_length + 1)
+        if (marker == fence_marker && run_length >= fence_length && rest ~ /^[[:space:]]*$/) {
+          in_fence=0
+        }
+      } else if ((marker == "`" || marker == "~") && run_length >= 3) {
+        in_fence=1
+        fence_marker=marker
+        fence_length=run_length
+      } else if ($0 ~ /^#+[[:space:]]/) {
+        if (matches(section)) found=1
+        section=""
+      }
+      section=section " " $0
+    }
     END {
       if (matches(section)) found=1
       exit !found
     }
   ' "$file"
+}
+
+check_contract_section_fence_regression() {
+  local dir positive negative
+  dir="$(new_work_dir)"
+  positive="$dir/fenced-comments.md"
+  negative="$dir/real-heading.md"
+  cat > "$positive" <<'EOF'
+# Contract
+write-delegate
+```sh
+# This shell comment is not a Markdown heading.
+```
+~~~sh
+# This shell comment is also not a Markdown heading.
+~~~
+delegate request
+EOF
+  cat > "$negative" <<'EOF'
+# Contract
+write-delegate
+# Separate contract
+delegate request
+EOF
+  check_contract_section "$positive" write-delegate 'delegate request' || {
+    rm -rf "$dir"
+    return 1
+  }
+  if check_contract_section "$negative" write-delegate 'delegate request'; then
+    rm -rf "$dir"
+    return 1
+  fi
+  rm -rf "$dir"
 }
 
 check_ordered_tokens() {
@@ -1152,7 +1207,8 @@ check_contract_positive_and_negative() {
     "$time_language" expected "$time_replacement"
 }
 case_write_delegate_docs_use_detach() {
-  check_contract_positive_and_negative T-A11 write-delegate en '' '' ''
+  check_contract_positive_and_negative T-A11 write-delegate en '' '' '' &&
+    check_contract_section_fence_regression
 }
 case_caller_sync_poll_timeout_contract() {
   check_contract_positive_and_negative T-A12 polling en heartbeat-interval en '91 seconds'
