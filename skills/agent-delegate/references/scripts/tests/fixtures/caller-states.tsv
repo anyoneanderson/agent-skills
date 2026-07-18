@@ -5,8 +5,12 @@ terminal-before-superseded	valid	done	other	any	none	absent	unpublished	0	30	TER
 superseded-before-process	invalid	unknown	other	fresh	heartbeat	absent	absent	120	30	SUPERSEDED
 starting	absent	none	expected	absent	none	alive	unpublished	90	0	STARTING
 starting-monitor-unknown	absent	none	expected	absent	none	unknown	unpublished	90	0	STARTING
+starting-owner-worker-alive	absent	none	expected	absent	owner	alive	alive	90	0	STARTING
+starting-owner-worker-unknown-monitor-unknown	absent	none	expected	absent	owner	unknown	unknown	90	0	STARTING
 no-heartbeat-degraded	absent	none	expected	absent	none	alive	unpublished	91	0	DEGRADED_NO_HEARTBEAT
 no-heartbeat-monitor-unknown	absent	none	expected	absent	none	unknown	unpublished	91	0	DEGRADED_NO_HEARTBEAT
+no-heartbeat-owner-worker-alive	absent	none	expected	absent	owner	alive	alive	91	0	DEGRADED_NO_HEARTBEAT
+no-heartbeat-owner-worker-unknown-monitor-unknown	absent	none	expected	absent	owner	unknown	unknown	91	0	DEGRADED_NO_HEARTBEAT
 heartbeat-unreadable	absent	none	expected	unreadable	heartbeat	alive	alive	120	0	DEGRADED_UNREADABLE
 running	absent	none	expected	fresh	heartbeat	alive	alive	120	0	RUNNING
 stale	absent	none	expected	stale	heartbeat	alive	alive	120	0	DEGRADED_STALE
