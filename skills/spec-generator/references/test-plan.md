@@ -54,6 +54,9 @@ Each case MUST declare exactly one verification method:
 | `command` | Run a shell command and assert its exit code / output | The exact command and expected exit code |
 | `file-check` | Assert an artifact exists and/or contains expected content | The path and the expected content marker |
 
+- Use `file-check` for generated artifacts. A raw source or configuration file
+  can establish only a literal-text requirement, not effective configuration or
+  runtime behavior; see Section 5.
 - `playwright` cases depend on an app launch recipe. When no launch recipe is
   available, still write the case but flag that it needs a recipe to run.
 - The verification method field is **mandatory** on every case. A case with no
@@ -73,7 +76,32 @@ Each case MUST declare exactly one verification method:
   positional argument: the run exits 0 without producing any coverage report,
   so the case passes while verifying nothing.
 
-### 5. Output Format
+### 5. Evidence Basis and Threat Model
+
+Before writing a case's steps and command:
+
+1. Define the claim being tested and its threat model. Acceptance tests verify
+   the correctness of an implementation when the declared verification command
+   and its test machinery run as written. If this boundary changes how a pass or
+   failure is interpreted, state it in the case's `Steps` or `Expected` field.
+2. Base semantic claims on evidence produced after the responsible system or
+   tool evaluates the input:
+   - **Measured output**: a coverage report, response, query result, or other
+     output produced by executing the behavior under test.
+   - **Evaluated object**: the value obtained after the target runtime or tool
+     loads a configuration or module through its supported interface.
+3. Do not infer effective configuration or runtime behavior by scanning raw
+   source or configuration text with `grep`, regular expressions, or substring
+   matching. A lexical check is valid only when the requirement itself concerns
+   literal text, such as a required header in a generated file.
+4. Treat deliberate verifier bypasses, such as disabling tests, adding
+   `skip` / `todo`, excluding the subject from measurement, or rewriting the
+   verification command, as code-review-gate concerns. Do not add successive
+   text guards to an acceptance command to detect them. If the specification
+   explicitly requires tamper resistance or detection of those attacks, test
+   that security behavior as its own acceptance claim instead.
+
+### 6. Output Format
 
 ```markdown
 # Acceptance Test Plan — {feature}
@@ -102,7 +130,7 @@ type: test-plan
 - For `playwright` and `file-check` cases the `Command` field holds the
   expected artifact or assertion detail; use `-` only when it adds nothing.
 
-### 6. Output Location
+### 7. Output Location
 
 ```
 .specs/[project-name]/test.md
@@ -129,3 +157,10 @@ Post-generation verification:
    is stated as a precondition
 8. [ ] Every `command` case was executed (or dry-run) at generation time and
    observed to exercise its claim — argument forwarding included
+9. [ ] Every semantic claim uses measured output or an evaluated object rather
+   than raw source/configuration text; lexical checks on source or configuration
+   text are limited to literal-text requirements
+10. [ ] Cases whose threat-model boundary affects pass/fail interpretation state
+    that boundary in `Steps` or `Expected`; deliberate verifier bypasses are
+    assigned to the code review gate unless the specification explicitly
+    requires their detection
