@@ -8,10 +8,12 @@ ORCHESTRATE_DIR="$(cd "$REFERENCE_DIR/.." && pwd)"
 SKILLS_DIR="$(cd "$ORCHESTRATE_DIR/.." && pwd)"
 FIXTURE="$TEST_DIR/fixtures/dispatch-matrix.tsv"
 REVIEW_FIXTURE="$TEST_DIR/fixtures/review-fallback.tsv"
+SPEC_REVIEW_RECOVERY_FIXTURE="$TEST_DIR/fixtures/spec-review-env-error-contract.tsv"
 ROLE_DISPATCH="$REFERENCE_DIR/role-dispatch.md"
 ROLE_DISPATCH_JA="$REFERENCE_DIR/role-dispatch.ja.md"
 IMPLEMENT_PHASE="$REFERENCE_DIR/phases/implement.md"
 SPEC_REVIEW_PHASE="$REFERENCE_DIR/phases/spec_review.md"
+SPEC_REVIEW_PHASE_JA="$REFERENCE_DIR/phases/spec_review.ja.md"
 IMPLEMENT_GUIDE="$SKILLS_DIR/spec-implement/references/implement-guide.md"
 IMPLEMENT_GUIDE_JA="$SKILLS_DIR/spec-implement/references/implement-guide.ja.md"
 EVALUATE_BACKEND="$SKILLS_DIR/spec-evaluate/references/execution-backend.md"
@@ -79,6 +81,56 @@ validate_fixture() {
     actual="$(resolve_backend "$host" "$role")" || return 1
     [ "$actual" = "$backend"$'\t'"$target" ] || return 1
   done < "$file"
+}
+
+extract_spec_review_recovery_contract() {
+  awk '
+    /<!-- spec-review-env-error-recovery:start -->/ { inside=1; next }
+    /<!-- spec-review-env-error-recovery:end -->/ { inside=0 }
+    inside { print }
+  ' "$1"
+}
+
+validate_spec_review_recovery_contract() {
+  local file="$1" language="$2" field contract_id en_token ja_token token section
+
+  [ "$(grep -c '<!-- spec-review-env-error-recovery:start -->' "$file")" -eq 1 ] || return 1
+  [ "$(grep -c '<!-- spec-review-env-error-recovery:end -->' "$file")" -eq 1 ] || return 1
+  section="$(extract_spec_review_recovery_contract "$file")"
+  [ -n "$section" ] || return 1
+
+  case "$language" in
+    en) field=2 ;;
+    ja) field=3 ;;
+    *) return 1 ;;
+  esac
+
+  while IFS=$'\t' read -r contract_id en_token ja_token; do
+    [ "$contract_id" = contract_id ] && continue
+    if [ "$field" -eq 2 ]; then token="$en_token"; else token="$ja_token"; fi
+    printf '%s\n' "$section" | grep -Fq -- "$token" || return 1
+  done < "$SPEC_REVIEW_RECOVERY_FIXTURE"
+}
+
+assert_spec_review_recovery_mutations_rejected() {
+  local file="$1" language="$2" field contract_id en_token ja_token token mutant
+
+  case "$language" in
+    en) field=2 ;;
+    ja) field=3 ;;
+    *) return 1 ;;
+  esac
+
+  while IFS=$'\t' read -r contract_id en_token ja_token; do
+    [ "$contract_id" = contract_id ] && continue
+    if [ "$field" -eq 2 ]; then token="$en_token"; else token="$ja_token"; fi
+    mutant="$tmp/spec-review-recovery-$language-$contract_id.md"
+    awk -v token="$token" 'index($0, token) == 0 { print }' "$file" > "$mutant"
+    if validate_spec_review_recovery_contract "$mutant" "$language"; then
+      printf 'SURVIVED_MUTATION\t%s\t%s\n' "$language" "$contract_id" >&2
+      return 1
+    fi
+  done < "$SPEC_REVIEW_RECOVERY_FIXTURE"
 }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/host-aware-dispatch.XXXXXX")"
@@ -163,7 +215,17 @@ grep -q 'fresh runtime-native reviewer subagent' "$ROLE_DISPATCH" ||
 grep -q 'state.review_fallbacks' "$ROLE_DISPATCH" ||
   fail "review fallback state recording contract is missing"
 
-for fixture_file in "$FIXTURE" "$REVIEW_FIXTURE"; do
+validate_spec_review_recovery_contract "$SPEC_REVIEW_PHASE" en ||
+  fail "English spec_review env_error recovery contract is incomplete"
+validate_spec_review_recovery_contract "$SPEC_REVIEW_PHASE_JA" ja ||
+  fail "Japanese spec_review env_error recovery contract is incomplete"
+assert_spec_review_recovery_mutations_rejected "$SPEC_REVIEW_PHASE" en ||
+  fail "English spec_review recovery validator accepted a contract mutation"
+assert_spec_review_recovery_mutations_rejected "$SPEC_REVIEW_PHASE_JA" ja ||
+  fail "Japanese spec_review recovery validator accepted a contract mutation"
+printf 'PASS\tcontract\tspec_review env_error artifact recovery\n'
+
+for fixture_file in "$FIXTURE" "$REVIEW_FIXTURE" "$SPEC_REVIEW_RECOVERY_FIXTURE"; do
   last_byte="$(tail -c 1 "$fixture_file" | od -An -t u1 | tr -d '[:space:]')"
   [ "$last_byte" = 10 ] || fail "$fixture_file must end with a newline"
 done

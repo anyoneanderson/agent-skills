@@ -59,6 +59,33 @@ otherwise keeps drilling into the same area it explored last round.
    `../role-dispatch.md`. Re-evaluate at 30-minute intervals and apply its
    2-hour controlled stop. A review without a concrete 5-minute basis detaches.
 
+<!-- spec-review-env-error-recovery:start -->
+**Detached `env_error` artifact recovery (agent-delegate only):**
+Follow the general fail-closed recovery contract in `../role-dispatch.md` Step 3.
+Before launch, record the exact artifact path `.specs/{feature}/review-spec-{round}.md`.
+Pass that same path to the detached launch as `--review-output` so `artifacts.review_file` and the predeclared recovery path agree.
+Record whether the path exists and, when it does, its content fingerprint as the freshness baseline.
+Record a caller-generated correlation value and require the reviewer to write it in `## Meta`.
+Record the phase validator as the checks in Verification below.
+Record the pre-launch workspace fingerprint defined by the general contract, excluding only the declared out-dir.
+After the detached launch returns, bind these predeclared values to its `expected_run_id` before starting the watcher.
+
+Attempt recovery only when a valid terminal report has `meta.run_id` equal to `expected_run_id`, `status: blocked`, and `blocker_category: env_error`.
+The watcher inspects only the predeclared review file and applies these checks:
+
+1. Require the file to be new or changed from the freshness baseline and to contain the predeclared correlation value.
+2. Apply the four-point structural check to the declared review file.
+3. Verify that every Critical / Improvement finding has a valid `fix_before` value from the stage list in effect.
+4. Recompute the Gate from those tags and reject a `Gate` line that contradicts the tally.
+5. Compare the post-run workspace fingerprint with the pre-launch value and require an exact match.
+
+When every check passes, adopt the review result without re-running the reviewer.
+Record the artifact path, correlation evidence, validator result, and recomputed Gate in the run record, then continue through the normal State Update and Transitions below.
+Retain the original blocked report unchanged as the runtime diagnostic.
+A report for another run or category, a stale or uncorrelated artifact, validator failure, or a changed workspace fingerprint remains blocked.
+Do not apply the malformed-output re-run rule to a rejected recovery candidate; a later retry is a new run with a new pre-launch record.
+<!-- spec-review-env-error-recovery:end -->
+
 **Runtime-native backend (subagent):**
 1. Round 1: dispatch a fresh review subagent, separate from the spec author and
    orchestrator contexts, with the spec file list and adversarial perspectives;
