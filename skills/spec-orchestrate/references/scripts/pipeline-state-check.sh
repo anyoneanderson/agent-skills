@@ -92,13 +92,18 @@ if [ "$phase" != "arbitration" ]; then
 fi
 
 # --- tasks.md checkboxes vs implement.tasks_done -----------------------------
-# Task ids are T-prefixed (T000, T012b, ...). Compare the set of checked boxes
-# in tasks.md with the ids the state claims are done, in both directions.
+# Task ids are T-prefixed and may carry a lowercase or hyphenated suffix
+# (T000, T012b, T002-R, ...). Compare complete ids in both directions.
+TASK_ID_PATTERN='T[0-9]+[a-z]?(-[A-Za-z0-9]+)?' # task-id-contract
 if [ -f "$SPEC_DIR/tasks.md" ] && jq -e '.implement.tasks_done' "$STATE" >/dev/null 2>&1; then
-  checked="$(grep -E '^\s*[-*] \[[xX]\]' "$SPEC_DIR/tasks.md" | grep -oE 'T[0-9]+[a-z]?' | sort -u)"
-  recorded="$(jq -r '.implement.tasks_done[]' "$STATE" | sort -u)"
-  only_checked="$(comm -23 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
-  only_recorded="$(comm -13 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
+  checked="$(
+    sed -nE \
+      "s/^[[:space:]]*[-*][[:space:]]+\[[xX]\][[:space:]]+($TASK_ID_PATTERN)([^A-Za-z0-9-]|$).*/\1/p" \
+      "$SPEC_DIR/tasks.md" | LC_ALL=C sort -u
+  )"
+  recorded="$(jq -r '.implement.tasks_done[]' "$STATE" | LC_ALL=C sort -u)"
+  only_checked="$(LC_ALL=C comm -23 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
+  only_recorded="$(LC_ALL=C comm -13 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
   [ -n "${only_checked// /}" ] && report "tasks checked in tasks.md but missing from state.implement.tasks_done: $only_checked"
   [ -n "${only_recorded// /}" ] && report "tasks in state.implement.tasks_done but unchecked in tasks.md: $only_recorded"
 fi

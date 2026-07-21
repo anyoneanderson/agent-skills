@@ -1,0 +1,8 @@
+case_id	checked_ids	recorded_ids	expected_status	expected_fragment	task_text
+hyphenated-gate	T002-R	T002-R	pass	STATE OK	fixture task
+legacy-lowercase	T012b	T012b	pass	STATE OK	fixture task
+mixed-identifiers	T001,T002-R,T012b	T001,T002-R,T012b	pass	STATE OK	fixture task
+description-reference	T001	T001	pass	STATE OK	depends on T002-T003
+truncated-state	T002-R	T002	fail	T002-R	fixture task
+unknown-recorded	T002-R	T002-R,T999-X	fail	T999-X	fixture task
+no-checked-tasks	-	T999-X	fail	T999-X	fixture task
