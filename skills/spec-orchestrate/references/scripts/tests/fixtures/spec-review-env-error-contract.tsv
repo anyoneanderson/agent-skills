@@ -1,0 +1,21 @@
+contract_id	en_token	ja_token
+general-contract	Follow the general fail-closed recovery contract in `../role-dispatch.md` Step 3.	一般の fail-closed 復旧契約は `../role-dispatch.ja.md` の Step 3 に従う。
+artifact-path	Before launch, record the exact artifact path `.specs/{feature}/review-spec-{round}.md`.	起動前に、成果物の正確なパス `.specs/{feature}/review-spec-{round}.md` を記録する。
+artifact-wiring	Pass that same path to the detached launch as `--review-output` so `artifacts.review_file` and the predeclared recovery path agree.	同じパスを detach 起動へ `--review-output` で渡し、`artifacts.review_file` と宣言済み復旧パスを一致させる。
+freshness	Record whether the path exists and, when it does, its content fingerprint as the freshness baseline.	パスの既存有無と、存在する場合は内容 fingerprint を鮮度の基準として記録する。
+correlation	Record a caller-generated correlation value and require the reviewer to write it in `## Meta`.	呼び出し側が生成した相関値を記録し、レビュアーに `## Meta` へ書かせる。
+validator	Record the phase validator as the checks in Verification below.	phase validator として、後述の「検証」にある検査項目を記録する。
+workspace	Record the pre-launch workspace fingerprint defined by the general contract, excluding only the declared out-dir.	一般契約が定める起動前 workspace fingerprint を、宣言済み out-dir だけ除外して記録する。
+expected-run-binding	After the detached launch returns, bind these predeclared values to its `expected_run_id` before starting the watcher.	detach 起動から値が返ったら、監視を始める前に宣言済みの値を `expected_run_id` と結び付ける。
+eligibility	Attempt recovery only when a valid terminal report has `meta.run_id` equal to `expected_run_id`, `status: blocked`, and `blocker_category: env_error`.	valid terminal report の `meta.run_id` が `expected_run_id` と一致し、`status: blocked` かつ `blocker_category: env_error` の場合だけ復旧を試す。
+watcher-scope	The watcher inspects only the predeclared review file and applies these checks:	監視は宣言済みのレビューファイルだけを対象に、次の項目を検査する。
+freshness-correlation-check	Require the file to be new or changed from the freshness baseline and to contain the predeclared correlation value.	成果物が鮮度の基準から新規作成または更新され、宣言済みの相関値を含むことを確認する。
+structure	Apply the four-point structural check to the declared review file.	宣言済みレビューファイルへ4点構造チェックを適用する。
+tags	Verify that every Critical / Improvement finding has a valid `fix_before` value from the stage list in effect.	Critical / Improvement の全 finding が有効な段階一覧の `fix_before` 値を持つことを確認する。
+gate	Recompute the Gate from those tags and reject a `Gate` line that contradicts the tally.	タグから Gate を再計算し、集計と矛盾する `Gate` 行を却下する。
+readonly	Compare the post-run workspace fingerprint with the pre-launch value and require an exact match.	実行後の workspace fingerprint を起動前の値と比較し、完全一致を要求する。
+adopt	When every check passes, adopt the review result without re-running the reviewer.	すべての検査に合格した場合は、レビュアーを再実行せずレビュー結果を採用する。
+adoption-record	Record the artifact path, correlation evidence, validator result, and recomputed Gate in the run record, then continue through the normal State Update and Transitions below.	成果物パス、相関の証拠、validator の結果、再計算した Gate を実行記録に残し、後述の通常の「state 更新」と「遷移」へ進む。
+diagnostic	Retain the original blocked report unchanged as the runtime diagnostic.	元の blocked report は変更せず、実行時の診断情報として残す。
+reject	A report for another run or category, a stale or uncorrelated artifact, validator failure, or a changed workspace fingerprint remains blocked.	別 run または別分類の report、古い成果物、相関を確認できない成果物、validator 不合格、workspace fingerprint の変化は blocked のまま扱う。
+rejected-retry	Do not apply the malformed-output re-run rule to a rejected recovery candidate; a later retry is a new run with a new pre-launch record.	却下した復旧候補には形式不正時の再実行規則を適用しない。後で再試行する場合は、起動前記録を作り直した新しい run とする。
