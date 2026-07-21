@@ -1,0 +1,5 @@
+case_id	mutation	expected_status
+valid-same-run	none	done
+missing-review	missing-review	blocked
+malformed-review	malformed-review	blocked
+wrong-run	wrong-run	blocked

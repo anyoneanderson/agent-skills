@@ -357,6 +357,14 @@ bound by the host command's execution limit.
   peer is killed and never writes one, the monitor synthesizes a `blocked`
   report (`blocker_category: env_error`) itself, so callers never re-implement
   the schema.
+- If the monitor receives `TERM`, `INT`, or `HUP`, or exits unexpectedly, it
+  stops the worker process group before finalization. It promotes an unpublished
+  review candidate to `done` only when the candidate belongs to the expected
+  run, is a blocker-free `review` result with empty `touchedFiles`, declares the
+  expected artifact paths, contains a structurally valid review, and that review
+  is byte-identical to the same run's final message. Missing, malformed, stale,
+  wrong-run, delegate-mode, or otherwise unverified candidates are discarded and
+  replaced with `blocked` / `env_error`.
 
 ### Polling and expected-run state
 
@@ -422,8 +430,10 @@ At 2 hours, the caller performs one final report-first state evaluation:
    sending a signal.
 2. If the expected-run owner still matches and its monitor is alive, send
    `TERM` to that monitor. The monitor terminates the worker and peer, publishes
-   an expected-run `blocked` report and terminal heartbeat, and removes runtime
-   owner records.
+   an expected-run terminal report and terminal heartbeat, and removes runtime
+   owner records. A fully completed review may be published as `done` only under
+   the fail-closed candidate checks above; every other interrupted run is
+   published as `blocked` / `env_error`.
 3. Continue report-first polling for up to 90 seconds. Accept a valid terminal
    report if it appears.
 4. If the monitor is absent or unknown at the 2-hour limit, or no terminal
