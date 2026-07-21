@@ -256,6 +256,26 @@ utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 heartbeat_test_mode() { [ "${AGENT_DELEGATE_TEST_MODE:-0}" = heartbeat ]; }
 owner_lock_signal_test_mode() { [ "${AGENT_DELEGATE_TEST_MODE:-0}" = owner-lock-signal ]; }
+monitor_term_recovery_test_mode() { [ "${AGENT_DELEGATE_TEST_MODE:-0}" = monitor-term-recovery ]; }
+
+monitor_term_recovery_test_hook() {
+  local ready_file="${AGENT_DELEGATE_TEST_MONITOR_BEFORE_PUBLISH_READY_FILE:-}"
+  local release_file="${AGENT_DELEGATE_TEST_MONITOR_BEFORE_PUBLISH_RELEASE_FILE:-}" deadline
+  monitor_term_recovery_test_mode || return 0
+  [ -n "$ready_file" ] && [ -n "$release_file" ] || {
+    err "monitor TERM recovery test paths are required"
+    return 1
+  }
+  : > "$ready_file"
+  deadline=$((SECONDS + 10))
+  while [ ! -f "$release_file" ]; do
+    [ "$SECONDS" -lt "$deadline" ] || {
+      err "monitor TERM recovery test release timeout"
+      return 1
+    }
+    sleep 0.01
+  done
+}
 
 owner_lock_signal_test_hook() {
   local stage="$1" configured="${AGENT_DELEGATE_TEST_OWNER_LOCK_SIGNAL_STAGE:-}"
@@ -1454,11 +1474,33 @@ run_delegate() {
 }
 
 # --- review mode (§4.4) ----------------------------------------------------
-#
+
+review_structure_error() {
+  local review_file="$1" missing=() joined="" item
+  grep -q '^type: review'                         "$review_file" || missing+=("type: review")
+  grep -q '^## Meta'                              "$review_file" || missing+=("## Meta")
+  grep -q '^## Findings'                          "$review_file" || missing+=("## Findings")
+  grep -q '^### Critical'                         "$review_file" || missing+=("### Critical")
+  grep -q '^### Improvement'                      "$review_file" || missing+=("### Improvement")
+  grep -q '^### Minor'                            "$review_file" || missing+=("### Minor")
+  grep -q '^## Summary'                           "$review_file" || missing+=("## Summary")
+  grep -qE 'Gate:[[:space:]]*(PASS|FAIL)'         "$review_file" || missing+=("Gate: PASS|FAIL")
+  [ "${#missing[@]}" -gt 0 ] || return 0
+
+  # Join with ", " manually: parameter expansion with IFS uses only the first
+  # IFS char as the separator, so "IFS=', '" would yield comma-only joins.
+  for item in "${missing[@]}"; do
+    if [ -z "$joined" ]; then joined="$item"; else joined="$joined, $item"; fi
+  done
+  printf 'review output malformed: missing %s' "$joined"
+  return 1
+}
+
 # Always read-only. Prompt = adversarial template + caller context. The reviewer
-# emits the full review file as its final message; we verify 4 structural points
-# then persist it. read-only that still touched files (after excluding our own
-# artifacts) is a sandbox misconfiguration, surfaced as sandbox_violation.
+# emits the full review file as its final message; we verify the required
+# structure and then persist it. read-only that still touched files (after
+# excluding our own artifacts) is a sandbox misconfiguration, surfaced as
+# sandbox_violation.
 run_review() {
   local template="${REFERENCES_DIR}/adversarial-review-prompt.md"
   if [ "${AGENT_DELEGATE_REVIEW_LANG:-en}" = "ja" ] && [ -f "${REFERENCES_DIR}/adversarial-review-prompt.ja.md" ]; then
@@ -1487,27 +1529,10 @@ run_review() {
     return
   fi
 
-  # Machine-verify the 4 contract points on the final message.
-  local missing=()
-  grep -q '^type: review'                         "$RUN_LAST_MSG_FILE" || missing+=("type: review")
-  grep -q '^## Meta'                              "$RUN_LAST_MSG_FILE" || missing+=("## Meta")
-  grep -q '^## Findings'                          "$RUN_LAST_MSG_FILE" || missing+=("## Findings")
-  grep -q '^### Critical'                         "$RUN_LAST_MSG_FILE" || missing+=("### Critical")
-  grep -q '^### Improvement'                      "$RUN_LAST_MSG_FILE" || missing+=("### Improvement")
-  grep -q '^### Minor'                            "$RUN_LAST_MSG_FILE" || missing+=("### Minor")
-  grep -q '^## Summary'                           "$RUN_LAST_MSG_FILE" || missing+=("## Summary")
-  grep -qE 'Gate:[[:space:]]*(PASS|FAIL)'         "$RUN_LAST_MSG_FILE" || missing+=("Gate: PASS|FAIL")
-
-  if [ "${#missing[@]}" -gt 0 ]; then
-    # Join with ", " manually: parameter expansion with IFS uses only the first
-    # IFS char as the separator, so "IFS=', '" would yield comma-only joins.
-    local joined=""
-    local item
-    for item in "${missing[@]}"; do
-      if [ -z "$joined" ]; then joined="$item"; else joined="$joined, $item"; fi
-    done
+  local structure_error=""
+  if ! structure_error="$(review_structure_error "$RUN_LAST_MSG_FILE")"; then
     REPORT_STATUS="blocked"
-    BLOCKER="review output malformed: missing $joined"
+    BLOCKER="$structure_error"
     BLOCKER_CATEGORY="malformed_output"
     write_report
     return
@@ -1669,6 +1694,23 @@ publish_worker_candidate() {
   publish_run_artifacts || return $?
   owner_publish_path "$RUN_ID" "$CANDIDATE_FILE" "$REPORT_FILE" 1 "$MONITOR_PID" || return $?
   printf '%s' "$status"
+}
+
+recoverable_review_candidate() {
+  [ "$MODE" = review ] && [ -f "$CANDIDATE_FILE" ] && [ -f "$REVIEW_FILE" ] &&
+    [ -f "$RUN_LAST_MSG_FILE" ] || return 1
+  jq -e \
+    --arg run_id "$RUN_ID" --arg review_file "$REVIEW_FILE" \
+    --arg last_message "$LAST_MSG_FILE" --arg stdout "$STDOUT_FILE" --arg stderr "$STDERR_FILE" '
+      .status=="done" and .blocker==null and .blocker_category==null and
+      .meta.run_id==$run_id and .meta.mode=="review" and
+      (.touchedFiles|type)=="array" and .touchedFiles==[] and
+      .artifacts.review_file==$review_file and
+      .artifacts.last_message==$last_message and
+      .artifacts.stdout==$stdout and .artifacts.stderr==$stderr
+    ' "$CANDIDATE_FILE" >/dev/null 2>&1 || return 1
+  review_structure_error "$REVIEW_FILE" >/dev/null || return 1
+  cmp -s "$RUN_LAST_MSG_FILE" "$REVIEW_FILE"
 }
 
 make_heartbeat_test_candidate() {
@@ -1889,13 +1931,20 @@ monitor_finalize_abnormal() {
   close_monitor_handoff_fds
 
   # A terminal report may already have won the race with the signal. Preserve
-  # it; otherwise replace any partial candidate with an owned blocked result.
+  # it. A completed read-only review candidate may also be promoted if every
+  # run-correlation and structure check passes; all other cases fail closed.
   if report_is_terminal_for_run "$REPORT_FILE" "$RUN_ID"; then
     terminal_status="$(jq -r '.status' "$REPORT_FILE")"
   elif owner_matches_run "$RUN_ID" && pid_matches_run "$RUN_ID" "$monitor_pid"; then
-    rm -f "$CANDIDATE_FILE" "$CANDIDATE_TMP"
-    if make_blocked_candidate "$reason"; then
+    if recoverable_review_candidate; then
+      err "publishing completed review after abnormal monitor termination"
       terminal_status="$(publish_worker_candidate)" || terminal_status=""
+    fi
+    if [ -z "$terminal_status" ]; then
+      rm -f "$CANDIDATE_FILE" "$CANDIDATE_TMP"
+      if make_blocked_candidate "$reason"; then
+        terminal_status="$(publish_worker_candidate)" || terminal_status=""
+      fi
     fi
   fi
   case "$worker_pid" in ''|*[!0-9]*) worker_pid="$monitor_pid" ;; esac
@@ -2014,6 +2063,7 @@ run_monitor() {
     err "worker (pid $worker_pid) exited rc=$worker_rc without report candidate"
     terminate_remaining_monitor_group
   fi
+  monitor_term_recovery_test_hook
   terminal_status="$(publish_worker_candidate)" || {
     err "failed to publish worker report candidate"
     owner_remove_runtime "$RUN_ID" 1 "$monitor_pid" || true

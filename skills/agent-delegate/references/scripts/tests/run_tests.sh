@@ -1437,11 +1437,13 @@ cleanup_detach_stub_fixture() {
 
 launch_detach_review_stub() {
   local dir="$1" label="$2" barrier="$3" signal_stage="${4:-}" test_handoff="${5:-}"
+  local test_mode_override="${6:-}" term_ready_file="${7:-}" term_release_file="${8:-}"
   local driver driver_pgid monitor_mode=0 test_mode=0 ready_file=""
   if [ -n "$signal_stage" ]; then
     test_mode=owner-lock-signal
     ready_file="$barrier/claude.ready"
   fi
+  [ -z "$test_mode_override" ] || test_mode="$test_mode_override"
   case $- in *m*) monitor_mode=1 ;; esac
   set -m
   (
@@ -1450,6 +1452,8 @@ launch_detach_review_stub() {
       AGENT_DELEGATE_TEST_HANDOFF_DIR="$test_handoff" \
       AGENT_DELEGATE_TEST_OWNER_LOCK_SIGNAL_STAGE="$signal_stage" \
       AGENT_DELEGATE_TEST_OWNER_LOCK_READY_FILE="$ready_file" \
+      AGENT_DELEGATE_TEST_MONITOR_BEFORE_PUBLISH_READY_FILE="$term_ready_file" \
+      AGENT_DELEGATE_TEST_MONITOR_BEFORE_PUBLISH_RELEASE_FILE="$term_release_file" \
       bash "$SCRIPT" --mode review --prompt-file "$dir/prompt.md" \
         --out-dir "$dir" --label "$label" --target claude --detach
   ) > "$dir/$label-launch.out" 2> "$dir/$label-launch.err" &
@@ -1536,6 +1540,84 @@ run_detach_review_lifecycle_stub() (
   trap - EXIT TERM INT HUP
   rm -rf "$dir"
 )
+
+run_monitor_term_review_stub() (
+  local case_id="$1" mutation="$2" expected_status="$3" dir label barrier owner monitor worker peer
+  local handoff driver_pgid monitor_pgid worker_pgid run candidate review ready release deadline report
+  dir="$(new_work_dir)"; label="monitor-term-review-$case_id"; barrier="$dir/barrier"
+  ready="$barrier/candidate.ready"; release="$barrier/monitor.release"
+  trap 'touch "$release" 2>/dev/null || true; cleanup_detach_stub_fixture "$dir" "$label"' EXIT TERM INT HUP
+  mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'review prompt\n' > "$dir/prompt.md"
+  launch_detach_review_stub "$dir" "$label" "$barrier" "" "" monitor-term-recovery "$ready" "$release" || return 1
+  wait_for_detach_stub_runtime "$dir" "$label" "$barrier" || return 1
+  owner="$dir/$label-owner.json"; monitor="$(jq -r '.monitor_pid' "$owner")"; worker="$(jq -r '.worker_pid' "$owner")"
+  peer="$(cat "$barrier/claude.pid")"; handoff="$(jq -r '.handoff_dir' "$owner")"
+  driver_pgid="$(cat "$dir/$label-launcher-shell.pgid")"; monitor_pgid="$(process_group_of "$monitor")"
+  worker_pgid="$(process_group_of "$worker")"; run="$(jq -r '.run_id' "$owner")"
+  candidate="$dir/$label-report.candidate.$run.json"; review="$dir/$label-review.md"
+  [ -n "$monitor_pgid" ] && [ "$monitor_pgid" = "$worker_pgid" ] && [ "$monitor_pgid" != "$driver_pgid" ] || return 1
+  kill -TERM -- "-$driver_pgid" 2>/dev/null || true
+  kill -0 "$monitor" 2>/dev/null && kill -0 "$worker" 2>/dev/null || return 1
+
+  printf 'release\n' > "$barrier/release.fifo"
+  deadline=$(( $(date -u +%s) + 10 ))
+  while [ "$(date -u +%s)" -lt "$deadline" ]; do
+    [ -f "$ready" ] && [ -f "$candidate" ] && [ -f "$review" ] && break
+  done
+  [ -f "$ready" ] && [ -f "$candidate" ] && [ -f "$review" ] || return 1
+  ! kill -0 "$peer" 2>/dev/null || return 1
+
+  case "$mutation" in
+    none) : ;;
+    missing-review) rm -f "$review" ;;
+    malformed-review) printf 'type: review\n## Findings\n' > "$review" ;;
+    wrong-run)
+      jq '.meta.run_id="stale-run"' "$candidate" > "$candidate.tmp" && mv -f "$candidate.tmp" "$candidate"
+      ;;
+    *) return 1 ;;
+  esac
+  kill -TERM "$monitor" 2>/dev/null || return 1
+  wait_for_detach_stub_terminal "$dir" "$label" "$expected_status" "$handoff" || return 1
+  report="$dir/$label-report.json"
+  if [ "$expected_status" = done ]; then
+    jq -e --arg run "$run" --arg review "$review" \
+      '.status=="done" and .blocker==null and .blocker_category==null and
+       .meta.run_id==$run and .meta.mode=="review" and .touchedFiles==[] and
+       .artifacts.review_file==$review' "$report" >/dev/null || return 1
+    grep -q '^type: review' "$review" && grep -q '^## Meta' "$review" &&
+      grep -q '^## Findings' "$review" && grep -qE 'Gate:[[:space:]]*(PASS|FAIL)' "$review" || return 1
+  else
+    jq -e --arg run "$run" \
+      '.status=="blocked" and .blocker_category=="env_error" and
+       .meta.run_id==$run and (.blocker|contains("TERM"))' "$report" >/dev/null || return 1
+  fi
+  [ ! -e "$candidate" ] && [ ! -e "$candidate.tmp" ] || return 1
+  trap - EXIT TERM INT HUP
+  rm -rf "$dir"
+)
+
+check_monitor_term_review_fixture() {
+  local file="$1" case_id mutation expected_status count=0
+  while IFS=$'\t' read -r case_id mutation expected_status; do
+    [ "$case_id" = case_id ] && continue
+    count=$((count + 1))
+    case "$mutation" in none|missing-review|malformed-review|wrong-run) : ;; *) return 1 ;; esac
+    case "$expected_status" in done|blocked) : ;; *) return 1 ;; esac
+    run_monitor_term_review_stub "$case_id" "$mutation" "$expected_status" || return 1
+  done < "$file"
+  [ "$count" -eq 4 ]
+}
+
+case_monitor_term_review_recovery() {
+  check_monitor_term_review_fixture "$FIXTURE_DIR/monitor-term-review-cases.tsv" ||
+    die "monitor TERM review recovery fixture rejected"
+  grep -Fq 'review candidate to `done` only when the candidate belongs to the expected' \
+    "$REPO_ROOT/skills/agent-delegate/references/contract.md" ||
+    die "English monitor TERM recovery contract is missing"
+  grep -Fq '未公開の review candidate を `done` として採用できるのは' \
+    "$REPO_ROOT/skills/agent-delegate/references/contract.ja.md" ||
+    die "Japanese monitor TERM recovery contract is missing"
+}
 
 check_owner_lock_signal_artifacts() {
   local report="$1" heartbeat="$2" dir="$3" label="$4" handoff="$5" expected_status="$6"
@@ -1910,9 +1992,9 @@ write_repeat_manifest() {
     --arg fixture "$fixture_hash" --arg harness "$harness_hash" --argjson beats "$CURRENT_HEARTBEATS" \
     --argjson terminals "$CURRENT_TERMINALS" '
     {iteration:$iteration,commit:$commit,hashes:{runner:$runner,fixture:$fixture,harness:$harness},
-     case_count:26,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
+     case_count:27,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
   ' > "$out"
-  jq -e '.case_count==26 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
+  jq -e '.case_count==27 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
 }
 
 if [ -n "$RUN_CASE" ]; then

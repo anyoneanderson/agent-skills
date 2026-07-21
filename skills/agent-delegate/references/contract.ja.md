@@ -296,6 +296,9 @@ stale-reaper が期限内に owner lock を取得できない場合、新しい 
 - ラッパーは相手完了時に `report.json` をアトミックに書く。相手が report を書かずに殺された
   場合は、ラッパー自身が `blocked` の report（`blocker_category: env_error`）を合成する。
   呼び出し元にスキーマ再実装をさせない。
+- monitor が `TERM`、`INT`、`HUP` を受けた場合、または異常終了した場合は、worker の process group を停止してから終了処理を行う。
+  未公開の review candidate を `done` として採用できるのは、expected run に属し、blocker のない `review` 結果で、`touchedFiles` が空、成果物パスが宣言どおり、review の構造が正しく、同じ run の final message とバイト単位で一致する場合だけである。
+  成果物が欠落、不正、古い、別 run、delegate mode、または検証不能の場合は candidate を破棄し、`blocked` / `env_error` に置き換える。
 
 ### ポーリングと expected run の状態
 
@@ -349,7 +352,8 @@ validな待機状態なら、呼び出し側は再評価後も待機を続ける
 
 1. 呼び出し側はreportから状態をもう一度確認し、新しいterminal report、`SUPERSEDED`、`DEAD`のいずれかを確認した場合はシグナルを送らず、その状態を返す。
 2. expected runのownerが変わっておらず、そのmonitorが生存している場合は、呼び出し側がmonitorへ`TERM`を送る。
-   monitorはworkerとpeerを停止し、expected runの`blocked` reportとterminal heartbeatを公開してから、ownerなどの実行時ファイルを削除する。
+   monitorはworkerとpeerを停止し、expected runのterminal reportとterminal heartbeatを公開してから、ownerなどの実行時ファイルを削除する。
+   完了済みreviewを`done`として公開できるのは、上記のfail-closedなcandidate検証をすべて満たす場合だけであり、それ以外の中断runは`blocked` / `env_error`として公開する。
 3. 呼び出し側はreportを先に確認するポーリングを最大90秒続け、valid terminal reportが公開されたら採用する。
 4. 2時間到達時にmonitorが不在または生存不明の場合、あるいは90秒以内にterminal reportが公開されない場合は、呼び出し側が待機を終了する。
    呼び出し側はrun id、最後に読めたowner、pid、heartbeat、プロセス確認結果、report検証エラーを人間へ渡す。

@@ -26,3 +26,4 @@ T-A24	caller-state-priority	suite	state-fixture	caller-priority.tsv	priority-sta
 T-A25	caller-wait-upper-bound	suite	wait-bound-fixture	caller-wait-bounds.tsv	reevaluation-stop-and-escalation-decisions
 T-A26	abnormal-cleanup-real-filesystem	suite	abnormal-cleanup	abnormal-cleanup-cases.tsv	six-abnormal-cleanup-paths
 T-A27	artifact-recovery-contract	suite	artifact-recovery	artifact-recovery.tsv	recovery-decisions-and-public-docs
+T-A28	monitor-term-review-recovery	suite	monitor-term-recovery	monitor-term-review-cases.tsv	same-run-review-recovery-and-fail-closed-negatives
