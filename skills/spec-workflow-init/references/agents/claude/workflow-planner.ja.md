@@ -15,6 +15,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 - requirement / design / tasks の生成: spec-generator `references/init.md`, `references/design.md`, `references/tasks.md`
 - 受け入れテスト計画（test.md）: spec-generator `references/test-plan.md`
 - タスクの `kind` 分類と分割規則: spec-generator `references/tasks.md`
+- 生成後とすべての仕様修正後の投影整合: spec-generator `references/projection-consistency.ja.md`
 
 （日本語で作業する場合は各 `.ja.md` 版を使用する）
 

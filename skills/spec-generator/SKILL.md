@@ -74,8 +74,8 @@ steps still execute the specification-writing procedure in Step 1.5.
 4. Explicit override takes priority (e.g., "in English", "日本語で")
 
 **Reference file selection**: Based on the detected output language, use the corresponding reference files:
-- English → `references/init.md`, `references/design.md`, `references/tasks.md`, `references/test-plan.md`, `references/auto-mode.md`
-- Japanese → `references/init.ja.md`, `references/design.ja.md`, `references/tasks.ja.md`, `references/test-plan.ja.md`, `references/auto-mode.ja.md`
+- English → `references/init.md`, `references/design.md`, `references/tasks.md`, `references/test-plan.md`, `references/auto-mode.md`, `references/projection-consistency.md`
+- Japanese → `references/init.ja.md`, `references/design.ja.md`, `references/tasks.ja.md`, `references/test-plan.ja.md`, `references/auto-mode.ja.md`, `references/projection-consistency.ja.md`
 
 ## Phases
 
@@ -298,13 +298,13 @@ Project names are converted to English kebab-case:
 - "株価分析ツール" → `stock-analysis-tool`
 - "Stock analysis tool" → `stock-analysis-tool`
 
-### 5. Output Integrity Self-Check
+### 5. Output Integrity and Projection Self-Check
 
-After writing each spec file, re-read its tail and confirm no tool-call residue
-has leaked into the content — stray closing tags such as `</content>` or
-`</invoke>`, or any other markup from the write mechanism. Strip any such
-residue before reporting the phase complete. Report completion only once every
-generated file ends with real document content.
+After generating or revising a spec, run the projection pass in the selected
+`references/projection-consistency*.md` across every present spec file. Then
+re-read each tail and remove tool-call residue such as `</content>` or
+`</invoke>`. Report completion only after projection checks pass and every file
+ends with real document content.
 
 ## Options
 
