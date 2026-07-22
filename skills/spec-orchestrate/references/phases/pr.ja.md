@@ -55,7 +55,9 @@
 ## state 更新
 
 - `phase` を `retrospective` にする。
-- PR URL・draft か否か・後続 issue 番号（`deferred_issues`）を state に記録する。
+- `pr`を`{"url":"<URL>","draft":<boolean>,"status":"draft|ready"}`として記録し、
+  後続issue番号を`deferred_issues`へ記録する。`status`は意図した作成modeではなく、
+  実際のPR状態から導出する。
 - `completed_phases` に `pr` を追加。
 
 ## 遷移

@@ -33,32 +33,52 @@ English version: [retrospective-format.md](retrospective-format.md)
 `unclassified`）。オーケストレーターは `blocker` テキストから再分類してよいが、
 カテゴリがグルーピングキー。
 
-## Step 2: pipeline-metrics.jsonl（ここで組み立て、追記は最後）
+## Step 2: pipeline-metrics.jsonl（version付き追記専用ledger）
 
-リポジトリ横断の履歴ファイル `.specs/pipeline-metrics.jsonl`（JSON Lines）。1実行
-につき1行:
+`.specs/pipeline-metrics.jsonl`はリポジトリ横断のJSON Lines ledger。terminalな
+retrospectiveはversion付きmetrics recordを追記する。完了runを再開したときはsupersede
+eventを追記し、古い行を変更・削除しない。
 
 ```json
-{"feature":"user-auth","run_id":"2026-07-05T09:00:00Z-a1b2","mode":"auto","rounds_spec":3,"rounds_eval":2,"stalls":1,"blocker_categories":{"malformed_output":3,"timeout":1},"applied_improvements":["P-01"],"ts":"2026-07-05T09:00:00Z"}
+{"record_type":"metrics","record_id":"2026-07-05T09:00:00Z-a1b2:r2:<snapshot-id>","revision":2,"feature":"user-auth","run_id":"2026-07-05T09:00:00Z-a1b2","mode":"auto","snapshot_id":"<sha256>","snapshot":{"run_id":"2026-07-05T09:00:00Z-a1b2","phase":"retrospective","completed_phases":["intake","spec_generate","inspect","spec_review","approval","implement","evaluate","pr","retrospective"],"rounds_spec":3,"rounds_eval":2,"report_count":2,"report_manifest":["implement-report.json","review-report.json"],"pr_url":"https://github.com/example/repo/pull/42","pr_status":"ready","state_ts_updated":"2026-07-05T10:00:00Z","state_hash":"<sha256>"},"rounds_spec":3,"rounds_eval":2,"stalls":1,"blocker_categories":{"malformed_output":3,"timeout":1},"applied_improvements":["P-01"],"ts":"2026-07-05T10:00:00Z"}
+{"record_type":"supersede","event_id":"supersede:<record-id>:run_resumed","run_id":"2026-07-05T09:00:00Z-a1b2","supersedes":"<record-id>","reason":"run_resumed","ts":"2026-07-05T09:30:00Z"}
 ```
 
 | フィールド | 意味 |
 |-----------|------|
-| `feature` / `run_id` / `mode` | 実行の同定 |
-| `rounds_spec` / `rounds_eval` | 2ループのラウンド数 |
-| `stalls` | この実行の arbitration エントリ数 |
-| `blocker_categories` | カテゴリ → 件数のマップ（Step 1 から） |
-| `applied_improvements` | この実行で実際に自動適用した提案ID（`improve-apply.ja.md` の適用ステップの結果。何も適用しない/縮退時は `[]`） |
-| `ts` | ISO 8601 タイムスタンプ |
+| `record_type` / `record_id` / `revision` | metrics ledgerの識別。revisionは再開runが再度terminalへ到達したときだけ増やす |
+| `feature` / `run_id` / `mode` | 安定した論理runの識別 |
+| `snapshot_id` / `snapshot` | 終端freshness snapshotのSHA-256と完全なcopy |
+| `rounds_spec` / `rounds_eval` | 2ループのround数 |
+| `stalls` | このrunのarbitration entry数 |
+| `blocker_categories` | カテゴリ → 件数のmap（Step 1から） |
+| `applied_improvements` | このrevisionで実際に自動適用した提案ID。未適用・縮退・pr未到達なら`[]` |
+| `ts` | ISO 8601 record timestamp |
 
-**行の追記は集計時ではなく、適用ステップの完了後に最後に行う。** JSON Lines は
-追記専用なので、`improve-apply.ja.md` の実行前に書いた行には `applied_improvements`
-を後から記録できない。Step 1 の値をここで組み立てて保持し、適用された集合が確定して
-から1行追記する（何も適用しない・Issue 縮退・pr 未到達のときは `[]`）:
+snapshot作成前にterminal `ts_updated`を1回設定する。すべての`report.json` /
+`*-report.json`をspec相対pathでsortした`report_manifest`を作り、そのarrayから
+`report_count`を導出する。canonical terminal stateは`phase: retrospective`、
+`retrospective`を含む履歴`completed_phases`、固定terminal timestampを既に持つ。
+ここから`.retrospective`を除いたSHA-256を`state_hash`、canonical snapshotのSHA-256を
+`snapshot_id`とする。report、state、metrics recordは同じsnapshot objectを持ち、metrics
+`ts`は`snapshot.state_ts_updated`と一致させる。
+
+新しいtimestampを選ぶ前に`active <metrics-file> <run-id>`を呼ぶ。中断したfinalizationが
+残したrecordが1件あり、そのsnapshotが現在の証拠と一致すれば、recordとtimestampをreportと
+stateへ採用する。不一致ならrepairのため停止する。helperは最初のversion付きrecordをrevision
+1、以後を正確に`max(existing revision) + 1`へ制限する。
+
+**metrics recordはapply step完了後、最後に追記する。** 生のredirectではなくhelperを
+使う。同じ`record_id`かつ同じ内容はno-opとなり、内容の衝突や2件目のactive recordは失敗する。
 
 ```bash
-printf '%s\n' "$line" >> .specs/pipeline-metrics.jsonl
+bash references/scripts/retrospective-ledger.sh append-metrics-once \
+  .specs/pipeline-metrics.jsonl "$line"
 ```
+
+完了runのresumeでは、state変更前に`supersede-once`を呼ぶ。安定したevent idは
+`supersede:<record-id>:run_resumed`。`record_type`を持たないlegacy行もsynthetic line idを
+持つmetrics recordとして読み取れる。
 
 ## Step 3: retrospective.md
 
@@ -67,6 +87,7 @@ printf '%s\n' "$line" >> .specs/pipeline-metrics.jsonl
 ```markdown
 # Retrospective - {feature} ({run_id})
 type: retrospective
+state_snapshot: {stateとmetricsに完全一致する1行のcanonical JSON object}
 
 ## Execution Summary
 モード / 通過フェーズ / PR URL / draft か ready か。
@@ -90,6 +111,8 @@ type: retrospective
 
 規則:
 - `type: retrospective` ヘッダは必須。
+- `state_snapshot:`行はちょうど1行必須。有効な1行JSONであり、
+  `state.retrospective.snapshot`と完全一致させる。
 - 各提案は対象ファイルと Tier を明示する（Tier 判定そのものは
   `improve-apply.ja.md`）。ここでの Tier は提案者の分類で、`improve-apply.ja.md` が
   適用前に canonical path で再検証する。
@@ -98,8 +121,16 @@ type: retrospective
 
 ## Step 4: 前回実行との比較
 
-`pipeline-metrics.jsonl` の前回行（今追記した行の1つ前）を読み、共有メトリクスで
-比較する:
+現在recordを追記する前に、前回の**有効な**metrics recordを読む。
+
+```bash
+bash references/scripts/retrospective-ledger.sh list-active \
+  .specs/pipeline-metrics.jsonl | tail -n 1
+```
+
+selectorはsupersede済みrecordを除外し、同じ`run_id`に複数のactive recordがあれば失敗する。
+物理的なJSONL最終行はsupersede eventや旧revisionかもしれないため、比較に使わない。
+選択したrecordを共有metricsで比較する:
 
 - `rounds_spec` / `rounds_eval`: 前回より多い = churn 増。
 - `blocker_categories`: 件数が上がったカテゴリ = その領域の退行。

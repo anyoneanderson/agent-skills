@@ -20,6 +20,23 @@ write.
 - **`improve.auto_apply: false`** → even Tier 1 proposals are left as PRs awaiting
   human review; nothing auto-merges.
 
+## Fresh Metrics and External-Action Idempotency
+
+Read comparison and revert inputs only through
+`references/scripts/retrospective-ledger.sh list-active`. Raw JSONL order is not
+valid selection: a later row may be a supersede event, and an older metrics row
+may describe an intermediate terminal state. The selector excludes superseded
+records and fails if a `run_id` has multiple active records.
+
+Before creating an improvement PR, revert PR, or fallback Issue, compute
+`action_key = sha256(proposal_id + action_kind + normalized_target +
+change_digest)` and reserve it in `state.retrospective.action_history` with
+`status: "pending"`. If the key exists, do not create another action. Reconcile
+a pending entry by finding the external item carrying that key in its body or
+branch metadata; then update the entry to `completed` with its URL/number, or
+retry only after confirming that no item was created. Preserve action history
+when a completed retrospective is invalidated and regenerated.
+
 ## Tier Judgment
 
 Each proposal's target path maps to a Tier. Tier 1 auto-merges; Tier 2 is left
@@ -113,7 +130,8 @@ The orchestrator does only git/PR; a **worker subagent** makes the file edits
 (the orchestrator never edits skill files itself — delegation-only).
 
 1. In `improve.skills_repo`, create the improve branch `improve/{feature}-{run-id}`.
-2. A worker subagent applies the proposal's edits on that branch.
+2. Reserve the action key in state and include it as a hidden marker in the PR
+   body. A worker subagent applies the proposal's edits on that branch.
 3. Commit. The commit body **references `retrospective.md`** (path + run_id) so the
    audit trail links every automatic change back to the evidence that justified it.
 4. Open a PR:
@@ -128,7 +146,9 @@ matches Tier 2 and any bad change reverts with a single `git revert`.
 
 If `improve.skills_repo` is unset or not writable, do not apply anything. Instead
 file an Issue on the agent-skills repository containing the proposals (target,
-Tier, rationale). This keeps the learning without requiring write access.
+Tier, rationale) and its action-key marker. Reserve and reconcile that key by the
+same rule as an improvement PR. This keeps the learning without requiring write
+access and prevents a terminal rerun from filing the Issue twice.
 
 ## Revert
 
@@ -146,6 +166,7 @@ staged by confidence:
 - **Issue only:** a change a human merged is never auto-reverted — file an Issue
   proposing the revert.
 
-The regression signal is read from `pipeline-metrics.jsonl`
+The regression signal is read from active records selected from
+`pipeline-metrics.jsonl`
 (`retrospective-format.md` Step 4); this file only defines what the signal
 authorizes.

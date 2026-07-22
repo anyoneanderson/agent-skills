@@ -100,6 +100,9 @@ the file), then summarize the completed phases and the next action in one short
 block, and continue from there. A full run spanning several hours and surviving
 a crash, restart, or deliberate session split is the normal case, not an
 exception. See the Resume Behavior section of `references/pipeline-config.md`.
+When a terminal run is deliberately reopened for non-terminal work, follow the
+completed-retrospective resume contract there: supersede its metrics projection,
+mark it stale, and regenerate revision N+1 at the next terminal state.
 
 ## Turn Discipline and the Watchdog
 
@@ -172,6 +175,7 @@ Verification / State-Update steps.
 | arbitration | draft PR landing | pr | `references/stall-detection.md` |
 | pr | PR created (incl. draft) | retrospective | `phases/pr.md` |
 | retrospective | report + improvements done | (end) | `phases/retrospective.md` |
+| retrospective (completed) | run reopened for more work | approval, implement, evaluate, or pr | `references/pipeline-config.md` |
 
 **Ordering principle:** run the cheap machine check (inspect) before the
 expensive semantic check (adversarial spec_review), so a peer LLM's tokens are
@@ -215,10 +219,11 @@ state file. Full steps live in `phases/intake.md`; the shape is:
   into a no-dialogue planner input, and derive the feature name as kebab-case
   from the Issue title.
 
-Both modes then explicitly determine the current host runtime and write the
-initial `pipeline-state.json` (mode, issue, feature, language, `host_runtime`,
-`phase: spec_generate`) before dispatching the spec author. On resume, determine
-the current host again and refresh this field before another dispatch.
+Both modes then generate one stable `run_id`, explicitly determine the current
+host runtime, and write the initial `pipeline-state.json` (mode, issue, feature,
+language, `run_id`, `host_runtime`, `phase: spec_generate`) before dispatching
+the spec author. Preserve `run_id` on every resume; determine the current host
+again and refresh only `host_runtime` before another dispatch.
 
 ## Error Handling
 

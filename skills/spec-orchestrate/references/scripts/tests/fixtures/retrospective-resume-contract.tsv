@@ -1,0 +1,13 @@
+contract_id	en_token	ja_token
+stable_run	run_id	run_id
+report_manifest	report_manifest	report_manifest
+state_hash	state_hash	state_hash
+supersede_once	supersede-once	supersede-once
+regeneration_flag	regeneration_required	regeneration_required
+next_revision	revision `N+1`	revision `N+1`
+metrics_idempotency	append-metrics-once	append-metrics-once
+action_deduplication	action_key	action_key
+active_selector	active metrics selector	有効metrics selector
+legacy_listing	list-metrics	list-metrics
+legacy_migration	legacy_migration	legacy_migration
+crash_adoption	adopt its revision	revision、各ID、固定timestampを採用

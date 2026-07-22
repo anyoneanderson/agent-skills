@@ -440,3 +440,5 @@ if bash "$STATE_CHECK" "$tmp/spec" >/dev/null 2>&1; then
 fi
 
 printf 'PASS\tcontract\thost-aware dispatch and independent review fallback\n'
+
+bash "$TEST_DIR/check-retrospective-resume-contract.sh"
