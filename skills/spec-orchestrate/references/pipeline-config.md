@@ -72,6 +72,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
   "phase": "spec_review",
   "completed_phases": ["intake", "spec_generate", "inspect"],
   "inspect": {"critical": 0, "warning": 0, "info": 2, "gate": "PASS"},
+  "implement": {"tasks_done": ["T001", "T002-R", "T012b"]},
   "rounds": {
     "spec_review": [
       {"round": 1, "critical": 3, "improvement": 2, "minor": 1,
@@ -98,6 +99,7 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 | `phase` | Current phase; the loop reads this to decide what to run next |
 | `completed_phases` | Phases finished at least once (for the resume summary) |
 | `inspect` | Summary of the last inspect result: CRITICAL / WARNING / INFO counts and the gate (`PASS` when no CRITICAL/WARNING). inspect is a single machine check, not a review loop, so it is one summary object here, not a `rounds` array |
+| `implement.tasks_done` | Complete canonical ids of checked tasks, preserved exactly. Valid ids match `T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` (for example `T001`, `T012b`, `T002-R`). Never record an id that is absent or unchecked in `tasks.md` |
 | `rounds` | Per-loop round history (`spec_review`, `evaluate`); each entry carries severity counts, the `fix_required` count (fix-loop findings), finding fingerprints, class keys, and the gate. `evaluate` entries also carry a `blocked` count (blocked cases are neither critical nor improvement; see `phases/evaluate.md`). Consumed by stall detection (`stall-detection.md`) |
 | `threads` | Peer session ids for resume (e.g. `spec_reviewer`) |
 | `role_overrides` | Roles reassigned this run (capability fallback or arbitration swap) |
@@ -209,7 +211,8 @@ file against evidence it cannot fake: the canonical phase order vs
 `completed_phases` (a later phase with unrecorded predecessors means a phase ran
 without its state update; a draft-PR landing recorded in `arbitrations` with
 `decision: "draft"` exempts the approval/implement/evaluate legs), `tasks.md`
-checkboxes vs `implement.tasks_done` (both directions), run-record files
+checkboxes vs `implement.tasks_done` (both directions, using the complete task-id
+grammar `T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` without truncation), run-record files
 (`retrospective.md`, `evaluate-*`) vs the recorded phase, and — when `gh` is
 available — an existing PR for the current branch vs a state that has not
 reached `pr`. Exit 0 is consistent; exit 1 prints one `DRIFT:` line per finding.
@@ -217,7 +220,8 @@ reached `pr`. Exit 0 is consistent; exit 1 prints one `DRIFT:` line per finding.
 **When to run (mandatory):** after every state write, and as step 0 of a resume.
 
 **On drift, evidence wins.** Reconcile the state to what actually happened —
-append the missing `completed_phases`, add the missing `tasks_done` entries, set
+append the missing `completed_phases`, add only checked canonical task ids that
+are missing from `tasks_done`, remove recorded ids that are absent or unchecked, set
 `phase` to where the evidence says the run is — then record the repair:
 
 ```bash

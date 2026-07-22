@@ -55,6 +55,9 @@ the `.specs/.gitignore` written at intake is the backstop.
 
 - Set `phase` to `evaluate`.
 - Append `implement` to `completed_phases`.
+- Replace `implement.tasks_done` with the complete ids of checked canonical
+  tasks, preserving `T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` ids exactly. Never include
+  an id that is absent or unchecked in `tasks.md`.
 - Record any role overrides applied during implementation under
   `role_overrides`.
 - Validate the `review_fallbacks` list returned by spec-implement, then append

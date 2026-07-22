@@ -9,9 +9,13 @@ SKILLS_DIR="$(cd "$ORCHESTRATE_DIR/.." && pwd)"
 FIXTURE="$TEST_DIR/fixtures/dispatch-matrix.tsv"
 REVIEW_FIXTURE="$TEST_DIR/fixtures/review-fallback.tsv"
 SPEC_REVIEW_RECOVERY_FIXTURE="$TEST_DIR/fixtures/spec-review-env-error-contract.tsv"
+TASK_ID_FIXTURE="$TEST_DIR/fixtures/task-id-cases.tsv"
 ROLE_DISPATCH="$REFERENCE_DIR/role-dispatch.md"
 ROLE_DISPATCH_JA="$REFERENCE_DIR/role-dispatch.ja.md"
 IMPLEMENT_PHASE="$REFERENCE_DIR/phases/implement.md"
+IMPLEMENT_PHASE_JA="$REFERENCE_DIR/phases/implement.ja.md"
+PIPELINE_CONFIG="$REFERENCE_DIR/pipeline-config.md"
+PIPELINE_CONFIG_JA="$REFERENCE_DIR/pipeline-config.ja.md"
 SPEC_REVIEW_PHASE="$REFERENCE_DIR/phases/spec_review.md"
 SPEC_REVIEW_PHASE_JA="$REFERENCE_DIR/phases/spec_review.ja.md"
 IMPLEMENT_GUIDE="$SKILLS_DIR/spec-implement/references/implement-guide.md"
@@ -19,6 +23,7 @@ IMPLEMENT_GUIDE_JA="$SKILLS_DIR/spec-implement/references/implement-guide.ja.md"
 EVALUATE_BACKEND="$SKILLS_DIR/spec-evaluate/references/execution-backend.md"
 EVALUATE_BACKEND_JA="$SKILLS_DIR/spec-evaluate/references/execution-backend.ja.md"
 STATE_CHECK="$SCRIPT_DIR/pipeline-state-check.sh"
+TASK_ID_GRAMMAR='T[0-9]+[a-z]?(-[A-Za-z0-9]+)?'
 
 fail() {
   printf 'FAIL\t%s\n' "$*" >&2
@@ -133,6 +138,59 @@ assert_spec_review_recovery_mutations_rejected() {
   done < "$SPEC_REVIEW_RECOVERY_FIXTURE"
 }
 
+write_task_id_state() {
+  local spec_dir="$1" checked_ids="$2" recorded_ids="$3" task_text="$4" tasks_done
+
+  mkdir -p "$spec_dir"
+  printf '%s\n' "$checked_ids" | tr ',' '\n' | while IFS= read -r task_id; do
+    if [ -n "$task_id" ] && [ "$task_id" != - ]; then
+      printf -- '- [x] %s: %s\n' "$task_id" "$task_text"
+    fi
+  done > "$spec_dir/tasks.md"
+  tasks_done="$(jq -Rn --arg ids "$recorded_ids" \
+    '$ids | if length == 0 or . == "-" then [] else split(",") end')"
+  jq -n --argjson tasks_done "$tasks_done" '{
+    feature: "task-id-fixture",
+    mode: "auto",
+    issue: 119,
+    language: "en",
+    host_runtime: "codex",
+    phase: "pr",
+    completed_phases: [
+      "intake", "spec_generate", "inspect", "spec_review", "approval",
+      "implement", "evaluate"
+    ],
+    rounds: {},
+    threads: {},
+    role_overrides: {},
+    review_fallbacks: [],
+    implement: {tasks_done: $tasks_done},
+    arbitrations: []
+  }' > "$spec_dir/pipeline-state.json"
+}
+
+assert_task_id_cases() {
+  local checker="$1" case_id checked_ids recorded_ids expected_status
+  local expected_fragment task_text spec_dir output actual_status
+
+  while IFS=$'\t' read -r \
+    case_id checked_ids recorded_ids expected_status expected_fragment task_text; do
+    [ "$case_id" = case_id ] && continue
+    spec_dir="$tmp/task-id-$case_id"
+    write_task_id_state "$spec_dir" "$checked_ids" "$recorded_ids" "$task_text"
+    if output="$(bash "$checker" "$spec_dir" 2>&1)"; then
+      actual_status=pass
+    else
+      actual_status=fail
+    fi
+    [ "$actual_status" = "$expected_status" ] ||
+      fail "task id case $case_id expected $expected_status, got $actual_status: $output"
+    printf '%s\n' "$output" | grep -Fq -- "$expected_fragment" ||
+      fail "task id case $case_id did not report '$expected_fragment': $output"
+    printf 'PASS\ttask-id\t%s\t%s\n' "$case_id" "$expected_status"
+  done < "$TASK_ID_FIXTURE"
+}
+
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/host-aware-dispatch.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 expected="$(tail -n +2 "$FIXTURE")"
@@ -225,10 +283,36 @@ assert_spec_review_recovery_mutations_rejected "$SPEC_REVIEW_PHASE_JA" ja ||
   fail "Japanese spec_review recovery validator accepted a contract mutation"
 printf 'PASS\tcontract\tspec_review env_error artifact recovery\n'
 
-for fixture_file in "$FIXTURE" "$REVIEW_FIXTURE" "$SPEC_REVIEW_RECOVERY_FIXTURE"; do
+grep -Fq "TASK_ID_PATTERN='$TASK_ID_GRAMMAR'" "$STATE_CHECK" ||
+  fail "state checker task id grammar differs from the tracked contract"
+for task_id_contract in \
+  "$IMPLEMENT_PHASE" "$IMPLEMENT_PHASE_JA" "$PIPELINE_CONFIG" "$PIPELINE_CONFIG_JA"; do
+  grep -Fq -- "$TASK_ID_GRAMMAR" "$task_id_contract" ||
+    fail "$task_id_contract does not document the complete task id grammar"
+done
+printf 'PASS\tcontract\ttask id grammar in checker and bilingual docs\n'
+
+for fixture_file in \
+  "$FIXTURE" "$REVIEW_FIXTURE" "$SPEC_REVIEW_RECOVERY_FIXTURE" "$TASK_ID_FIXTURE"; do
   last_byte="$(tail -c 1 "$fixture_file" | od -An -t u1 | tr -d '[:space:]')"
   [ "$last_byte" = 10 ] || fail "$fixture_file must end with a newline"
 done
+
+assert_task_id_cases "$STATE_CHECK"
+
+mutant="$tmp/pipeline-state-check-truncated-task-id.sh"
+sed "s|^TASK_ID_PATTERN=.*|TASK_ID_PATTERN='T[0-9]+[a-z]?' # task-id-contract|" \
+  "$STATE_CHECK" > "$mutant"
+grep -Fq "TASK_ID_PATTERN='T[0-9]+[a-z]?'" "$mutant" ||
+  fail "task id mutation was not applied"
+mutation_spec="$tmp/task-id-mutation"
+write_task_id_state "$mutation_spec" "T002-R" "T002-R" "fixture task"
+if mutation_output="$(bash "$mutant" "$mutation_spec" 2>&1)"; then
+  fail "task id checker accepted the truncating regex mutation"
+fi
+printf '%s\n' "$mutation_output" | grep -Fq -- 'T002-R' ||
+  fail "task id mutation failed for an unrelated reason: $mutation_output"
+printf 'PASS\tmutation\thyphenated task id truncation rejected\n'
 
 mkdir -p "$tmp/spec"
 cat > "$tmp/spec/pipeline-state.json" <<'JSON'
