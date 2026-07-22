@@ -65,21 +65,25 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 ```json
 {
   "feature": "user-auth",
+  "run_id": "2026-07-03T00:00:00Z-a1b2c3d4",
   "mode": "auto",
   "issue": 42,
   "language": "en",
   "host_runtime": "codex",
-  "phase": "spec_review",
-  "completed_phases": ["intake", "spec_generate", "inspect"],
+  "phase": "retrospective",
+  "completed_phases": ["intake", "spec_generate", "inspect", "spec_review", "approval", "implement", "evaluate", "pr", "retrospective"],
   "inspect": {"critical": 0, "warning": 0, "info": 2, "gate": "PASS"},
   "implement": {"tasks_done": ["T001", "T002-R", "T012b"]},
   "rounds": {
     "spec_review": [
-      {"round": 1, "critical": 3, "improvement": 2, "minor": 1,
-       "fix_required": 2, "fingerprints": ["a1b2..", "c3d4.."],
-       "class_keys": ["e5f6..", "a7b8.."], "gate": "FAIL"}
+      {"round": 1, "critical": 0, "improvement": 1, "minor": 1,
+       "fix_required": 0, "fingerprints": ["a1b2..", "c3d4.."],
+       "class_keys": ["e5f6..", "a7b8.."], "gate": "PASS"}
     ],
-    "evaluate": []
+    "evaluate": [
+      {"round": 1, "critical": 0, "improvement": 0, "minor": 0,
+       "blocked": 0, "gate": "PASS"}
+    ]
   },
   "threads": {"spec_reviewer": "codex-thread-abc"},
   "role_overrides": {},
@@ -87,13 +91,35 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
   "arbitrations": [
     {"phase": "spec_review", "signal": "S1", "decision": "continue", "note": "...", "ts": "..."}
   ],
-  "ts_updated": "2026-07-03T00:00:00Z"
+  "pr": {"url": "https://github.com/example/repo/pull/42", "draft": false, "status": "ready"},
+  "retrospective": {
+    "revision": 1,
+    "snapshot_id": "<sha256-of-canonical-snapshot>",
+    "metrics_record_id": "2026-07-03T00:00:00Z-a1b2c3d4:r1:<snapshot-id>",
+    "snapshot": {
+      "run_id": "2026-07-03T00:00:00Z-a1b2c3d4",
+      "phase": "retrospective",
+      "completed_phases": ["intake", "spec_generate", "inspect", "spec_review", "approval", "implement", "evaluate", "pr", "retrospective"],
+      "rounds_spec": 1,
+      "rounds_eval": 1,
+      "report_count": 2,
+      "report_manifest": ["implement-report.json", "review-report.json"],
+      "pr_url": "https://github.com/example/repo/pull/42",
+      "pr_status": "ready",
+      "state_ts_updated": "2026-07-03T01:00:00Z",
+      "state_hash": "<sha256-of-state-without-retrospective>"
+    },
+    "stale": false,
+    "regeneration_required": false,
+    "action_history": []
+  },
+  "ts_updated": "2026-07-03T01:00:00Z"
 }
 ```
 
 | Field | Meaning |
 |-------|---------|
-| `feature` / `mode` / `issue` | Run identity (issue is null in manual) |
+| `feature` / `run_id` / `mode` / `issue` | Run identity. Generate `run_id` once at intake and preserve it across every resume (issue is null in manual) |
 | `language` | Detected I/O language, set at intake |
 | `host_runtime` | Explicit current orchestrator runtime (`claude` or `codex`), set at intake and refreshed before dispatch on resume |
 | `phase` | Current phase; the loop reads this to decide what to run next |
@@ -106,6 +132,8 @@ Location: `.specs/{feature}/pipeline-state.json`, one per feature.
 | `review_fallbacks` | Review rounds where an unavailable preferred cross-AI reviewer was replaced by a fresh read-only host-native reviewer. Each entry records phase, artifact, round, the host runtime at review time, preferred/actual AI role, backend, reason, and independence guarantee. Omit or use `[]` when unused |
 | `arbitrations` | Stall adjudication records (see `stall-detection.md`) |
 | `repairs` | Optional. State-drift repairs applied on resume or after a failed integrity check (see §State Integrity Check) |
+| `pr` | Latest PR evidence: `url`, boolean `draft`, and derived `status` (`draft` or `ready`) |
+| `retrospective` | Versioned terminal projection: revision, snapshot and ids, freshness flags, metrics record id, and deduplicated external-action history |
 | `ts_updated` | Last write timestamp |
 
 When the fallback is used, append one record per review round:
@@ -254,9 +282,12 @@ without its state update; a draft-PR landing recorded in `arbitrations` with
 checkboxes vs `implement.tasks_done` (both directions, rejecting duplicate state
 entries, and using the complete task-id grammar
 `T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` without truncation), run-record files
-(`retrospective.md`, `evaluate-*`) vs the recorded phase, and — when `gh` is
-available — an existing PR for the current branch vs a state that has not
-reached `pr`. Exit 0 is consistent; exit 1 prints one `DRIFT:` line per finding.
+(`retrospective.md`, `evaluate-*`) vs the recorded phase, retrospective
+state/report/metrics snapshot freshness (including the report manifest, PR
+state, state timestamp, and canonical hash), exactly one active metrics
+revision per finalized run, and — when `gh` is available — an existing PR for
+the current branch vs a state that has not reached `pr`. Exit 0 is consistent;
+exit 1 prints one `DRIFT:` line per finding.
 
 **When to run (mandatory):** after every state write, and as step 0 of a resume.
 
@@ -306,6 +337,81 @@ intake writes a single `.specs/.gitignore` that excludes the run records across
 every feature. A project that deliberately wants to commit its run records edits
 that file (it carries a comment saying so). The staging pathspec in the commit
 steps (implement / pr) is the first guard; `.specs/.gitignore` is the backstop.
+
+<!-- retrospective-resume-contract:start -->
+## Resume After a Completed Retrospective
+
+`completed_phases` remains a historical set: keep `retrospective` in it when a
+finished run resumes. Freshness lives in `state.retrospective`, so history and
+the need to regenerate are not overloaded into one field.
+
+The terminal snapshot contains `run_id`, `phase`, `completed_phases`, the
+`spec_review` and `evaluate` round counts, `report_count` and the sorted
+spec-relative `report_manifest` of worker `report.json` files, PR URL and
+`draft` / `ready` status, the
+state update timestamp, and `state_hash`. Compute `state_hash` as SHA-256 over
+canonical JSON (`jq -cS`) of the terminal state with `.retrospective` removed;
+this avoids a self-referential hash while detecting later operational-state
+changes. `snapshot_id` is SHA-256 over the canonical snapshot object.
+Write the same snapshot object to state, the `state_snapshot:` JSON line in
+`retrospective.md`, and the active metrics record.
+
+When a completed retrospective resumes into approval, implement, evaluate, or
+pr, apply this order without an integrity-check gap:
+
+1. Use `references/scripts/retrospective-ledger.sh supersede-once` to append one
+   `run_resumed` event for the current `metrics_record_id`. Use the stable
+   `event_id` `supersede:<metrics_record_id>:run_resumed`; the helper verifies
+   that the target belongs to the same `run_id`. The event is idempotent and
+   leaves the JSON Lines history append-only.
+2. In one atomic state write, set the resume phase, set both
+   `retrospective.stale` and `retrospective.regeneration_required` to `true`,
+   preserve `completed_phases` and `retrospective.action_history`, and refresh
+   `ts_updated`.
+3. Recreate the run marker, then run `pipeline-state-check.sh`. It accepts an
+   intentionally stale report only when the state flags are set and its prior
+   metrics record is superseded exactly once. Otherwise the non-zero result
+   blocks resume.
+4. Continue the non-terminal phases. Keep the stale flags set through every
+   intervening state write.
+5. At the next terminal state, run retrospective again with revision `N+1`.
+   Clear both freshness flags only after the report, state snapshot, and new
+   active metrics record agree; then delete the run marker.
+
+Before the first active-record comparison on a legacy ledger, use
+`retrospective-ledger.sh list-metrics` to find duplicate unversioned rows per
+`run_id`. Preserve the physically newest row and append `legacy_migration`
+supersede events for every older duplicate, using stable event ids
+`supersede:<legacy-id>:legacy_migration`. This one-time migration makes selection
+unambiguous without rewriting history.
+
+For the legacy completed run being resumed, backfill the state's `run_id` from
+its matching newest metrics row. Supersede that final legacy row with
+`legacy_migration`, build a versioned revision-1 snapshot from the current state,
+report, and row, append it with `append-metrics-once`, then atomically write the
+matching report and retrospective state metadata. Record the repair and pass the
+checker before applying the normal `run_resumed` invalidation above. A legacy
+in-flight state with no metrics row gets one newly generated stable `run_id` in
+a recorded repair before its next dispatch. Never treat an unversioned report
+as implicitly fresh.
+
+If a crash left the resume supersede event appended but state still fresh,
+repair state by setting both freshness flags and recreating the marker; do not
+append another event. If a crash left a terminal metrics record active but the
+report or state projection unfinished, query `active`, validate its snapshot
+against current evidence, and adopt its revision, ids, and frozen timestamp.
+Do not stamp a new timestamp or append a competing record.
+
+At the same terminal snapshot, rerunning retrospective is a no-op. Use
+`append-metrics-once` for metrics. Before an external action, reserve a stable
+`action_key` made from the proposal id, action kind, normalized target, and
+change digest in `retrospective.action_history`; then update that entry with the
+result URL or number. On resume, reconcile a pending key against the external
+system before retrying, so an improvement PR or Issue is never created twice.
+The active metrics selector excludes every record named by a supersede event
+and requires at most one active record per `run_id`; a finalized run requires
+exactly one. Comparison and automatic revert consume only those active records.
+<!-- retrospective-resume-contract:end -->
 
 ## Resume Behavior
 

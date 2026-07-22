@@ -59,8 +59,9 @@ unresolved items. A stall landing produces a draft PR instead of a ready one.
 ## State Update
 
 - Set `phase` to `retrospective`.
-- Record the PR URL, whether it is a draft, and the follow-up issue numbers
-  (`deferred_issues`) in state.
+- Record `pr` as `{"url":"<URL>","draft":<boolean>,"status":"draft|ready"}`
+  and record the follow-up issue numbers in `deferred_issues`. Derive `status`
+  from the actual PR state rather than from the intended creation mode.
 - Append `pr` to `completed_phases`.
 
 ## Transitions

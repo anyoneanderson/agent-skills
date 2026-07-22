@@ -65,6 +65,11 @@ pipeline-metrics.jsonl
 */*.pid
 ```
 
+Generate `run_id` once before the initial state write. Use an ISO 8601 UTC
+timestamp plus a random suffix (for example
+`2026-07-03T00:00:00Z-a1b2c3d4`). It identifies the logical run, so preserve it
+unchanged across crash recovery and every later resume.
+
 ## Output
 
 - A decided, writable `.specs/{feature}/` directory path.
@@ -83,7 +88,8 @@ pipeline-metrics.jsonl
 
 Write the initial `pipeline-state.json`:
 ```json
-{ "feature": "<name>", "mode": "manual|auto", "issue": <N|null>,
+{ "feature": "<name>", "run_id": "<UTC timestamp>-<random suffix>",
+  "mode": "manual|auto", "issue": <N|null>,
   "language": "en|ja", "host_runtime": "claude|codex", "phase": "spec_generate",
   "completed_phases": ["intake"], "rounds": {}, "threads": {},
   "role_overrides": {}, "review_fallbacks": [], "arbitrations": [] }
@@ -91,7 +97,8 @@ Write the initial `pipeline-state.json`:
 The full schema and the jq/awk write idiom are in `../pipeline-config.md`;
 intake writes the minimum required to enter spec_generate. Determine
 `host_runtime` from the current runtime explicitly; if it is unknown, apply the
-manual/auto fallback in `../role-dispatch.md` Step 0 before writing state.
+manual/auto fallback in `../role-dispatch.md` Step 0 before writing state. Never
+regenerate `run_id` when this state already exists.
 
 ## Transitions
 
