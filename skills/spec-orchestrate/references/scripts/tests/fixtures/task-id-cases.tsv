@@ -5,4 +5,6 @@ mixed-identifiers	T001,T002-R,T012b	T001,T002-R,T012b	pass	STATE OK	fixture task
 description-reference	T001	T001	pass	STATE OK	depends on T002-T003
 truncated-state	T002-R	T002	fail	T002-R	fixture task
 unknown-recorded	T002-R	T002-R,T999-X	fail	T999-X	fixture task
+duplicate-recorded	T002-R	T002-R,T002-R	fail	duplicate ids in state.implement.tasks_done	fixture task
+empty-recorded-id	-	<empty-id>	fail	implement.tasks_done must be an array of complete canonical task ids	fixture task
 no-checked-tasks	-	T999-X	fail	T999-X	fixture task

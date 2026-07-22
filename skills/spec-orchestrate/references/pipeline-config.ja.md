@@ -138,9 +138,9 @@ host_runtime="$(jq -r .host_runtime "$state")"
 
 アトミックに書く（その場編集しない — 一時ファイルに書いて mv）:
 ```bash
-jq '.phase = "inspect"
-    | .completed_phases += ["spec_generate"]
-    | .ts_updated = (now | todate)' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+jq --arg host "$host_runtime" \
+   '.host_runtime = $host | .ts_updated = (now | todate)' \
+   "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 ```
 
 レビューラウンドを追記:
@@ -148,6 +148,43 @@ jq '.phase = "inspect"
 jq --argjson r '{"round":1,"critical":3,"improvement":2,"minor":1,"fix_required":2,"fingerprints":[],"class_keys":[],"gate":"FAIL"}' \
    '.rounds.spec_review += [$r]' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 ```
+
+<!-- phase-completion-state-write:start -->
+### フェーズ完了時の state 記帳チェックリスト
+
+フェーズを完了して遷移するたびに、このチェックリストを適用する。タスクを完了できるのは
+implement フェーズだけではない。
+
+1. state を書く前に、完了フェーズと次フェーズを確定する。
+2. `tasks.md` を読み直し、チェック済み正準タスク行だけから
+   `implement.tasks_done` を作る。`T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` に一致する完全な
+   IDを保ち、重複を除き、`tasks.md` に存在しない、または未チェックのIDを残さない。
+3. 1回のアトミックな `jq` 更新で `.phase` を設定し、完了フェーズが未記録の場合だけ
+   `.completed_phases` へ追加し、`implement.tasks_done` を作成した配列で置き換える。
+   `implement` 以外のフェーズでタスクをチェックした場合も、同じ更新を行う。
+4. state を書いた後に run marker の時刻を更新する。
+5. 直ちに `references/scripts/pipeline-state-check.sh <spec-dir>` を実行する。
+   終了コードが0以外なら遷移を止め、乖離を修復し、検査がcleanになってから次フェーズを
+   dispatchする。
+
+チェック済み正準タスク行から `tasks_done_json` を作成した後の完了書き込み例
+（チェック済みタスクが0件なら、`tasks_done_json` は有効なJSON配列 `[]` とする）:
+
+```bash
+jq --arg finished "$finished_phase" --arg next "$next_phase" \
+   --argjson tasks_done "$tasks_done_json" '
+  .phase = $next
+  | .completed_phases = ((.completed_phases // []) |
+      if index($finished) then . else . + [$finished] end)
+  | .implement = ((.implement // {}) | .tasks_done = $tasks_done)
+  | .ts_updated = (now | todate)
+' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+jq '.ts = (now | todate)' .specs/.orchestrate-active.json \
+  > .specs/.orchestrate-active.json.tmp \
+  && mv .specs/.orchestrate-active.json.tmp .specs/.orchestrate-active.json
+bash references/scripts/pipeline-state-check.sh "$spec_dir"
+```
+<!-- phase-completion-state-write:end -->
 
 YAML パーサなしで `pipeline.yml` のロール値を読む（フラットな `roles:` ブロックの
 awk 流儀）:
@@ -209,8 +246,8 @@ hook はリポジトリごとに Claude Code の Stop hook として登録する
 偽装できない証拠と突き合わせる: 正準フェーズ順序と `completed_phases`（先のフェーズに
 居るのに前段が未記録 = state 更新なしでフェーズが走った。ただし `arbitrations` に
 `decision: "draft"` が記録された draft PR 着地は approval / implement / evaluate を
-免除する）、`tasks.md` のチェックボックスと `implement.tasks_done`（完全なタスクID文法
-`T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` を切り詰めずに両方向で比較）、
+免除する）、`tasks.md` のチェックボックスと `implement.tasks_done`（state内の重複を
+拒否し、完全なタスクID文法 `T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` を切り詰めずに両方向で比較）、
 運転記録ファイル（`retrospective.md`・`evaluate-*`）と記録上のフェーズ、そして
 `gh` があれば現在ブランチの PR 実在と `pr` 未到達の state。
 exit 0 = 整合、exit 1 = 乖離1件につき `DRIFT:` 行を1つ出力する。

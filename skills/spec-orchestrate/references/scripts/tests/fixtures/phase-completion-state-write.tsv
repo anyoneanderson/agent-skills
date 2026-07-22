@@ -1,0 +1,10 @@
+contract_id	en_token	ja_token
+phase_pair	Determine the finished phase and the next phase	完了フェーズと次フェーズを確定
+task_source	Re-read `tasks.md`	`tasks.md` を読み直し
+task_grammar	T[0-9]+[a-z]?(-[A-Za-z0-9]+)?	T[0-9]+[a-z]?(-[A-Za-z0-9]+)?
+atomic_update	In one atomic `jq` update	1回のアトミックな `jq` 更新
+idempotent_phase	only when absent	完了フェーズが未記録の場合だけ
+non_implement	phase other than	`implement` 以外のフェーズ
+marker_refresh	Refresh the run-marker timestamp	run marker の時刻を更新
+checker_command	references/scripts/pipeline-state-check.sh	references/scripts/pipeline-state-check.sh
+integrity_gate	A non-zero exit blocks the transition	終了コードが0以外なら遷移を止め
