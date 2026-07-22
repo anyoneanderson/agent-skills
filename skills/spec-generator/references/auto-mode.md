@@ -51,6 +51,10 @@ requirement source, in order: requirement.md → design.md → tasks.md → test
 Reuse the same reference files as the interactive path
 (`init.md`, `design.md`, `tasks.md`, `test-plan.md` and their `.ja` variants).
 
+After all four documents are generated, run
+`references/projection-consistency.md` (`.ja.md` for Japanese output). Run it
+again after every revision, and do not report completion until the pass succeeds.
+
 Apply the **YAGNI principle** (see SKILL.md): build only what the Issue asks
 for. Do not add auth, analytics, i18n, or infrastructure that the Issue does not
 mention.
@@ -105,3 +109,4 @@ paths and the list of assumptions written, then returns control to the caller
 3. [ ] Feature name is kebab-case, derived from the Issue title
 4. [ ] Every inferred decision is recorded as an `ASM-XXX` in requirement.md
 5. [ ] Output language matches the Issue language
+6. [ ] Projection consistency pass completed after generation or revision

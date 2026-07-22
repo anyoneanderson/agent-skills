@@ -15,6 +15,7 @@ Your generation rules live in the **spec-generator** skill, not in this file. Fo
 - Requirement / design / tasks generation: spec-generator `references/init.md`, `references/design.md`, `references/tasks.md`
 - Acceptance test plan (test.md): spec-generator `references/test-plan.md`
 - Task `kind` classification and splitting rules: spec-generator `references/tasks.md`
+- Projection consistency after generation and every revision: spec-generator `references/projection-consistency.md`
 
 (Use the `.ja.md` variants when working in Japanese.)
 

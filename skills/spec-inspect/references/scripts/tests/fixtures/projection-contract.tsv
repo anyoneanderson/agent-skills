@@ -1,0 +1,17 @@
+contract_id	target	en_token	ja_token
+CG-001	generator	initial generation and every revision	初回生成とすべての仕様修正
+CG-002	generator	Requirement IDs, design decisions, numeric thresholds, and named methods	Requirement ID、設計判断、数値基準、方式名
+CG-003	generator	§0, §12, and headings	§0、§12、見出し
+CG-004	generator	§1 traceability matrix	§1トレーサビリティ表
+CG-005	generator	same edit	同じ編集内
+CG-006	generator	requirements whose expected downstream projection disappeared	必要な下流投影が消えた要求
+CG-007	generator	Do not use exact-string	文字列の完全一致を意味の一致の代用にしない
+CG-008	generator	Do not report completion	完了を報告しない
+CI-001	inspect	every reference in `design.md`, `tasks.md`, and `test.md`	`design.md`、`tasks.md`、`test.md`のすべての参照
+CI-002	inspect	§0, §12, and headings	§0、§12、見出し
+CI-003	inspect	§1 traceability matrix	§1トレーサビリティ表
+CI-004	inspect	numeric thresholds and named methods	数値基準と方式名
+CI-005	inspect	projected into `tasks.md` and `test.md`	`tasks.md`と`test.md`へ投影
+CI-006	inspect	Use semantic comparison for	要約文は意味で比較
+CI-007	inspect	changed source fact	変更元の事実
+CI-008	inspect	as `WARNING`	`WARNING`として

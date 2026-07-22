@@ -1,0 +1,6 @@
+case_id	target_file	old_line	new_line	expected_fragment
+summary-stale	design.md	- Summary Delivery method: webhook.	- Summary Delivery method: polling.	delivery method mismatch
+traceability-stale	design.md	| [REQ-001] | Delivery method | webhook |	| [REQ-009] | Delivery method | webhook |	requirement id mismatch
+numeric-stale	design.md	- Summary Batch size: 500.	- Summary Batch size: 1000.	batch size mismatch
+downstream-stale	tasks.md	- [ ] T003: Persist the event cursor [REQ-003].	- [ ] T003: Persist the offset cursor [REQ-003].	cursor model downstream mismatch
+numeric-prefix-stale	tasks.md	- [ ] T002: Enforce a batch size of 500 [REQ-002].	- [ ] T002: Enforce a batch size of 5000 [REQ-002].	batch size downstream mismatch

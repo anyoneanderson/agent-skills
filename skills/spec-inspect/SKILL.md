@@ -59,27 +59,26 @@ coding_rules = Read("docs/coding-rules.md") or None
 # Also check CLAUDE.md / AGENTS.md for alternative path
 ```
 
-Detect the specification language, resolve `spec-writing` by name from the currently available skills, and read its complete `SKILL.md` plus the matching `references/abstract-verbs.md` or `references/abstract-verbs.ja.md` once as the primary vocabulary source. Read [abstract-process-check.md](references/abstract-process-check.md) or [abstract-process-check.ja.md](references/abstract-process-check.ja.md) for the same language. If the skill, vocabulary, required columns, or IDs cannot be read, follow that reference's vocabulary-error procedure without inferring a pattern list; Checks 1 through 17 must continue.
+Detect the specification language, resolve `spec-writing` by name from the currently available skills, and read its complete `SKILL.md` plus the matching `references/abstract-verbs.md` or `references/abstract-verbs.ja.md` once as the primary vocabulary source. Read the matching [abstract-process-check.md](references/abstract-process-check.md) and [projection-consistency-check.md](references/projection-consistency-check.md) references (`*.ja.md` for Japanese), and run both checks in Step 3. If the skill, vocabulary, required columns, or IDs cannot be read, follow the abstract-process reference's vocabulary-error procedure without inferring a pattern list; all other checks must continue.
 
 ### Step 3: Run Quality Checks
 
 Execute the following checks sequentially. Add detected issues to an issues list.
 
 #### Check 1: Requirement ID Consistency [CRITICAL]
-**Purpose**: Verify that requirement IDs defined in requirement.md are correctly referenced in design.md and tasks.md.
+**Purpose**: Verify that requirement IDs defined in requirement.md are correctly referenced in design.md, tasks.md, and test.md when present.
 
 **Procedure**:
 1. Extract requirement IDs from requirement.md (regex: `\[(REQ|NFR|CON|ASM|T)-\d{3,}\]`)
-2. Extract referenced requirement IDs from design.md
-3. Extract referenced requirement IDs from tasks.md
+2. Extract referenced requirement IDs from design.md, tasks.md, and test.md when present
 
 **Detection patterns**:
 
-- **[CRITICAL]** ID referenced in design.md or tasks.md but not defined in requirement.md
+- **[CRITICAL]** ID referenced in design.md, tasks.md, or test.md but not defined in requirement.md
   ```
   ID: CRITICAL-{seq}
   Title: "Requirement ID {req_id} does not exist"
-  File: design.md or tasks.md
+  File: design.md, tasks.md, or test.md
   Line: {line_number}
   Description: "{req_id} is referenced in {file} but not defined in requirement.md"
   Suggestion: "Add {req_id} to requirement.md or fix the reference"
@@ -403,6 +402,9 @@ to *read* is untracked, or is a symlink that git tree resolution will not follow
 **Procedure**: Run the selected abstract-process-check reference with the selected `spec-writing` vocabulary. Keep the vocabulary's Pattern list in `spec-writing` only.
 
 **Output**: `WARNING-{seq}` with file, line, missing process elements, a concrete rewrite, and the matching `AV-*` source rule.
+
+#### Check 19: Projection Consistency [WARNING]
+**Procedure**: Run the selected `projection-consistency-check*.md`; use its finding contract.
 
 ### Step 4: Generate Summary
 
