@@ -140,9 +140,9 @@ host_runtime="$(jq -r .host_runtime "$state")"
 
 Write atomically (never edit in place — write a temp file then move):
 ```bash
-jq '.phase = "inspect"
-    | .completed_phases += ["spec_generate"]
-    | .ts_updated = (now | todate)' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+jq --arg host "$host_runtime" \
+   '.host_runtime = $host | .ts_updated = (now | todate)' \
+   "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 ```
 
 Append a review round:
@@ -150,6 +150,46 @@ Append a review round:
 jq --argjson r '{"round":1,"critical":3,"improvement":2,"minor":1,"fix_required":2,"fingerprints":[],"class_keys":[],"gate":"FAIL"}' \
    '.rounds.spec_review += [$r]' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 ```
+
+<!-- phase-completion-state-write:start -->
+### Phase completion state-write checklist
+
+Apply this checklist whenever a transition finishes a phase. Implementation is
+not the only phase that may complete a task.
+
+1. Determine the finished phase and the next phase before writing state.
+2. Re-read `tasks.md` and derive `implement.tasks_done` only from checked
+   canonical task rows. Preserve the complete id with
+   `T[0-9]+[a-z]?(-[A-Za-z0-9]+)?`, remove duplicates, and never retain an id
+   that is absent or unchecked in `tasks.md`.
+3. In one atomic `jq` update, set `.phase`, append the finished phase to
+   `.completed_phases` only when absent, and replace `implement.tasks_done` with
+   the derived array. Apply the same refresh when a phase other than
+   `implement` checks a task.
+4. Refresh the run-marker timestamp after the state write.
+5. Immediately run `references/scripts/pipeline-state-check.sh <spec-dir>`.
+   A non-zero exit blocks the transition: reconcile the drift and obtain a
+   clean check before dispatching the next phase.
+
+Example completion write after deriving `tasks_done_json` from the checked
+canonical rows (`tasks_done_json` must be the valid JSON array `[]` when no task
+is checked):
+
+```bash
+jq --arg finished "$finished_phase" --arg next "$next_phase" \
+   --argjson tasks_done "$tasks_done_json" '
+  .phase = $next
+  | .completed_phases = ((.completed_phases // []) |
+      if index($finished) then . else . + [$finished] end)
+  | .implement = ((.implement // {}) | .tasks_done = $tasks_done)
+  | .ts_updated = (now | todate)
+' "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+jq '.ts = (now | todate)' .specs/.orchestrate-active.json \
+  > .specs/.orchestrate-active.json.tmp \
+  && mv .specs/.orchestrate-active.json.tmp .specs/.orchestrate-active.json
+bash references/scripts/pipeline-state-check.sh "$spec_dir"
+```
+<!-- phase-completion-state-write:end -->
 
 Reading a role value from `pipeline.yml` without a YAML parser (awk idiom for the
 flat `roles:` block):
@@ -211,8 +251,9 @@ file against evidence it cannot fake: the canonical phase order vs
 `completed_phases` (a later phase with unrecorded predecessors means a phase ran
 without its state update; a draft-PR landing recorded in `arbitrations` with
 `decision: "draft"` exempts the approval/implement/evaluate legs), `tasks.md`
-checkboxes vs `implement.tasks_done` (both directions, using the complete task-id
-grammar `T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` without truncation), run-record files
+checkboxes vs `implement.tasks_done` (both directions, rejecting duplicate state
+entries, and using the complete task-id grammar
+`T[0-9]+[a-z]?(-[A-Za-z0-9]+)?` without truncation), run-record files
 (`retrospective.md`, `evaluate-*`) vs the recorded phase, and — when `gh` is
 available — an existing PR for the current branch vs a state that has not
 reached `pr`. Exit 0 is consistent; exit 1 prints one `DRIFT:` line per finding.

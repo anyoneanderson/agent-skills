@@ -93,19 +93,31 @@ fi
 
 # --- tasks.md checkboxes vs implement.tasks_done -----------------------------
 # Task ids are T-prefixed and may carry a lowercase or hyphenated suffix
-# (T000, T012b, T002-R, ...). Compare complete ids in both directions.
+# (T000, T012b, T002-R, ...). Compare complete ids in both directions and
+# reject duplicate state entries: tasks_done is a projection, not an event log.
 TASK_ID_PATTERN='T[0-9]+[a-z]?(-[A-Za-z0-9]+)?' # task-id-contract
 if [ -f "$SPEC_DIR/tasks.md" ] && jq -e '.implement.tasks_done' "$STATE" >/dev/null 2>&1; then
-  checked="$(
-    sed -nE \
-      "s/^[[:space:]]*[-*][[:space:]]+\[[xX]\][[:space:]]+($TASK_ID_PATTERN)([^A-Za-z0-9-]|$).*/\1/p" \
-      "$SPEC_DIR/tasks.md" | LC_ALL=C sort -u
-  )"
-  recorded="$(jq -r '.implement.tasks_done[]' "$STATE" | LC_ALL=C sort -u)"
-  only_checked="$(LC_ALL=C comm -23 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
-  only_recorded="$(LC_ALL=C comm -13 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
-  [ -n "${only_checked// /}" ] && report "tasks checked in tasks.md but missing from state.implement.tasks_done: $only_checked"
-  [ -n "${only_recorded// /}" ] && report "tasks in state.implement.tasks_done but unchecked in tasks.md: $only_recorded"
+  if ! jq -e --arg pattern "^${TASK_ID_PATTERN}$" '
+    .implement.tasks_done
+    | (type == "array") and all(.[];
+        if type == "string" then test($pattern) else false end)
+  ' "$STATE" >/dev/null 2>&1; then
+    report "implement.tasks_done must be an array of complete canonical task ids: $(jq -c '.implement.tasks_done' "$STATE")"
+  else
+    checked="$(
+      sed -nE \
+        "s/^[[:space:]]*[-*][[:space:]]+\[[xX]\][[:space:]]+($TASK_ID_PATTERN)([^A-Za-z0-9-]|$).*/\1/p" \
+        "$SPEC_DIR/tasks.md" | LC_ALL=C sort -u
+    )"
+    recorded_raw="$(jq -r '.implement.tasks_done[]' "$STATE")"
+    recorded_duplicates="$(printf '%s\n' "$recorded_raw" | sed '/^$/d' | LC_ALL=C sort | uniq -d | tr '\n' ' ')"
+    recorded="$(printf '%s\n' "$recorded_raw" | sed '/^$/d' | LC_ALL=C sort -u)"
+    only_checked="$(LC_ALL=C comm -23 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
+    only_recorded="$(LC_ALL=C comm -13 <(printf '%s\n' $checked) <(printf '%s\n' $recorded) 2>/dev/null | tr '\n' ' ')"
+    [ -n "${recorded_duplicates// /}" ] && report "duplicate ids in state.implement.tasks_done: $recorded_duplicates"
+    [ -n "${only_checked// /}" ] && report "tasks checked in tasks.md but missing from state.implement.tasks_done: $only_checked"
+    [ -n "${only_recorded// /}" ] && report "tasks in state.implement.tasks_done but unchecked in tasks.md: $only_recorded"
+  fi
 fi
 
 # --- run-record files vs phase progression -----------------------------------

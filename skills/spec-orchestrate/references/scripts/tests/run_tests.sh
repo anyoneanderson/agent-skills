@@ -9,6 +9,7 @@ SKILLS_DIR="$(cd "$ORCHESTRATE_DIR/.." && pwd)"
 FIXTURE="$TEST_DIR/fixtures/dispatch-matrix.tsv"
 REVIEW_FIXTURE="$TEST_DIR/fixtures/review-fallback.tsv"
 SPEC_REVIEW_RECOVERY_FIXTURE="$TEST_DIR/fixtures/spec-review-env-error-contract.tsv"
+STATE_WRITE_FIXTURE="$TEST_DIR/fixtures/phase-completion-state-write.tsv"
 TASK_ID_FIXTURE="$TEST_DIR/fixtures/task-id-cases.tsv"
 ROLE_DISPATCH="$REFERENCE_DIR/role-dispatch.md"
 ROLE_DISPATCH_JA="$REFERENCE_DIR/role-dispatch.ja.md"
@@ -138,6 +139,56 @@ assert_spec_review_recovery_mutations_rejected() {
   done < "$SPEC_REVIEW_RECOVERY_FIXTURE"
 }
 
+extract_phase_completion_state_write_contract() {
+  awk '
+    /<!-- phase-completion-state-write:start -->/ { inside=1; next }
+    /<!-- phase-completion-state-write:end -->/ { inside=0 }
+    inside { print }
+  ' "$1"
+}
+
+validate_phase_completion_state_write_contract() {
+  local file="$1" language="$2" field contract_id en_token ja_token token section
+
+  [ "$(grep -c '<!-- phase-completion-state-write:start -->' "$file")" -eq 1 ] || return 1
+  [ "$(grep -c '<!-- phase-completion-state-write:end -->' "$file")" -eq 1 ] || return 1
+  section="$(extract_phase_completion_state_write_contract "$file")"
+  [ -n "$section" ] || return 1
+
+  case "$language" in
+    en) field=2 ;;
+    ja) field=3 ;;
+    *) return 1 ;;
+  esac
+
+  while IFS=$'\t' read -r contract_id en_token ja_token; do
+    [ "$contract_id" = contract_id ] && continue
+    if [ "$field" -eq 2 ]; then token="$en_token"; else token="$ja_token"; fi
+    printf '%s\n' "$section" | grep -Fq -- "$token" || return 1
+  done < "$STATE_WRITE_FIXTURE"
+}
+
+assert_phase_completion_state_write_mutations_rejected() {
+  local file="$1" language="$2" field contract_id en_token ja_token token mutant
+
+  case "$language" in
+    en) field=2 ;;
+    ja) field=3 ;;
+    *) return 1 ;;
+  esac
+
+  while IFS=$'\t' read -r contract_id en_token ja_token; do
+    [ "$contract_id" = contract_id ] && continue
+    if [ "$field" -eq 2 ]; then token="$en_token"; else token="$ja_token"; fi
+    mutant="$tmp/phase-completion-state-write-$language-$contract_id.md"
+    awk -v token="$token" 'index($0, token) == 0 { print }' "$file" > "$mutant"
+    if validate_phase_completion_state_write_contract "$mutant" "$language"; then
+      printf 'SURVIVED_MUTATION\t%s\t%s\n' "$language" "$contract_id" >&2
+      return 1
+    fi
+  done < "$STATE_WRITE_FIXTURE"
+}
+
 write_task_id_state() {
   local spec_dir="$1" checked_ids="$2" recorded_ids="$3" task_text="$4" tasks_done
 
@@ -147,8 +198,12 @@ write_task_id_state() {
       printf -- '- [x] %s: %s\n' "$task_id" "$task_text"
     fi
   done > "$spec_dir/tasks.md"
-  tasks_done="$(jq -Rn --arg ids "$recorded_ids" \
-    '$ids | if length == 0 or . == "-" then [] else split(",") end')"
+  if [ "$recorded_ids" = "<empty-id>" ]; then
+    tasks_done='[""]'
+  else
+    tasks_done="$(jq -Rn --arg ids "$recorded_ids" \
+      '$ids | if length == 0 or . == "-" then [] else split(",") end')"
+  fi
   jq -n --argjson tasks_done "$tasks_done" '{
     feature: "task-id-fixture",
     mode: "auto",
@@ -283,6 +338,16 @@ assert_spec_review_recovery_mutations_rejected "$SPEC_REVIEW_PHASE_JA" ja ||
   fail "Japanese spec_review recovery validator accepted a contract mutation"
 printf 'PASS\tcontract\tspec_review env_error artifact recovery\n'
 
+validate_phase_completion_state_write_contract "$PIPELINE_CONFIG" en ||
+  fail "English phase completion state-write contract is incomplete"
+validate_phase_completion_state_write_contract "$PIPELINE_CONFIG_JA" ja ||
+  fail "Japanese phase completion state-write contract is incomplete"
+assert_phase_completion_state_write_mutations_rejected "$PIPELINE_CONFIG" en ||
+  fail "English phase completion state-write validator accepted a contract mutation"
+assert_phase_completion_state_write_mutations_rejected "$PIPELINE_CONFIG_JA" ja ||
+  fail "Japanese phase completion state-write validator accepted a contract mutation"
+printf 'PASS\tcontract\tphase completion state write\n'
+
 grep -Fq "TASK_ID_PATTERN='$TASK_ID_GRAMMAR'" "$STATE_CHECK" ||
   fail "state checker task id grammar differs from the tracked contract"
 for task_id_contract in \
@@ -293,7 +358,8 @@ done
 printf 'PASS\tcontract\ttask id grammar in checker and bilingual docs\n'
 
 for fixture_file in \
-  "$FIXTURE" "$REVIEW_FIXTURE" "$SPEC_REVIEW_RECOVERY_FIXTURE" "$TASK_ID_FIXTURE"; do
+  "$FIXTURE" "$REVIEW_FIXTURE" "$SPEC_REVIEW_RECOVERY_FIXTURE" \
+  "$STATE_WRITE_FIXTURE" "$TASK_ID_FIXTURE"; do
   last_byte="$(tail -c 1 "$fixture_file" | od -An -t u1 | tr -d '[:space:]')"
   [ "$last_byte" = 10 ] || fail "$fixture_file must end with a newline"
 done
