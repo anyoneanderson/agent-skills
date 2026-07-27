@@ -73,11 +73,15 @@ of this skill — see `references/sages.md` to swap one out.
 Two rules govern everything that follows.
 
 **You do not vote (CON-001).** You have no position in the tally, even when you
-believe all three sages are wrong. Your opinions belong nowhere in the matrix.
-If you think the council reached a poor conclusion, you may add a clearly
-labelled note after the matrix — never a vote, and never an edit to what a sage
-said. Do not write a sage's answer for it, complete a truncated one, or
-"correct" a rationale.
+believe all three sages are wrong. Your opinions belong nowhere in the output —
+not in the tally, not in the matrix, not in a note beside it. When you think the
+council reached a poor conclusion, the only thing you may add is a note about the
+council's own workings: how many sages answered, which round produced the result,
+what a sage stated it was unsure of, that a claim rests on training data. Such a
+note carries no recommendation of your own, stated or implied; if it would steer
+the user toward a different choice, it is a vote wearing a different hat, and it
+does not belong in the output. Never alter what a sage said: do not write a
+sage's answer for it, complete a truncated one, or "correct" a rationale.
 
 **You make the semantic judgements; the script does not (CON-002).** Deciding
 whether two differently worded positions mean the same thing, whether two
@@ -127,8 +131,12 @@ When it is genuinely ambiguous, do not guess. Ask with bilingual options:
 preflight="$("$magi_run" --out-dir "$out_dir" --preflight-only | tail -1)"
 ```
 
-Read the file it names: `available_count` and `missing`. If any sage is missing,
-go to [Degraded Council](#degraded-council) before dispatching anything.
+Read the file it names and branch on **`available_count`**, not on `missing`. A
+config that lists only two sages leaves `missing` empty and still gives you a
+two-sage council, so an empty `missing` is not evidence that the council is
+complete. Fewer than three available sages means
+[Degraded Council](#degraded-council): confirm with the user before dispatching
+anything.
 
 ### Step 4: Round 1 — ask all three, independently
 
@@ -145,7 +153,14 @@ Required answer shapes (full templates in `references/council.md`):
 | decision, round 1 | `{"position": "...", "rationale": "...", "confidence": "high\|medium\|low"}` |
 | decision, debate | `{"action": "keep\|switch\|compromise", "position": "...", "rationale": "...", "confidence": "..."}` |
 | research, round 1 | `{"findings": [{"claim": "...", "evidence": "...", "source": "..."}]}` |
-| research, deliberation | `{"verdict": "agree\|conditional\|reject", "rationale": "..."}` |
+| research, deliberation | `{"verdicts": [{"finding_id": "...", "verdict": "agree\|conditional\|reject", "rationale": "..."}]}` |
+
+Deliberation always uses the batched shape above, because one prompt normally
+carries several findings and the `finding_id` is what ties a verdict back to the
+claim it judges. The single-object form
+`{"verdict": "...", "rationale": "..."}` is acceptable only when that sage's
+prompt holds exactly one finding. A schema passed with `--schema-file` must be
+the batched one for the same reason.
 
 Optionally write the matching JSON schema to `${out_dir}/schema.json` and pass
 `--schema-file`. Sages that declare `schema_args` (CASPER by default) are then
@@ -240,19 +255,25 @@ Only when all sages hold different positions.
    not two findings.
 3. **Two or more sages → adopted.** Record the support count and keep each
    sage's evidence and source.
-4. **One sage only → deliberation.** Write a prompt naming the claim, its
-   evidence and its source, and ask the other sages to return
-   `agree` / `conditional` / `reject` with a rationale. Send it to the other
-   sages only:
+4. **One sage only → deliberation.** Assign each solo finding an id, then write
+   **one prompt per sage** to `${out_dir}/deliberation1/prompt-<SAGE>.md`
+   containing only the findings that sage did **not** report, each with its claim,
+   evidence, source and id. Ask for `agree` / `conditional` / `reject` with a
+   rationale per finding.
+
+   Per-sage prompts are what keep a sage from reviewing its own claim. A single
+   shared prompt cannot: as soon as two sages each have a solo finding, that
+   prompt either asks each of them to judge its own finding or omits a review
+   that was needed. Dispatch all of them in one parallel run — with per-sage
+   prompt files, `--prompt-file` is not used:
 
    ```bash
-   summary="$("$magi_run" \
-     --prompt-file "${out_dir}/deliberation1/prompt.md" \
-     --out-dir "$out_dir" --round deliberation1 --sages BALTHASAR,CASPER | tail -1)"
+   summary="$("$magi_run" --out-dir "$out_dir" --round deliberation1 | tail -1)"
+   # A sage with nothing to review has no prompt file, so exclude it with
+   # --sages; the script refuses to dispatch a sage it has no prompt for.
    ```
 
-   Batch every solo finding of a given sage into that one prompt, asking for one
-   verdict object per finding tagged with the finding id you assigned. There is
+   Batch every finding a sage must review into that sage's prompt. There is
    **one deliberation pass**, so a second circulation is not available.
 
 5. Classify each solo finding from the verdicts:
@@ -263,6 +284,7 @@ Only when all sages hold different positions.
    | `agree` + `conditional`, or both `conditional` | conditionally adopted, note the conditions |
    | both `reject` | rejected |
    | `agree` + `reject` | conditionally adopted, note that the council split and quote both sides |
+   | `conditional` + `reject` | conditionally adopted, note the condition and the rejection side by side |
 
    A sage that fails to answer the deliberation does not veto: classify on the
    verdicts you have, and record the missing one. With a single verdict (degraded
@@ -283,7 +305,10 @@ Every answer ends with a matrix. Full templates are in
   research a one-paragraph summary of the merged report.
 - **One row per sage**, in configuration order, showing the display name with
   its actual CLI (`MELCHIOR (claude)`), the position, the gist of the rationale,
-  the confidence, and what the debate changed (`kept`, `switched → …`, `—`).
+  the confidence, and what the debate changed. The debate column is part of the
+  matrix even when the vote passed in round 1: fill it with `not held` rather
+  than removing it, so the reader can tell a council that never debated from one
+  whose debate you did not report.
 - **The minority opinion, always.** Name the sage, state its position and
   rationale, and say plainly that it lost the vote but is recorded. A council
   whose dissent is not written down is a single model with extra steps.
@@ -299,33 +324,52 @@ what each sage claimed. That breakdown is what makes the failed vote useful.
 
 ## Degraded Council
 
-### Missing CLI, found before dispatch
+### Fewer than three sages, found before dispatch
 
-`preflight.json` reports `missing` and `available_count`.
+`preflight.json` reports `available_count` (sages whose CLI was found), `missing`
+(CLIs that were not) and `sages_file` (the config actually read). Branch on
+`available_count` alone. A council can be short for two different reasons, and
+only one of them shows up in `missing`: a CLI is not installed, or the config
+lists fewer than three sages in the first place.
 
 **`available_count` ≥ 3** — proceed normally.
 
-**`available_count` == 2** — show which sage is missing and the install command
-from `references/sages.md`, then ask:
+**`available_count` == 2** — confirm before dispatching, and say which reason
+applies: name the missing CLI with its install command from
+`references/sages.md`, or name `sages_file` as a config with only two sages. Then
+ask:
 
-- question: "MELCHIOR (claude) is not installed. Continue with two sages?" / "MELCHIOR (claude) が未導入です。2体で続行しますか？"
+- question: "Only two sages are available. Continue with a two-sage council?" / "利用できる賢者が2体だけです。2体で合議を続けますか？"
 - options:
-  - "Continue with two" / "2体で続行" — two-sage rules: 2-0 passes, 1-1 gets one debate round
-  - "Abort" / "中止" — stop now; install the missing CLI and re-run
+  - "Continue with two" / "2体で続行" — two-sage rules below: 2-0 passes, a 1-1 split gets one debate round
+  - "Abort" / "中止" — stop now; install the missing CLI or fix the config, then re-run
 
-On "Continue with two", pass `--sages` listing exactly the available sages. The
+Ask this question on both paths. A two-sage roster produces a two-sage verdict
+whether or not anything was missing, and the user is entitled to know the vote
+they are about to receive comes from two models.
+
+When a CLI is missing, pass `--sages` listing exactly the available sages: the
 script refuses to dispatch a round while any selected sage's CLI is missing, so
-narrowing the selection is required, not optional.
+narrowing the selection is required, not optional. When the roster itself holds
+two sages, the default selection is already those two and `--sages` is
+unnecessary.
 
 **`available_count` ≤ 1** — do not dispatch. A single model is not a council.
-Report which CLIs are missing, give the install and login commands, and stop.
+Report which CLIs are missing or how the config is short, give the install and
+login commands, and stop.
 
 ### Two-sage rules
 
+These apply however the council became two — a missing CLI, a roster of two, or a
+sage lost mid-round.
+
 - decision: agreement 2-0 passes. A 1-1 split gets **one** debate round
-  (`debate1`); if the positions still differ, it is no consensus.
+  (`debate1`), never two; if the positions still differ after it, the result is
+  no consensus and goes back to the user.
 - research: two sages reporting the same fact → adopted. A solo finding
-  circulates to the one remaining sage (still a single pass).
+  circulates to the one remaining sage (still a single pass), and that single
+  verdict decides it: `agree` → adopted, `conditional` → conditionally adopted,
+  `reject` → rejected.
 
 ### Failure during the round
 
@@ -347,14 +391,14 @@ audit log, and stop.
 |---|---|
 | Question may contain confidential material | Show the configured sages and confirm external transmission before dispatching |
 | `jq` missing | Script exits 2 and records `jq_available: false`; report the install command and stop |
-| One sage's CLI missing | Ask "continue with two / abort" (bilingual) |
-| Two or more CLIs missing | Stop; report install and login commands |
+| `available_count` is 2 (a CLI is missing, or the config lists only two sages) | Ask "continue with two / abort" (bilingual) before dispatching |
+| `available_count` is 0 or 1 | Stop; report install and login commands, or the short config |
 | Script exits 2 | A precondition failed and nothing was sent; read its stderr, fix the cause, then dispatch again |
 | `status: timeout` | Sage exceeded `timeout_seconds` (default 600). Continue degraded, record `no answer (timeout)` |
 | `status: error` | Sage failed or printed an unusable envelope; check its `stderr_file`. Quota exhaustion arrives this way |
 | Answer is not valid JSON after fence stripping | Treat as invalid answer; degrade, never rewrite it |
 | Fewer than two usable answers | Do not tally; present what arrived plus failure reasons and stop |
-| Debate exhausted (2 rounds, no majority) | Report no consensus with the disagreement breakdown; do not decide for the user |
+| Debate exhausted (two rounds with three sages, one with two) | Report no consensus with the disagreement breakdown, stating how many rounds ran; do not decide for the user |
 | Config declares more than three sages | Script exits 2; the tally rules support three at most |
 | Sage asks a clarifying question instead of answering | Treat as invalid answer for this round; if two or more do it, stop and sharpen the question with the user |
 
@@ -373,9 +417,9 @@ mkdir -p "${out_dir}/round1"
 # ... write debate1/prompt-MELCHIOR.md, prompt-BALTHASAR.md, prompt-CASPER.md ...
 "$magi_run" --out-dir "$out_dir" --round debate1
 
-# Deliberation on a solo finding: only the other two sages
-"$magi_run" --prompt-file "${out_dir}/deliberation1/prompt.md" \
-  --out-dir "$out_dir" --round deliberation1 --sages BALTHASAR,CASPER
+# Deliberation: per-sage prompts holding only the findings that sage did not report
+# ... write deliberation1/prompt-BALTHASAR.md, prompt-CASPER.md ...
+"$magi_run" --out-dir "$out_dir" --round deliberation1 --sages BALTHASAR,CASPER
 
 # Degraded council: dispatch to the sages that exist
 "$magi_run" --prompt-file "${out_dir}/round1/prompt.md" \

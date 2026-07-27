@@ -34,6 +34,12 @@ Three is the maximum. The tally rules in `SKILL.md` are built on three (or two
 degraded), so a config with four sages exits 2 instead of silently changing how
 votes are counted.
 
+A roster of two is accepted, and it is a degraded council even though nothing is
+missing: `preflight.json` reports `available_count: 2` with an empty `missing`.
+The host confirms with the user before dispatching and applies the two-sage
+rules — 2-0 passes, a 1-1 split gets a single debate round. A roster of one is
+rejected by the host at that point, since a single model is not a council.
+
 ## Per-sage fields
 
 | Field | Required | Meaning |

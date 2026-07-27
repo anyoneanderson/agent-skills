@@ -12,7 +12,9 @@ to the user — the Japanese versions of these templates are in
 - `{{DOUBLE_BRACES}}` marks a slot the host fills in. No brace survives into a
   prompt file.
 - One prompt file per dispatch, saved under the run directory:
-  `round1/prompt.md`, `debate1/prompt-<SAGE>.md`, `deliberation1/prompt.md`.
+  `round1/prompt.md`, `debate1/prompt-<SAGE>.md`,
+  `deliberation1/prompt-<SAGE>.md`. Round 1 sends the same file to every sage;
+  debate and deliberation send a different file to each.
 - Every template ends with the answer-format instruction. Keep it last: it is
   the part a sage is most likely to skip when it is buried mid-prompt.
 - Never name the other sages, their vendors or their models in any prompt. Round
@@ -161,8 +163,20 @@ code fence.
 
 ## 4. Research, deliberation — reviewing a solo finding
 
-Sent to the sages that did **not** report the finding. One pass only, so batch
-every solo finding of the round into this single prompt.
+One prompt **per sage**, written to `deliberation1/prompt-<SAGE>.md` and holding
+only the solo findings that sage did **not** report. All of them go out in a
+single parallel dispatch.
+
+Do not send one shared prompt to everyone. When two sages each reported a solo
+finding, a shared prompt either asks a sage to review its own claim — which is
+not review — or leaves out a finding that needed one. Filtering per recipient is
+the only arrangement where every finding is judged exactly by the sages that did
+not report it.
+
+There is one pass, so batch every finding a given sage must review into that
+sage's prompt. A sage with nothing to review gets no prompt file and must be left
+out of `--sages`, because the script refuses to dispatch a sage it has no prompt
+for.
 
 ```text
 You are reviewing claims that another researcher reported and you did not. For
@@ -202,8 +216,9 @@ code fence.
 {"verdicts": [{"finding_id": "<the id above>", "verdict": "agree|conditional|reject", "rationale": "<why, max 3 sentences; state the condition when conditional>"}]}
 ```
 
-When exactly one solo finding is under review, the single-verdict form is
-equivalent and simpler:
+The batched shape is the default: `finding_id` is what ties each verdict back to
+the claim it judges. Only when a sage's own prompt holds exactly one finding is
+the single-verdict form equivalent:
 
 ```text
 {"verdict": "agree|conditional|reject", "rationale": "<why, max 3 sentences>"}
@@ -313,8 +328,11 @@ recorded here because the reason it lost may still apply to your situation.)
 **Audit log**: {{OUT_DIR}} holds every prompt sent and every raw answer received.
 ```
 
-- The `After debate` column reads `—` when no debate was held; drop the column
-  entirely if the vote passed in round 1.
+- The `After debate` column stays in the table even when the vote passed in round
+  1 without a debate. Fill every cell with `not held` in that case, and use `—`
+  only for a sage that has no movement to report in a debate that did happen.
+  Removing the column leaves the reader unable to tell "no debate took place"
+  from "the debate is missing from this report".
 - A sage that could not answer keeps its row:
   `| CASPER (grok) | no answer (timeout) | — | — | — |`. The reason in the
   parentheses is one of `timeout`, `error`, `invalid answer`.
@@ -326,14 +344,14 @@ recorded here because the reason it lost may still apply to your situation.)
 ```markdown
 ## Council result: no consensus — returned to you
 
-Two debate rounds did not produce a position with two supporters. The decision
+{{ROUNDS_HELD}} did not produce a position with two supporters. The decision
 is yours; below is what the council established.
 
 | Sage | Final position | Rationale (gist) | Confidence | Movement |
 |---|---|---|---|---|
-| MELCHIOR (claude) | {{POSITION}} | {{GIST}} | high | kept through both rounds |
-| BALTHASAR (codex) | {{POSITION}} | {{GIST}} | medium | compromise in debate2 |
-| CASPER (grok) | {{POSITION}} | {{GIST}} | low | switched in debate1, then back |
+| MELCHIOR (claude) | {{POSITION}} | {{GIST}} | high | {{MOVEMENT}} |
+| BALTHASAR (codex) | {{POSITION}} | {{GIST}} | medium | {{MOVEMENT}} |
+| CASPER (grok) | {{POSITION}} | {{GIST}} | low | {{MOVEMENT}} |
 
 ### What they actually disagree about
 
@@ -352,8 +370,21 @@ what the sages themselves said they were unsure of, not from your own opinion.}}
 **Audit log**: {{OUT_DIR}} holds every prompt sent and every raw answer received.
 ```
 
+Fill `{{ROUNDS_HELD}}` with the number of debate rounds that actually ran, and
+write the `Movement` column from the rounds that happened:
+
+| Council | `{{ROUNDS_HELD}}` | Movement examples |
+|---|---|---|
+| three sages, `debate1` + `debate2` | `Two debate rounds` | `kept through both rounds`, `compromise in debate2`, `switched in debate1, then back` |
+| two sages, `debate1` only | `One debate round` | `kept`, `switched → {{POSITION}}`, `compromise` |
+
+A two-sage council gets one debate round and no more, so "two debate rounds" in
+that report would be a claim the audit log contradicts. Its table has two rows,
+and `debate2` is never mentioned in it.
+
 The disagreement breakdown is the deliverable here. A no-consensus result that
-only lists three positions has told the user nothing they did not already fear.
+only lists the final positions has told the user nothing they did not already
+fear.
 
 ## 8. Output template — research report
 
@@ -375,6 +406,7 @@ only lists three positions has told the user nothing they did not already fear.
 |---|---|---|---|
 | {{CLAIM}} | CASPER | BALTHASAR: conditional, MELCHIOR: agree | {{CONDITION}} |
 | {{CLAIM}} | MELCHIOR | BALTHASAR: agree, CASPER: reject | Council split: {{BOTH SIDES}} |
+| {{CLAIM}} | BALTHASAR | MELCHIOR: conditional, CASPER: reject | {{CONDITION}}, and the rejection: {{REASON}} |
 
 ### Rejected ({{N}} findings)
 
