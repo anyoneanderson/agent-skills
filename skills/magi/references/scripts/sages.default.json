@@ -1,0 +1,27 @@
+{
+  "timeout_seconds": 600,
+  "sages": [
+    {
+      "name": "MELCHIOR",
+      "cli": "claude",
+      "command": ["claude", "-p", "{PROMPT}", "--output-format", "json"],
+      "extract": ".result",
+      "notes": "Claude Code headless. .result holds the final text."
+    },
+    {
+      "name": "BALTHASAR",
+      "cli": "codex",
+      "command": ["codex", "exec", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "{PROMPT}"],
+      "extract": "answer-file",
+      "notes": "Codex exec writes the final message to ANSWER_FILE. read-only sandbox: an opinion never needs to write files."
+    },
+    {
+      "name": "CASPER",
+      "cli": "grok",
+      "command": ["grok", "-p", "{PROMPT}", "--output-format", "json"],
+      "extract": ".text",
+      "schema_args": ["--json-schema", "{SCHEMA}"],
+      "notes": "Grok Build headless. schema_args is appended when the host supplies a schema."
+    }
+  ]
+}
