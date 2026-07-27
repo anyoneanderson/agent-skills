@@ -23,6 +23,11 @@
 #                             {MAGI_SCRIPTS_DIR}, as the default codex adapter
 #                             does to reach its wrapper (fixtures/fake-sage.sh)
 #
+# The last three cases test codex-sage.sh instead of magi-run.sh, with
+# fixtures/fake-codex.sh copied to <case>/bin/codex and put first on PATH. They
+# assert the arguments that reach `codex exec`, because that is where the MCP
+# blocking either happens or silently does not.
+#
 # Keep fixture timeouts small: a bug that hangs a sage should cost this suite
 # seconds, not the ten minutes the real council allows.
 #
@@ -38,6 +43,7 @@ set -euo pipefail
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="$(cd "$TEST_DIR/.." && pwd)"
 SCRIPT="$SCRIPT_DIR/magi-run.sh"
+CODEX_WRAPPER="$SCRIPT_DIR/codex-sage.sh"
 BUNDLED_SAGES="$SCRIPT_DIR/sages.default.json"
 FIXTURES="$TEST_DIR/fixtures"
 
@@ -244,17 +250,17 @@ case_sources_parse() {
   fi
   # The codex wrapper ships beside magi-run.sh and the default config points at
   # it, so a syntax error there breaks a default sage.
-  bash -n "$SCRIPT_DIR/codex-sage.sh" 2>>"$CASE_LOG" ||
+  bash -n "$CODEX_WRAPPER" 2>>"$CASE_LOG" ||
     note_failure "codex-sage.sh has a syntax error"
   if [ -x /bin/bash ]; then
-    /bin/bash -n "$SCRIPT_DIR/codex-sage.sh" 2>>"$CASE_LOG" ||
+    /bin/bash -n "$CODEX_WRAPPER" 2>>"$CASE_LOG" ||
       note_failure "codex-sage.sh does not parse under /bin/bash"
   fi
   for fixture in "$FIXTURES"/sages-*.json; do
     jq -e . "$fixture" >/dev/null 2>&1 || note_failure "fixture is not valid JSON: $fixture"
   done
   expect_file "$BUNDLED_SAGES" "bundled sage config"
-  expect_file "$SCRIPT_DIR/codex-sage.sh" "bundled codex wrapper"
+  expect_file "$CODEX_WRAPPER" "bundled codex wrapper"
   end_case
 }
 
@@ -725,6 +731,108 @@ case_scripts_dir_placeholder() {
   end_case
 }
 
+# --- the codex wrapper -----------------------------------------------------
+
+# Per-invocation settings for the fake codex, cleared by run_codex_wrapper the
+# same way RUN_CONFIG is.
+WRAP_LIST_FILE=""  # JSON body the fake prints for `mcp list` ("" means [])
+WRAP_LIST_RC=0     # exit code the fake returns for `mcp list`
+WRAP_RC=0
+
+# Runs codex-sage.sh with a fake `codex` first on PATH. The fake records the
+# arguments of both calls it receives, which is what these cases assert on: the
+# wrapper is only correct if the right overrides reach `codex exec`.
+run_codex_wrapper() { # <case dir> <args...>
+  local dir="$1" bin
+  shift
+  bin="${dir}/bin"
+  mkdir -p "$bin"
+  cp "${FIXTURES}/fake-codex.sh" "${bin}/codex"
+  chmod +x "${bin}/codex"
+  WRAP_RC=0
+  (
+    export PATH="${bin}:${PATH}"
+    export FAKE_CODEX_LIST_FILE="$WRAP_LIST_FILE"
+    export FAKE_CODEX_LIST_RC="$WRAP_LIST_RC"
+    export FAKE_CODEX_LIST_ARGV_FILE="${dir}/list-argv.txt"
+    export FAKE_CODEX_ARGV_FILE="${dir}/exec-argv.txt"
+    exec bash "$CODEX_WRAPPER" "$@"
+  ) > "${dir}/wrapper.out" 2> "${dir}/wrapper.err" || WRAP_RC=$?
+  WRAP_LIST_FILE=""
+  WRAP_LIST_RC=0
+}
+
+case_codex_wrapper_disables_mcp() {
+  begin_case "the codex wrapper disables every MCP server codex reports"
+  local dir argv list_argv name
+  dir="$(case_dir codex-wrapper-disable)"
+  printf '%s\n' \
+    '[{"name":"firecrawl","enabled":true},{"name":"context7","enabled":true},{"name":"notion_api","enabled":false}]' \
+    > "${dir}/servers.json"
+
+  WRAP_LIST_FILE="${dir}/servers.json"
+  run_codex_wrapper "$dir" --sandbox read-only --output-last-message "${dir}/answer.txt" -
+
+  expect_rc 0 "$WRAP_RC" "the wrapper run"
+  list_argv="$(tr '\n' ' ' < "${dir}/list-argv.txt")"
+  # Reading the roster from codex rather than from config.toml is what makes the
+  # wrapper independent of how TOML spells a server declaration.
+  expect_text_has "$list_argv" "list --json --disable plugins" "the roster comes from codex, plugins excluded"
+
+  argv="$(tr '\n' ' ' < "${dir}/exec-argv.txt")"
+  expect_text_has "$argv" "--disable plugins" "plugin-supplied servers are switched off"
+  expect_text_has "$argv" "--disable apps" "app-supplied servers are switched off"
+  # notion_api arrives already disabled and is still named: the wrapper states the
+  # end state instead of trusting the configuration it read.
+  for name in firecrawl context7 notion_api; do
+    expect_text_has "$argv" "-c mcp_servers.${name}.enabled=false" "server ${name} is disabled"
+  done
+  expect_text_has "$argv" "--sandbox read-only" "the sage's own flags are forwarded"
+  expect_text_has "$argv" "--output-last-message ${dir}/answer.txt" "the answer file is forwarded"
+  end_case
+}
+
+case_codex_wrapper_empty_roster() {
+  begin_case "the codex wrapper starts codex when no MCP server is configured"
+  local dir argv
+  dir="$(case_dir codex-wrapper-empty)"
+  printf '[]\n' > "${dir}/servers.json"
+
+  WRAP_LIST_FILE="${dir}/servers.json"
+  run_codex_wrapper "$dir" --sandbox read-only -
+
+  expect_rc 0 "$WRAP_RC" "the wrapper run with an empty roster"
+  argv="$(tr '\n' ' ' < "${dir}/exec-argv.txt")"
+  expect_text_has "$argv" "--disable plugins" "the plugin switch is still applied"
+  expect_text_lacks "$argv" "-c mcp_servers." "no per-server override is invented"
+  end_case
+}
+
+case_codex_wrapper_fails_closed() {
+  begin_case "the codex wrapper refuses to start codex when the MCP roster is unusable"
+  local dir
+  dir="$(case_dir codex-wrapper-closed)"
+
+  # An older codex-cli rejects the unknown --disable flag, which is the realistic
+  # way this call fails.
+  WRAP_LIST_RC=1
+  run_codex_wrapper "$dir" --sandbox read-only -
+  expect_rc 2 "$WRAP_RC" "a failing roster call"
+  expect_absent "${dir}/exec-argv.txt" "codex exec is never reached"
+  expect_contains "${dir}/wrapper.err" "refusing to start codex exec" "the refusal is stated"
+  expect_contains "${dir}/wrapper.err" "0.145.0" "the required codex version is named"
+
+  # A roster that arrives but cannot be read is the same situation: the set of
+  # servers to block is unknown.
+  printf 'not json at all\n' > "${dir}/servers.json"
+  WRAP_LIST_FILE="${dir}/servers.json"
+  run_codex_wrapper "$dir" --sandbox read-only -
+  expect_rc 2 "$WRAP_RC" "an unreadable roster"
+  expect_absent "${dir}/exec-argv.txt" "codex exec is still never reached"
+  expect_contains "${dir}/wrapper.err" "cannot read the MCP server list" "the reason names the roster"
+  end_case
+}
+
 case_round_label_validation() {
   begin_case "dispatch is refused when the round label contains path characters"
   local dir out
@@ -768,6 +876,9 @@ case_schema_args_omitted
 case_prompt_body_not_in_argv
 case_prompt_file_preconditions
 case_scripts_dir_placeholder
+case_codex_wrapper_disables_mcp
+case_codex_wrapper_empty_roster
+case_codex_wrapper_fails_closed
 case_round_label_validation
 
 rm -f "$CASE_LOG"

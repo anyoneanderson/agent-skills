@@ -174,11 +174,22 @@ blocked, verified 2026-07-27:
 two mechanisms, and the split is the part worth remembering:
 
 - `--disable plugins --disable apps` handles servers supplied by plugins and
-  apps. Those have no `[mcp_servers.<name>]` section of their own, and aiming
+  apps. Those cannot be switched off individually — aiming
   `-c mcp_servers.<name>.enabled=false` at one makes codex fail with
   `invalid transport` instead of disabling it.
-- `-c mcp_servers.<name>.enabled=false`, generated once per server named in
-  `config.toml` (`$CODEX_HOME` is honoured), handles the declared servers.
+- `-c mcp_servers.<name>.enabled=false`, generated once per server, handles the
+  servers the operator configured.
+
+**The list of servers comes from `codex mcp list --json --disable plugins`, not
+from reading `config.toml`.** This matters more than it sounds. TOML can declare
+the same server in several ways — a `[mcp_servers.<name>]` header, an inline table
+under `[mcp_servers]`, dotted `mcp_servers.<name>.command` keys, an indented
+header — so a hand-written parser quietly misses some of them, and a missed server
+stays enabled. Asking codex uses its own configuration loader, which also covers
+settings the wrapper never sees, such as project-level configuration and a
+relocated `$CODEX_HOME`. Passing `--disable plugins` to the list call keeps
+plugin-supplied servers out of the result, so every name it returns is one that
+`-c` can actually switch off.
 
 With codex-cli 0.145.0 this took the registered tool count from 141 down to 19
 with no MCP-backed tool left, and a question naming a tool from one of those
@@ -187,12 +198,23 @@ servers came back as "no such tool is registered".
 The adapter keeps `"cli": "codex"` while `command[0]` is the wrapper: preflight
 should report the CLI the user would have to install, which is `codex` itself.
 
-The wrapper **fails closed.** A declared server whose TOML key is not plain
-`[A-Za-z0-9_-]` — a quoted name, for instance — cannot be turned into a reliable
-`-c` override, so the wrapper exits 3 rather than starting with that server
-enabled. The sage is recorded as `no answer (error)` with the reason in
-`BALTHASAR.stderr`; rename or remove the section to convene the council. A failed
-sage is recoverable, a question sent to an undisclosed provider is not.
+**Minimum version: codex-cli 0.145.0**, the release `mcp list --json` and
+`--disable` were verified against. An older codex rejects the unknown flag, so the
+wrapper stops (see below) and BALTHASAR is recorded as no answer. The council
+degrades to two sages and the question still does not leak — but if BALTHASAR
+fails on every run, check `codex --version` first.
+
+The wrapper **fails closed** in two situations, both meaning "the set of servers
+to block is unknown":
+
+- The roster call fails, or returns something that is not an array of objects with
+  a name: exit 2. codex's own message is left on stderr next to the refusal.
+- codex reports a server whose name is not plain `[A-Za-z0-9_-]`, which cannot be
+  expressed as a dotted `-c` path: exit 3. Rename or remove that server.
+
+Either way BALTHASAR appears as `no answer (error)` with the reason in
+`BALTHASAR.stderr`, and nothing is sent. A failed sage is recoverable, a question
+sent to an undisclosed provider is not.
 
 **Swapping a sage means re-establishing this yourself.** The config validator
 checks structure, not tool permissions. For whatever CLI you seat, find its
@@ -223,6 +245,10 @@ codex login status                         # confirm
 
 For an API key instead of a browser session:
 `printenv OPENAI_API_KEY | codex login --with-api-key`.
+
+**0.145.0 is the minimum here**, not just the version that happened to be tested:
+the bundled `codex-sage.sh` needs `mcp list --json` and `--disable`, and it refuses
+to run rather than proceed without them.
 
 ### CASPER — Grok Build (`grok`)
 
