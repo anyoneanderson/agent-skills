@@ -73,6 +73,8 @@ Before submitting, verify:
 2. All referenced files exist
 3. No hardcoded MCP tool names (e.g., `mcp__serena__`, `Context7`)
 4. SKILL.md is under 500 lines
+5. `bash scripts/check-skill-line-budget.sh` passes for the whole repository
+6. For reference-split changes, `bash scripts/tests/check-skill-reference-split-contract.sh` passes
 
 ## コーディングルール
 

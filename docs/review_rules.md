@@ -27,14 +27,16 @@
 ## 4. コード品質
 
 - `[MUST]` ディレクトリ名は kebab-case
-- `[MUST]` SKILL.md は 500 行以下
+- `[MUST]` SKILL.md は 500 行未満
 - `[MUST]` 対話的判断には AskUserQuestion を使用（自由記述プロンプト禁止）
 - `[MUST]` リファレンスファイルは `references/*.md` / `references/*.ja.md` パターンに従う
 - `[MUST]` スキル追加時は README.md / README.ja.md のスキルテーブルを更新
 
 ## 5. テスト
 
-- `[MUST]` プレサブミットチェック: フロントマター name 一致、参照ファイル存在、MCP ツール名なし、500 行以下
+- `[MUST]` プレサブミットチェック: フロントマター name 一致、参照ファイル存在、MCP ツール名なし、500 行未満
+- `[MUST]` `bash scripts/check-skill-line-budget.sh`でリポジトリ内の全`SKILL.md`を検査する
+- `[MUST]` reference分割を変更した場合は`bash scripts/tests/check-skill-reference-split-contract.sh`を実行する
 - `[SHOULD]` テスト名は振る舞いを記述する
 
 ## 6. レビュー対象外（コメント抑制可）

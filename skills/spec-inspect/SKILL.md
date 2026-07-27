@@ -299,98 +299,10 @@ Execute the following checks sequentially. Add detected issues to an issues list
 
 #### Check 14: API / UI Naming Convention Consistency [WARNING]
 
-**Purpose**: Validate API and UI naming conventions (for web app / API specifications).
-
-**Detection patterns**:
-- Inconsistent singular/plural in REST resource names (`/user/:id` vs `/comments`)
-- Non-RESTful verb paths (`/getUsers` → `/users` (GET) is recommended)
-- Path casing inconsistency (`/user-profile` vs `/userProfile`)
-- Path parameter format inconsistency (`:id` vs `{id}`)
-- Screen component suffix inconsistency (`Screen` vs `Page`)
-
-**Procedure**:
-1. Extract endpoint list from the "API Design" section of design.md
-2. Extract screen names / routing from tasks.md
-3. Identify majority pattern as "recommended" and flag minority pattern
-
-**Output**: `WARNING-{seq}` "API naming inconsistency: {details}" + unification suggestion
-
-#### Check 15: Documentation Update Analysis [INFO]
-
-**Purpose**: Analyze whether existing documentation needs updating based on spec content.
-
-**Target documents**:
-- README.md, CLAUDE.md, AGENTS.md
-- coding-rules.md (detected path or `docs/coding-rules.md`)
-- issue-to-pr-workflow.md (detected path or `docs/issue-to-pr-workflow.md`)
-- Files in documentation directories specified by CLAUDE.md (e.g., `docs/`)
-
-**Procedure**:
-1. Check for README.md, CLAUDE.md, AGENTS.md at project root
-2. Parse CLAUDE.md for documentation directory references and scan them
-3. Cross-reference with spec content:
-   - New feature → not listed in README.md feature list
-   - New API endpoint → not in API docs
-   - Technology stack change → setup guide not updated
-   - New coding convention → CLAUDE.md / AGENTS.md not updated
-   - Shared library or utility changes → coding-rules.md library usage rules may need updating
-   - Workflow process changes → issue-to-pr-workflow.md may need updating
-   - New quality gates or coding standards → coding-rules.md may need updating
-4. Propose needed updates as DOC-XXX tasks
-
-**Output**:
-- `INFO-{seq}` "Documentation update needed: {filename} — {reason}"
-- Suggest additions to tasks.md:
-  ```
-  ### Documentation Update Tasks (auto-detected)
-  - [ ] DOC-001: Update {section} in {filename} ({reason})
-  ```
-
-#### Check 16: Acceptance Test Coverage (test.md) [WARNING]
-
-**Purpose**: Verify the acceptance test plan (test.md) exists and covers every requirement. test.md is produced by the spec-generator full workflow and consumed by acceptance evaluation. Legacy three-document specs (created before test.md existed) stay valid — its absence is reported as INFO, never as an error, so this check never breaks existing specs.
-
-**Test case format** (defined by spec-generator, in `skills/spec-generator/references/test-plan.md`): each case heading is `## T-A{nn}: [REQ-XXX] ...`, followed by a verification method field `Verify:` (Japanese: `検証方法:`) valued `playwright` / `command` / `file-check`.
-
-**Procedure**:
-1. If `test_content` is None (test.md absent) → emit one INFO finding (see below) and skip steps 2–4. Do not fail; legacy specs remain valid.
-2. Extract test case IDs (`T-A\d+`) and, per case heading, the requirement IDs referenced (`\[(REQ|NFR)-\d+\]`).
-3. Extract all `REQ` / `NFR` IDs from requirement.md; each with no referencing test case → coverage gap.
-4. Each test case whose `Verify:` / `検証方法:` field is empty, missing, or not one of `playwright` / `command` / `file-check` → verification gap.
-
-**Outputs** (existing findings format):
-- **[INFO]** test.md absent: `INFO-{seq}` "Acceptance test plan (test.md) not found" — File: test.md. "Acceptance coverage was not checked; run the spec-generator full workflow to generate test.md, or ignore for a three-document-only spec."
-- **[WARNING]** uncovered requirements: `WARNING-{seq}` "Acceptance coverage: {covered}/{total} requirements have a test case" + list of REQ/NFR IDs with no `T-A` case + "Add a T-A case referencing each."
-- **[WARNING]** empty verification method: `WARNING-{seq}` "Test case {case_id} has no verification method" + "Set Verify (検証方法) to playwright / command / file-check."
-
-#### Check 17: Referenced Path Existence and Mode [CRITICAL]
-
-**Purpose**: A spec is unimplementable when a path it tells the implementation
-to *read* is untracked, or is a symlink that git tree resolution will not follow.
-
-**Procedure**:
-1. Extract repo-relative paths the specs use as a **content source** (a step
-   reads, parses, or diffs the file — not paths cited as examples or outputs).
-2. For each, run `git ls-files -s -- <path>`: no output = untracked (the read
-   fails on a clean checkout); mode `120000` = symlink (`git show HEAD:<path>`
-   yields the link *target string*, not the target's content).
-3. Plain working-tree reads tolerate symlinks; flag mode `120000` when the read
-   goes through git object/tree access or the read side is unspecified.
-
-**Outputs**:
-- **[CRITICAL]** `CRITICAL-{seq}` "Referenced path {path} is not tracked by git" + "Track the file, or point the spec at the real tracked path"
-- **[CRITICAL]** `CRITICAL-{seq}` "Referenced path {path} is a symlink (mode 120000) used as a content source" + "Point the spec at the symlink's target (the real file path)"
-
-#### Check 18: Abstract Process Description [WARNING]
-
-**Purpose**: Report a process description only when a primary-vocabulary candidate lacks evidence needed to determine its concrete behavior.
-
-**Procedure**: Run the selected abstract-process-check reference with the selected `spec-writing` vocabulary. Keep the vocabulary's Pattern list in `spec-writing` only.
-
-**Output**: `WARNING-{seq}` with file, line, missing process elements, a concrete rewrite, and the matching `AV-*` source rule.
-
-#### Check 19: Projection Consistency [WARNING]
-**Procedure**: Run the selected `projection-consistency-check*.md`; use its finding contract.
+Before starting Check 14, read
+[references/extended-quality-checks.md](references/extended-quality-checks.md)
+completely (`.ja.md` for Japanese). Execute its Checks 14 through 19 in order
+and use each check's severity and output contract without modification.
 
 ### Step 4: Generate Summary
 

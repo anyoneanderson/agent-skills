@@ -55,9 +55,9 @@ After all four documents are generated, run
 `references/projection-consistency.md` (`.ja.md` for Japanese output). Run it
 again after every revision, and do not report completion until the pass succeeds.
 
-Apply the **YAGNI principle** (see SKILL.md): build only what the Issue asks
-for. Do not add auth, analytics, i18n, or infrastructure that the Issue does not
-mention.
+Apply [yagni-guardrails.md](yagni-guardrails.md) directly: build only what the
+Issue asks for. Do not add auth, analytics, i18n, or infrastructure that the
+Issue does not mention.
 
 Populate `## 6. Out of Scope` with at least one concrete capability, scenario,
 or responsibility excluded by the Issue or the applicable YAGNI boundary. If

@@ -71,7 +71,7 @@ only contains the dispatch skeleton; protocol detail lives in references.
 | Step 4 | Negotiation | [references/negotiation-protocol.md](references/negotiation-protocol.md), [references/generator-dispatch.md](references/generator-dispatch.md) |
 | Step 6 | Implementation | [references/shared-state-protocol.md](references/shared-state-protocol.md), [references/validator-protocol.md](references/validator-protocol.md) |
 | Step 6 (mid-impl replan) | When a contract debt trigger fires | [references/negotiation-protocol.md §Mid-impl replan](references/negotiation-protocol.md#mid-impl-replan), [references/shared-state-protocol.md §Mid-impl replan escalation](references/shared-state-protocol.md#mid-impl-replan-escalation-layer-1-agent-request) |
-| Step 9 | Sprint transition (re-pin Generator backend via 4-layer resolution) | [references/generator-dispatch.md §4-layer resolution](references/generator-dispatch.md) |
+| Steps 8–10 | PR, sprint transition, final summary | [references/completion-and-transition.md](references/completion-and-transition.md), plus [references/pr-creation-guide.md](references/pr-creation-guide.md) for Step 8 and [references/generator-dispatch.md §4-layer resolution](references/generator-dispatch.md) for Step 9 |
 | Step 7 | Checkpoint / Principal Skinner | [../harness-init/references/resilience-schema.md](../harness-init/references/resilience-schema.md), [references/git-strategy.md](references/git-strategy.md) (Orchestrator owns the atomic commit; agents must NOT) |
 | Step 8 | PR creation | [references/pr-creation-guide.md](references/pr-creation-guide.md) |
 | Foundation-sprint (sprint-0, `type: foundation`) | Skips negotiation + G⇄E loop | [references/foundation-loop-protocol.md](references/foundation-loop-protocol.md), [../harness-init/references/templates/foundation-sprint-checklist.md](../harness-init/references/templates/foundation-sprint-checklist.md) |
@@ -403,73 +403,22 @@ this gate.
 
 ### Step 8: PR Creation on Sprint Pass
 
-**Open [references/pr-creation-guide.md](references/pr-creation-guide.md).**
-
-When `contract.status == "done"`:
-
-1. Ensure commits are on branch `harness/<epic>/sprint-<n>-<feature>`
-2. `git push -u origin <branch>` (skip when `tracker == none`)
-3. `bundling: split` → one PR per sprint; `bundled` → one PR listing all
-   bundled features
-4. Build PR body from the guide's template, quoting
-   `shared_state.md/Evaluation` and linking `_state.json.sprint_issues[<n>]`
-5. Record PR URL to `_state.json.sprint_prs[<n>]`; append progress.md
-
-On `aborted`: skip PR creation. Record in `shared_state.md/Decisions`,
-keep the branch for later inspection.
+Read [references/completion-and-transition.md](references/completion-and-transition.md)
+completely (`.ja.md` for Japanese), then execute its canonical PR creation,
+sprint transition, state-reset, final-write, and summary contract in order.
 
 ### Step 9: Sprint Transition
 
-```
-if aborted_reason != null:
-  stop; surface to user; do not advance current_sprint
-elif any sprint remains in roadmap:
-  current_sprint += 1; iteration = 0; phase = "negotiation"
-  start_time = now(); rubric_stagnation_count = 0
-  features_pass_fail = []
-  sprint_branch = null; negotiation_round = 0; last_agent = null  # prevent stale carry-over
-  re-execute Step 1 backend pinning for the new sprint
-    (4-layer resolution; log transition to progress.md when changed)
-  pending_worker_exit = true   # final durable write of this turn
-  if mode == interactive: AskUserQuestion "Proceed to sprint <n+1>?"
-  go to Step 3
-else:
-  assert sprint_prs[1..current_sprint] non-null; completed = true; phase = "done"; pending_worker_exit = true
-  go to Step 10
-```
-
-Reset policy: `cumulative_cost_usd` accumulates across the epic;
-`start_time` / `effective_generator_backend` / `sprint_branch` /
-`negotiation_round` / `last_agent` all reset per sprint (latter four to
-`null` / `null` / `0` / `null` respectively) so no value silently carries
-over. Do NOT write `phase = "ready-for-loop"` during sprint transition;
-the supervisor must observe `phase = "negotiation"` and spawn the next
-worker from that live cursor.
+Execute Step 9 from the required completion-and-transition reference.
 
 ### Step 10: Final Summary
 
-On `completed == true`: emit report (epic name, sprints run, PR URLs,
-total cost / wall-time / iterations, aborted sprints with reasons).
-Append progress.md:
-`decision: epic=<name> completed sprints=<N> cost=<$> iters=<total>`.
-
-Suggest `/harness-rules-update` on any abort or `rubric_stagnation`
-trigger — those failures are what that skill refines.
+Execute Step 10 from the same reference after its completion assertion passes.
 
 ## Error Handling
 
-| Situation | Response |
-|---|---|
-| `.harness/_config.yml` missing | "Run `/harness-init` first." |
-| `.harness/<epic>/roadmap.md` missing | "Run `/harness-plan` first." |
-| `jq` / `git` not found | Error; install and re-run |
-| `gh` missing when tracker=github | Abort; do not silently swap trackers |
-| Generator dispatch fails | Log to phase-appropriate feedback (`generator-neg-<round>.md` or `generator-<iter>.md`); retry once; 2nd fail → `pending_human=true` |
-| Evaluator tool unavailable | Record `verdict: fail, reason: tool-unavailable`; let rubric_stagnation halt eventually |
-| `git commit` fails mid-iter | Log; continue; never bypass hooks |
-| Planner ruling file missing after round 3 | `pending_human=true`; halt |
-| `_state.json` unparseable | Halt; never overwrite. User restores from git |
-| AskUserQuestion in non-interactive mode | Bug; fall back to `_config.yml` default + progress.md warning |
+Use the Error Handling table in the required completion-and-transition
+reference. Do not convert its halt or retry responses into silent fallbacks.
 
 ## Usage
 

@@ -81,7 +81,7 @@ check_skill() {
   if grep -Eq 'mcp__[A-Za-z0-9_]+|Context7' "$file"; then
     fail "$file" "hardcoded MCP/tool provider name"
   fi
-  [ "$(wc -l < "$file" | tr -d ' ')" -le 500 ] || fail "$file" "SKILL.md exceeds 500 lines"
+  [ "$(awk 'END { print NR }' "$file")" -lt 500 ] || fail "$file" "SKILL.md must stay under 500 lines"
   check_reference_paths "$file"
 }
 

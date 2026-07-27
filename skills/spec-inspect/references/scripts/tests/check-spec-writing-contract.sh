@@ -70,11 +70,11 @@ check_frontmatter_value() {
 check_line_limit() {
   local file="$1" limit="$2" label="$3" lines
   checks=$((checks + 1))
-  lines="$(wc -l < "$file" | tr -d ' ')"
-  if [ "$lines" -le "$limit" ]; then
+  lines="$(awk 'END { print NR }' "$file")"
+  if [ "$lines" -lt "$limit" ]; then
     pass "$label"
   else
-    fail "$label" "$file has $lines lines; limit is $limit"
+    fail "$label" "$file has $lines lines; must stay under $limit"
   fi
 }
 
@@ -444,6 +444,8 @@ generator_design_ja="$SPEC_GENERATOR/references/design.ja.md"
 inspect="$SPEC_INSPECT/SKILL.md"
 inspect_check_en="$SPEC_INSPECT/references/abstract-process-check.md"
 inspect_check_ja="$SPEC_INSPECT/references/abstract-process-check.ja.md"
+inspect_extended_en="$SPEC_INSPECT/references/extended-quality-checks.md"
+inspect_extended_ja="$SPEC_INSPECT/references/extended-quality-checks.ja.md"
 
 check_frontmatter_value "$skill" name spec-writing "spec-writing frontmatter name"
 check_frontmatter_value "$skill" license MIT "spec-writing frontmatter license"
@@ -523,9 +525,11 @@ done
 
 check_contains "$inspect" "references/abstract-verbs.md" "inspect reads English primary vocabulary"
 check_contains "$inspect" "references/abstract-verbs.ja.md" "inspect reads Japanese primary vocabulary"
-check_contains "$inspect" "Keep the vocabulary's Pattern list in \`spec-writing\` only." "inspect declares one vocabulary source"
+check_contains "$inspect" "references/extended-quality-checks.md" "inspect loads extended checks"
+check_contains "$inspect_extended_en" "Keep the Pattern list only in \`spec-writing\`." "inspect declares one vocabulary source"
+check_contains "$inspect_extended_ja" "Pattern一覧は\`spec-writing\`だけに置く。" "inspect Japanese declares one vocabulary source"
 check_no_pattern_list_duplication "$tmp/pattern-map" \
-  "$inspect" "$inspect_check_en" "$inspect_check_ja"
+  "$inspect" "$inspect_check_en" "$inspect_check_ja" "$inspect_extended_en" "$inspect_extended_ja"
 
 check_line_limit "$generator" 500 "spec-generator 500-line limit"
 check_line_limit "$inspect" 500 "spec-inspect 500-line limit"
