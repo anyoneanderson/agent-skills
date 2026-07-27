@@ -101,6 +101,10 @@ on standard input; otherwise the file path replaces {PROMPT_FILE} in its command
 The prompt body is never placed in a command-line argument, where `ps` would
 expose the question to every local process.
 
+A command may also use {MAGI_SCRIPTS_DIR}, the absolute directory holding this
+script, to run a wrapper shipped next to it — the default codex adapter does that
+to switch off the operator's MCP servers (references/sages.md).
+
 Sage config resolution, first match wins: $MAGI_SAGES_FILE, ./.magi/sages.json,
 ~/.magi/sages.json, bundled sages.default.json.
 
@@ -418,6 +422,9 @@ run_sage() {
     substitute_placeholder "$element" '{PROMPT_FILE}' "$prompt_file"
     substitute_placeholder "$SUBST_OUT" '{ANSWER_FILE}' "$answer_file"
     substitute_placeholder "$SUBST_OUT" '{SCHEMA}' "$SCHEMA_TEXT"
+    # Lets an adapter reach a wrapper shipped beside this script (codex-sage.sh)
+    # without the config hard-coding an install path.
+    substitute_placeholder "$SUBST_OUT" '{MAGI_SCRIPTS_DIR}' "$SCRIPT_DIR"
     cmd+=("$SUBST_OUT")
   done
 

@@ -1,0 +1,13 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "WRAPPERSAGE",
+      "cli": "sh",
+      "command": ["{MAGI_SCRIPTS_DIR}/tests/fixtures/fake-sage.sh", "--output-last-message", "{ANSWER_FILE}", "-"],
+      "input": "stdin",
+      "extract": "answer-file",
+      "notes": "Mirrors the default codex adapter: command[0] is built from {MAGI_SCRIPTS_DIR} so the sage only runs if the placeholder resolves to the real scripts directory. cli is 'sh' because preflight checks cli on PATH, not command[0] — the same split the real BALTHASAR uses, where cli is 'codex' while command[0] is the bundled wrapper."
+    }
+  ]
+}

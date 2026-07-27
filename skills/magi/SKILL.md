@@ -60,6 +60,14 @@ of this skill — see `references/sages.md` to swap one out.
   confirm that sending the question to all of them is acceptable. If it is not,
   do not convene the council; either narrow the question until it is safe to
   send, or use a single trusted agent instead.
+- **That list of providers is only true because the sages' own tools are
+  blocked.** A headless CLI inherits the operator's tool set, which usually
+  includes servers pointed at other companies' services, and a sage could hand
+  the question to one of them without anything looking unusual. The bundled
+  config starts each default sage with those tools switched off. If you swap a
+  sage out, re-establish that blocking in the replacement adapter — otherwise the
+  count of providers you told the user is wrong. `references/sages.md` documents
+  what each default sage blocks and what to check in a new one.
 - The sage CLIs must be installed and authenticated. Setup and login commands
   are in `references/sages.md`. Missing CLIs are detected by preflight, not
   assumed.
@@ -408,7 +416,7 @@ audit log, and stop.
 | Debate exhausted (two rounds with three sages, one with two) | Report no consensus with the disagreement breakdown, stating how many rounds ran; do not decide for the user |
 | Config declares more than three sages | Script exits 2; the tally rules support three at most |
 | Sage asks a clarifying question instead of answering | Treat as invalid answer for this round; if two or more do it, stop and sharpen the question with the user |
-| Research answer shows no sign of searching, or the sage reports a denied tool or a cancelled run | Its adapter is missing the flags that permit web search (`references/sages.md`). Record the sage as degraded for this round, fix the config before the next council, and do not re-send inside this one |
+| Research answer shows no sign of searching, or the sage reports a denied tool or a cancelled run | Read that sage's `stderr_file` and raw stdout before naming a cause, then report what you actually observed — a denied tool, an approval prompt it could not answer, an exhausted quota, a provider error. Record the sage as degraded for this round and do not re-send inside it; if the evidence points at the adapter's tool permissions, `references/sages.md` has the flags each default sage needs |
 
 ## Usage Examples
 

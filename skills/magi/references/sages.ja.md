@@ -60,6 +60,7 @@
 | `{PROMPT_FILE}` | このラウンドでこの賢者へ送るプロンプトファイルの絶対パス |
 | `{ANSWER_FILE}` | CLI が最終回答を書き出すことをスクリプトが期待するパス |
 | `{SCHEMA}` | `--schema-file` で渡したファイルの全文 |
+| `{MAGI_SCRIPTS_DIR}` | `magi-run.sh` が置かれたディレクトリの絶対パス。導入先のパスを設定に焼き付けずに、隣に同梱されたラッパーを起動するために使う |
 
 **プロンプト本文は `command` に入れない。** コマンドライン引数は同一マシンの
 全プロセスから `ps` で読めるため、問いは標準入力かファイルパスのどちらかで渡す。
@@ -96,14 +97,14 @@
     {
       "name": "BALTHASAR",
       "cli": "codex",
-      "command": ["codex", "exec", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
+      "command": ["{MAGI_SCRIPTS_DIR}/codex-sage.sh", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
       "input": "stdin",
       "extract": "answer-file"
     },
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto", "--tools", "web_search,web_fetch", "--deny", "MCPTool(*)"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"]
     }
@@ -117,6 +118,7 @@
 - BALTHASAR は `--sandbox read-only` で起動する。意見を求めるだけならファイル
   書き込みは不要なので、サンドボックスは閉じたままにしておく。
 - BALTHASAR の末尾の `-` が、`codex exec` に標準入力からプロンプトを読ませる。
+  `codex` を直接ではなく同梱の `codex-sage.sh` 経由で起動している理由は次節にある。
 - 既定で `schema_args` を持つのは CASPER だけである。Grok は回答を JSON スキーマ
   で拘束できるため、回答不正による失敗をほぼ無くせる。他の2体はプロンプトの指示
   と、ホスト側の解析に頼る。
@@ -143,6 +145,53 @@ research モードの品質は、賢者が実際に Web を確認できるかで
 CASPER は、要求した JSON オブジェクトの前に散文を1文置くことがある。ホストが
 JSON 部分を抽出するため（`SKILL.md` の Step 5）これは失敗ではないが、`grok` 用の
 アダプターを自分で書くときは起こるものとして扱うこと。
+
+### 問いを告知した提供元の中に留める
+
+`SKILL.md` はユーザーへ、問いがどの提供元に渡るかを伝える（既定では3社）。この
+説明が成り立つのは、賢者が自分のツールを使って問いを外へ渡せない場合だけである。
+ヘッドレスの CLI は利用者の設定したツール一式を引き継ぎ、そこには他社サービスへ
+向いた MCP サーバーが入っているのが普通である。検索のような形の問いは、記録上は
+何も異常に見えないまま第4の提供元へ届きうる。そのため既定の3体は、いずれもこれら
+のツールを遮断した状態で起動する。以下は 2026-07-27 に実測確認した内容である。
+
+| 賢者 | MCP・プラグイン系ツールの遮断方法 | 残る部分 |
+|---|---|---|
+| MELCHIOR | `--allowedTools WebSearch WebFetch` は許可リストなので、MCP ツールはそこに載らない | 観測された残余はない。MCP の呼び出しも他の未許可ツールと同様に拒否される |
+| BALTHASAR | 同梱の `codex-sage.sh` ラッパー（後述） | 残余なし。サーバー自体がツール登録から消える |
+| CASPER | `--tools web_search,web_fetch` で組み込みツールを絞り、`--deny 'MCPTool(*)'` で MCP 呼び出しを拒否する | MCP ツールのスキーマ一覧はモデルに見えたままで、呼び出しだけが `Denied by permission policy: deny rule on mcp` で拒否される |
+
+#### `codex-sage.sh`
+
+`codex exec` に「MCP を全部止める」1つのフラグは無いため、ラッパーは2つの手段で
+分担する。この分担が覚えておく価値のある部分である。
+
+- `--disable plugins --disable apps` は、プラグインとアプリが供給するサーバーを
+  受け持つ。これらには `[mcp_servers.<name>]` セクションが存在せず、
+  `-c mcp_servers.<name>.enabled=false` を当てると無効化ではなく
+  `invalid transport` で失敗する。
+- `-c mcp_servers.<name>.enabled=false` は、`config.toml`（`$CODEX_HOME` を尊重）
+  に書かれたサーバーを受け持ち、名前ごとに1組ずつ生成する。
+
+codex-cli 0.145.0 では、これでツール登録数が 141 から 19 に減り、MCP 由来の
+ツールは1つも残らず、それらのサーバーのツールを名指しした問いには
+「no such tool is registered」と返った。
+
+アダプターは `command[0]` をラッパーにしつつ `"cli": "codex"` のままにしている。
+preflight が報告すべきなのは利用者が導入する必要のある CLI であり、それは
+`codex` 本体だからである。
+
+このラッパーは**フェイルクローズで止まる。** 宣言されたサーバーの TOML キーが
+`[A-Za-z0-9_-]` だけで書かれていない場合（引用符つきの名前など）、確実な `-c` の
+上書きに変換できないため、そのサーバーを有効なまま起動せず exit 3 で終了する。
+賢者は「回答なし（エラー）」として記録され、理由は `BALTHASAR.stderr` に残る。
+合議を開くには、そのセクションを改名するか削除すること。失敗した賢者は取り戻せる
+が、告知していない提供元へ送られた問いは取り戻せない。
+
+**賢者を差し替えるときは、この遮断を自分で作り直すことになる。** 設定の検査が見る
+のは構造であり、ツール権限ではない。座らせる CLI について許可リストまたは拒否の
+フラグとプラグインの停止方法を調べ、MCP ツールが呼び出せないことを実際の実行で
+確認し、確認した内容をアダプターの `notes` に書き残すこと。
 
 ## 既定の賢者の導入と認証
 
@@ -226,10 +275,12 @@ grok login --oauth                         # auth.x.ai でのブラウザ方式
 - **`--print-timeout` の既定は5分**で、`timeout_seconds` の600秒より短い。
   少なくとも `timeout_seconds` 以上に設定しないと、合議側の上限より先に `agy` が
   諦める。値は Go の duration 文字列（`10m`）で指定する。
-- **この CLI の Web 検索可否は未検証。** `agy` がヘッドレスで Web 検索できるか、
-  そのためにどの権限フラグが必要かは確認していない。research モードの合議に
-  `agy` を座らせる前に確認すること。検索できない賢者も自信のある回答を返すが、
-  その中身は学習データに依存している。
+- **この CLI の Web 検索可否とツール遮断は未検証。** `agy` がヘッドレスで Web 検索
+  できるか、そのためにどの権限フラグが必要か、MCP や拡張のツールをどう遮断するかは
+  いずれも確認していない。`agy` を座らせる前に両方を確認すること。検索できない賢者
+  も自信のある回答を返すが中身は学習データに依存しており、利用者の MCP ツールに
+  届く賢者は前述の提供元の境界を破る。`--add-dir` によるファイル読み取りの制限は、
+  ネットワーク系ツールについての根拠にはならない。
 
 運用上の注意が1つある。**`agy` は回答を出せなかったときも exit 0 で終了する。**
 読み取り権限を拒否した場合、通知文（"no output produced — a tool required the

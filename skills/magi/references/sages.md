@@ -62,6 +62,7 @@ spaces or an ampersand cannot be re-parsed as syntax.
 | `{PROMPT_FILE}` | Absolute path of the prompt file for this sage in this round |
 | `{ANSWER_FILE}` | Path the script expects the CLI to write its final answer to |
 | `{SCHEMA}` | Full text of the `--schema-file` contents |
+| `{MAGI_SCRIPTS_DIR}` | Absolute path of the directory holding `magi-run.sh`, for reaching a wrapper shipped beside it without hard-coding an install path |
 
 **The prompt body never goes into `command`.** A sage receives the question
 either on stdin or as a file path, because command-line arguments are readable by
@@ -100,14 +101,14 @@ sage (REQ-010).
     {
       "name": "BALTHASAR",
       "cli": "codex",
-      "command": ["codex", "exec", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
+      "command": ["{MAGI_SCRIPTS_DIR}/codex-sage.sh", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
       "input": "stdin",
       "extract": "answer-file"
     },
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto", "--tools", "web_search,web_fetch", "--deny", "MCPTool(*)"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"]
     }
@@ -121,7 +122,8 @@ worth knowing:
 - BALTHASAR runs under `--sandbox read-only`. Asking for an opinion never
   requires writing files, so the sandbox stays closed.
 - BALTHASAR's trailing `-` is what makes `codex exec` read the prompt from
-  stdin.
+  stdin. It reaches `codex` through the bundled `codex-sage.sh`, for the reason
+  in the next section.
 - CASPER is the only default sage with `schema_args`. Grok can be constrained to
   a JSON schema, which removes most broken-answer failures; the other two rely on
   the prompt instruction and the host's parsing.
@@ -149,6 +151,53 @@ that open it, verified on real runs 2026-07-27:
 CASPER also sometimes puts a sentence of prose before the JSON object it was
 asked for. The host extracts the JSON part (`SKILL.md` Step 5), so this is not a
 failure; expect it if you write your own adapter around `grok`.
+
+### Keeping the question inside the announced providers
+
+`SKILL.md` tells the user which providers receive the question — three companies
+by default. That statement only holds if a sage cannot pass the question to a
+tool of its own, and a headless CLI inherits the operator's whole tool set,
+which usually includes MCP servers pointed at other companies' services. A
+search-shaped question can then reach a fourth provider without anything looking
+unusual in the transcript. Each default sage therefore starts with those tools
+blocked, verified 2026-07-27:
+
+| Sage | How MCP and plugin tools are blocked | What remains |
+|---|---|---|
+| MELCHIOR | `--allowedTools WebSearch WebFetch` is an allowlist, so an MCP tool is simply not on it | Nothing observed: an MCP call is denied like any other unlisted tool |
+| BALTHASAR | The bundled `codex-sage.sh` wrapper (below) | Nothing: the servers leave the tool registry entirely |
+| CASPER | `--tools web_search,web_fetch` limits the built-ins, `--deny 'MCPTool(*)'` refuses MCP calls | The MCP tool schemas are still listed to the model; only calling one is refused, with `Denied by permission policy: deny rule on mcp` |
+
+#### `codex-sage.sh`
+
+`codex exec` has no single "no MCP" flag, so the wrapper splits the work between
+two mechanisms, and the split is the part worth remembering:
+
+- `--disable plugins --disable apps` handles servers supplied by plugins and
+  apps. Those have no `[mcp_servers.<name>]` section of their own, and aiming
+  `-c mcp_servers.<name>.enabled=false` at one makes codex fail with
+  `invalid transport` instead of disabling it.
+- `-c mcp_servers.<name>.enabled=false`, generated once per server named in
+  `config.toml` (`$CODEX_HOME` is honoured), handles the declared servers.
+
+With codex-cli 0.145.0 this took the registered tool count from 141 down to 19
+with no MCP-backed tool left, and a question naming a tool from one of those
+servers came back as "no such tool is registered".
+
+The adapter keeps `"cli": "codex"` while `command[0]` is the wrapper: preflight
+should report the CLI the user would have to install, which is `codex` itself.
+
+The wrapper **fails closed.** A declared server whose TOML key is not plain
+`[A-Za-z0-9_-]` — a quoted name, for instance — cannot be turned into a reliable
+`-c` override, so the wrapper exits 3 rather than starting with that server
+enabled. The sage is recorded as `no answer (error)` with the reason in
+`BALTHASAR.stderr`; rename or remove the section to convene the council. A failed
+sage is recoverable, a question sent to an undisclosed provider is not.
+
+**Swapping a sage means re-establishing this yourself.** The config validator
+checks structure, not tool permissions. For whatever CLI you seat, find its
+allowlist or deny flag and its plugin switch, confirm on a real run that an MCP
+tool cannot be called, and write what you verified into the adapter's `notes`.
 
 ## Installing and authenticating the default sages
 
@@ -236,10 +285,13 @@ Why it is shaped that way:
 - **`--print-timeout` defaults to 5 minutes**, shorter than the 600-second
   `timeout_seconds`. Set it to at least `timeout_seconds` or `agy` gives up
   before the council's own limit; the value is a Go duration string (`10m`).
-- **Web search is unverified for this CLI.** Whether `agy` can search the web in
-  headless mode, and which permission flag that would need, was not tested. Check
-  it before seating `agy` in a research-mode council: a sage that cannot search
-  still produces a confident answer, it just rests on training data.
+- **Web search and tool isolation are unverified for this CLI.** Whether `agy` can
+  search the web in headless mode, which permission flag that would need, and how
+  to block its MCP and extension tools were all left untested. Check both before
+  seating `agy`: a sage that cannot search still produces a confident answer that
+  rests on training data, and a sage that can reach the operator's MCP tools
+  breaks the provider boundary described above. `--add-dir` restricting file reads
+  is not evidence about network tools.
 
 The operational caveat worth knowing: **`agy` exits 0 even when it produced no
 answer.** When the read permission is denied it prints a notice

@@ -19,6 +19,9 @@
 #   sages-override.json       TESTSAGE, a name no other config uses
 #   sages-argv-probe.json     a sage that reports its own argv, then echoes stdin
 #   sages-prompt-in-argv.json invalid on purpose: uses the withdrawn {PROMPT}
+#   sages-scripts-dir.json    a sage whose command[0] comes from
+#                             {MAGI_SCRIPTS_DIR}, as the default codex adapter
+#                             does to reach its wrapper (fixtures/fake-sage.sh)
 #
 # Keep fixture timeouts small: a bug that hangs a sage should cost this suite
 # seconds, not the ten minutes the real council allows.
@@ -239,10 +242,19 @@ case_sources_parse() {
     /bin/bash -n "$SCRIPT" 2>>"$CASE_LOG" ||
       note_failure "magi-run.sh does not parse under /bin/bash"
   fi
+  # The codex wrapper ships beside magi-run.sh and the default config points at
+  # it, so a syntax error there breaks a default sage.
+  bash -n "$SCRIPT_DIR/codex-sage.sh" 2>>"$CASE_LOG" ||
+    note_failure "codex-sage.sh has a syntax error"
+  if [ -x /bin/bash ]; then
+    /bin/bash -n "$SCRIPT_DIR/codex-sage.sh" 2>>"$CASE_LOG" ||
+      note_failure "codex-sage.sh does not parse under /bin/bash"
+  fi
   for fixture in "$FIXTURES"/sages-*.json; do
     jq -e . "$fixture" >/dev/null 2>&1 || note_failure "fixture is not valid JSON: $fixture"
   done
   expect_file "$BUNDLED_SAGES" "bundled sage config"
+  expect_file "$SCRIPT_DIR/codex-sage.sh" "bundled codex wrapper"
   end_case
 }
 
@@ -689,6 +701,30 @@ case_prompt_file_preconditions() {
   end_case
 }
 
+case_scripts_dir_placeholder() {
+  begin_case "a command built from {MAGI_SCRIPTS_DIR} runs the wrapper shipped beside the script"
+  local dir out summary answer marker
+  dir="$(case_dir scripts-dir)"
+  out="${dir}/out"
+  marker="MAGI-SCRIPTS-DIR-PROMPT"
+  printf 'Reach the wrapper: %s\n' "$marker" > "${dir}/prompt.md"
+
+  RUN_CONFIG="${FIXTURES}/sages-scripts-dir.json"
+  run_magi "$dir" --prompt-file "${dir}/prompt.md" --out-dir "$out" --round round1
+
+  summary="${out}/round1/summary.json"
+  expect_rc 0 "$RUN_RC" "dispatch through a substituted script path"
+  expect_json "$summary" "$SUMMARY_CONTRACT" "the summary contract holds"
+  expect_value "ok" "$(sage_field "$summary" WRAPPERSAGE status)" "the wrapper sage answered"
+  answer="$(sage_field "$summary" WRAPPERSAGE answer)"
+  # Running at all proves the placeholder became the real scripts directory: an
+  # unsubstituted or wrong path would exit 127 and be recorded as an error.
+  expect_text_has "$answer" "reached via MAGI_SCRIPTS_DIR" "the substituted command[0] executed"
+  expect_text_has "$answer" "$marker" "the prompt still arrives on stdin"
+  expect_contains "${out}/preflight.json" '"cli": "sh"' "preflight checks cli, not command[0]"
+  end_case
+}
+
 case_round_label_validation() {
   begin_case "dispatch is refused when the round label contains path characters"
   local dir out
@@ -731,6 +767,7 @@ case_schema_args_appended
 case_schema_args_omitted
 case_prompt_body_not_in_argv
 case_prompt_file_preconditions
+case_scripts_dir_placeholder
 case_round_label_validation
 
 rm -f "$CASE_LOG"

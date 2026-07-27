@@ -12,18 +12,18 @@
     {
       "name": "BALTHASAR",
       "cli": "codex",
-      "command": ["codex", "exec", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
+      "command": ["{MAGI_SCRIPTS_DIR}/codex-sage.sh", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
       "input": "stdin",
       "extract": "answer-file",
-      "notes": "Codex exec reads the prompt from stdin when '-' is given; final message goes to ANSWER_FILE. read-only sandbox: an opinion never needs to write files."
+      "notes": "Runs through the bundled codex-sage.sh wrapper, which starts codex exec with the operator's MCP servers, plugins and apps switched off so the question does not reach a fourth provider. cli stays 'codex' because that is what preflight must find. The prompt arrives on stdin via the trailing '-'; the final message goes to ANSWER_FILE. read-only sandbox: an opinion never needs to write files."
     },
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto", "--tools", "web_search,web_fetch", "--deny", "MCPTool(*)"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"],
-      "notes": "Grok Build headless. Prompt is passed as a file path. schema_args is appended when the host supplies a schema. permission-mode auto is required: without it tool use stalls on an approval prompt nobody can answer and the run ends with stopReason Cancelled."
+      "notes": "Grok Build headless. Prompt is passed as a file path. schema_args is appended when the host supplies a schema. permission-mode auto is required: without it tool use stalls on an approval prompt nobody can answer and the run ends with stopReason Cancelled. Because auto would also approve the operator's MCP tools, --tools limits the built-ins to search and fetch and --deny 'MCPTool(*)' blocks MCP calls, keeping the question inside the three announced providers. The MCP tool schemas remain listed to the model; only calling them is refused."
     }
   ]
 }
