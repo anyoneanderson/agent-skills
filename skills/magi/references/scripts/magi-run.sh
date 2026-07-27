@@ -20,8 +20,11 @@
 #   - No GNU `timeout`: it is absent on macOS (CON-003). A `perl -e 'alarm N'`
 #     wrapper enforces the limit instead; the alarm survives exec, so the sage
 #     process itself dies of SIGALRM and bash reports exit 142.
+#   - The question never reaches argv. A sage receives it either on stdin
+#     (`"input": "stdin"`) or as the path in {PROMPT_FILE}, because arguments are
+#     world-readable through `ps` on the same machine (design §8).
 #   - Sage command elements are substituted per array element, never through a
-#     shell, so a prompt containing quotes or newlines cannot be re-parsed.
+#     shell, so a path or schema cannot be re-parsed as shell syntax.
 
 set -euo pipefail
 
@@ -76,8 +79,8 @@ usage_text() {
 Usage: magi-run.sh --prompt-file <path> --out-dir <dir> --round <label>
        [--sages NAME1,NAME2] [--schema-file <path>] [--preflight-only]
 
-  --prompt-file     Prompt text sent to every selected sage. Required unless
-                    --preflight-only is set, or every selected sage has a
+  --prompt-file     File holding the prompt for every selected sage. Required
+                    unless --preflight-only is set, or every selected sage has a
                     per-sage prompt file (see below).
   --out-dir         Run directory. preflight.json is written at its root.
   --round           Round label (round1, debate1, ...). Sage artifacts and
@@ -92,6 +95,11 @@ Usage: magi-run.sh --prompt-file <path> --out-dir <dir> --round <label>
 Per-sage prompts: when <out-dir>/<round>/prompt-<SAGE>.md exists it overrides
 --prompt-file for that sage. A debate round uses this to send each sage its own
 anonymised prompt within a single parallel dispatch.
+
+Prompt delivery: a sage with "input": "stdin" in the config reads the prompt file
+on standard input; otherwise the file path replaces {PROMPT_FILE} in its command.
+The prompt body is never placed in a command-line argument, where `ps` would
+expose the question to every local process.
 
 Sage config resolution, first match wins: $MAGI_SAGES_FILE, ./.magi/sages.json,
 ~/.magi/sages.json, bundled sages.default.json.
@@ -163,8 +171,13 @@ config_problems() {
               then "sages[\($i)].command must be a non-empty array"
             elif any($s.command[]; type != "string")
               then "sages[\($i)].command must contain only strings"
-            elif (any($s.command[]; contains("{PROMPT}")) | not)
-              then "sages[\($i)].command must contain the {PROMPT} placeholder"
+            elif any($s.command[]; contains("{PROMPT}"))
+              then "sages[\($i)].command uses the withdrawn {PROMPT} placeholder: the prompt body must never appear in argv, where any local process can read it with ps. Use {PROMPT_FILE} or \"input\": \"stdin\" instead"
+            elif (any($s.command[]; contains("{PROMPT_FILE}")) | not) and ($s.input? // "") != "stdin"
+              then "sages[\($i)] has no way to receive the prompt: put the {PROMPT_FILE} placeholder in command, or set \"input\": \"stdin\""
+              else empty end),
+          (if ($s | has("input")) and ($s.input != "stdin")
+              then "sages[\($i)].input must be the string \"stdin\" when present (the only supported input mode; omit it to pass the prompt path with {PROMPT_FILE})"
               else empty end),
           (if ($s.extract | type) != "string" or ($s.extract | length) == 0
               then "sages[\($i)].extract must be a non-empty string (jq filter, \"answer-file\" or \"raw\")"
@@ -348,9 +361,9 @@ read_sage_argv() {
 
 # Replaces every occurrence of a placeholder, leaving the result in SUBST_OUT
 # (bash 3.2 has no namerefs). Bash's own ${var//pat/rep} is unusable here: an `&`
-# in the replacement expands to the matched text, so a prompt containing an
-# ampersand would come out with "{PROMPT}" spliced into it. Splitting on the
-# placeholder with prefix/suffix removal keeps the value byte-for-byte.
+# in the replacement expands to the matched text, so a directory name or schema
+# containing an ampersand would come out with the placeholder spliced into it.
+# Splitting on the placeholder with prefix/suffix removal keeps it byte-for-byte.
 SUBST_OUT=""
 substitute_placeholder() {
   local text="$1" placeholder="$2" value="$3" out=""
@@ -374,7 +387,7 @@ substitute_placeholder() {
 run_sage() {
   local idx="$1" name="$2" prompt_file="$3"
   local stdout_file stderr_file answer_file meta_file
-  local prompt element rc=0 started ended duration
+  local element input_mode stdin_src rc=0 started ended duration
   local -a argv=()
 
   stdout_file="$(sage_stdout_file "$name")"
@@ -382,7 +395,12 @@ run_sage() {
   answer_file="$(sage_answer_file "$name")"
   meta_file="$(sage_meta_file "$name")"
 
-  prompt="$(cat "$prompt_file")"
+  # A sage reads the prompt from stdin or from the path in {PROMPT_FILE}. Sages
+  # without stdin input get /dev/null, so one waiting on stdin fails fast instead
+  # of consuming the host's input or hanging until the alarm fires.
+  input_mode="$(jq -r --argjson idx "$idx" '.sages[$idx].input // ""' "$SAGES_FILE")"
+  stdin_src="/dev/null"
+  if [ "$input_mode" = "stdin" ]; then stdin_src="$prompt_file"; fi
 
   read_sage_argv "$idx" '(.sages[$idx].command)' || return 1
   argv=("${RAW_ARGV[@]}")
@@ -393,11 +411,11 @@ run_sage() {
     fi
   fi
 
-  # Element-wise substitution: the prompt never passes through a shell, so
-  # quotes, backticks and newlines inside it stay literal.
+  # Element-wise substitution: only paths and the schema go into argv, and none of
+  # them passes through a shell, so their contents cannot be re-parsed.
   local -a cmd=()
   for element in "${argv[@]}"; do
-    substitute_placeholder "$element" '{PROMPT}' "$prompt"
+    substitute_placeholder "$element" '{PROMPT_FILE}' "$prompt_file"
     substitute_placeholder "$SUBST_OUT" '{ANSWER_FILE}' "$answer_file"
     substitute_placeholder "$SUBST_OUT" '{SCHEMA}' "$SCHEMA_TEXT"
     cmd+=("$SUBST_OUT")
@@ -407,7 +425,7 @@ run_sage() {
   # The subshell keeps any shell-level notice about the sage process (bash prints
   # "Alarm clock: 14" in some versions) inside that sage's stderr file.
   ( perl -e "$ALARM_WRAPPER" "$TIMEOUT_SECONDS" "${cmd[@]}" ) \
-    > "$stdout_file" 2> "$stderr_file" || rc=$?
+    < "$stdin_src" > "$stdout_file" 2> "$stderr_file" || rc=$?
   ended="$(now_ms)"
   # A killed sage often leaves no stderr at all; state the reason so the run
   # directory alone explains the outcome (NFR-003).

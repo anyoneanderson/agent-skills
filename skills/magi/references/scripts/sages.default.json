@@ -4,24 +4,26 @@
     {
       "name": "MELCHIOR",
       "cli": "claude",
-      "command": ["claude", "-p", "{PROMPT}", "--output-format", "json"],
+      "command": ["claude", "-p", "--output-format", "json"],
+      "input": "stdin",
       "extract": ".result",
-      "notes": "Claude Code headless. .result holds the final text."
+      "notes": "Claude Code headless. Prompt is piped via stdin. .result holds the final text."
     },
     {
       "name": "BALTHASAR",
       "cli": "codex",
-      "command": ["codex", "exec", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "{PROMPT}"],
+      "command": ["codex", "exec", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
+      "input": "stdin",
       "extract": "answer-file",
-      "notes": "Codex exec writes the final message to ANSWER_FILE. read-only sandbox: an opinion never needs to write files."
+      "notes": "Codex exec reads the prompt from stdin when '-' is given; final message goes to ANSWER_FILE. read-only sandbox: an opinion never needs to write files."
     },
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "-p", "{PROMPT}", "--output-format", "json"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"],
-      "notes": "Grok Build headless. schema_args is appended when the host supplies a schema."
+      "notes": "Grok Build headless. Prompt is passed as a file path. schema_args is appended when the host supplies a schema."
     }
   ]
 }
