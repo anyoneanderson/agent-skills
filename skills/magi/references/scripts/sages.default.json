@@ -4,10 +4,10 @@
     {
       "name": "MELCHIOR",
       "cli": "claude",
-      "command": ["claude", "-p", "--output-format", "json"],
+      "command": ["claude", "-p", "--output-format", "json", "--allowedTools", "WebSearch", "WebFetch"],
       "input": "stdin",
       "extract": ".result",
-      "notes": "Claude Code headless. Prompt is piped via stdin. .result holds the final text."
+      "notes": "Claude Code headless. Prompt is piped via stdin. .result holds the final text. Headless denies network tools by default; WebSearch/WebFetch are allowlisted so research mode works. Keep this variadic flag last."
     },
     {
       "name": "BALTHASAR",
@@ -20,10 +20,10 @@
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"],
-      "notes": "Grok Build headless. Prompt is passed as a file path. schema_args is appended when the host supplies a schema."
+      "notes": "Grok Build headless. Prompt is passed as a file path. schema_args is appended when the host supplies a schema. permission-mode auto is required: without it tool use stalls on an approval prompt nobody can answer and the run ends with stopReason Cancelled."
     }
   ]
 }

@@ -89,7 +89,7 @@
     {
       "name": "MELCHIOR",
       "cli": "claude",
-      "command": ["claude", "-p", "--output-format", "json"],
+      "command": ["claude", "-p", "--output-format", "json", "--allowedTools", "WebSearch", "WebFetch"],
       "input": "stdin",
       "extract": ".result"
     },
@@ -103,7 +103,7 @@
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"]
     }
@@ -120,6 +120,29 @@
 - 既定で `schema_args` を持つのは CASPER だけである。Grok は回答を JSON スキーマ
   で拘束できるため、回答不正による失敗をほぼ無くせる。他の2体はプロンプトの指示
   と、ホスト側の解析に頼る。
+
+### Web 検索の権限
+
+research モードの品質は、賢者が実際に Web を確認できるかで決まる。ヘッドレス時の
+ツール利用の可否は CLI ごとに異なるため、既定設定にはそれを開くフラグを入れて
+ある。以下は 2026-07-27 に実際の実行で確認した内容である。
+
+- **MELCHIOR には `--allowedTools WebSearch WebFetch` が必要。** ヘッドレスの
+  `claude -p` は明示的に許可されていないツールをすべて拒否する。この許可リストが
+  無いと検索・取得・シェルの呼び出しがすべて拒否され、賢者は学習データだけで答え
+  るか、確認できなかったと報告する。許可リストを付けると検索が動く。このフラグは
+  ツール名の一覧を取るため、後続のフラグを飲み込まないよう `command` の末尾に置く。
+- **BALTHASAR は追加のフラグ不要。** 検索は提供元のサーバー側で実行されるため、
+  `--sandbox read-only` は妨げにならない。サンドボックスが制限するのはこのマシンの
+  ファイルであり、モデル側のツールではない。検索が走ると
+  `BALTHASAR.stderr` に `web search:` の行が出る。
+- **CASPER には `--permission-mode auto` が必要。** これが無いと、答える人のいない
+  ツール承認待ちで止まり、`stopReason: "Cancelled"` として途中終了する。使える
+  回答は残らない。
+
+CASPER は、要求した JSON オブジェクトの前に散文を1文置くことがある。ホストが
+JSON 部分を抽出するため（`SKILL.md` の Step 5）これは失敗ではないが、`grok` 用の
+アダプターを自分で書くときは起こるものとして扱うこと。
 
 ## 既定の賢者の導入と認証
 
@@ -203,6 +226,10 @@ grok login --oauth                         # auth.x.ai でのブラウザ方式
 - **`--print-timeout` の既定は5分**で、`timeout_seconds` の600秒より短い。
   少なくとも `timeout_seconds` 以上に設定しないと、合議側の上限より先に `agy` が
   諦める。値は Go の duration 文字列（`10m`）で指定する。
+- **この CLI の Web 検索可否は未検証。** `agy` がヘッドレスで Web 検索できるか、
+  そのためにどの権限フラグが必要かは確認していない。research モードの合議に
+  `agy` を座らせる前に確認すること。検索できない賢者も自信のある回答を返すが、
+  その中身は学習データに依存している。
 
 運用上の注意が1つある。**`agy` は回答を出せなかったときも exit 0 で終了する。**
 読み取り権限を拒否した場合、通知文（"no output produced — a tool required the

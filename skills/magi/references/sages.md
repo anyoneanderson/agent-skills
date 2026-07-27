@@ -93,7 +93,7 @@ sage (REQ-010).
     {
       "name": "MELCHIOR",
       "cli": "claude",
-      "command": ["claude", "-p", "--output-format", "json"],
+      "command": ["claude", "-p", "--output-format", "json", "--allowedTools", "WebSearch", "WebFetch"],
       "input": "stdin",
       "extract": ".result"
     },
@@ -107,7 +107,7 @@ sage (REQ-010).
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"]
     }
@@ -125,6 +125,30 @@ worth knowing:
 - CASPER is the only default sage with `schema_args`. Grok can be constrained to
   a JSON schema, which removes most broken-answer failures; the other two rely on
   the prompt instruction and the host's parsing.
+
+### Web search permissions
+
+Research mode is only as good as the sages' ability to check the web, and each
+CLI gates tool use differently in headless mode. The defaults carry the flags
+that open it, verified on real runs 2026-07-27:
+
+- **MELCHIOR needs `--allowedTools WebSearch WebFetch`.** Headless `claude -p`
+  denies every tool that was not explicitly allowed, so without the allowlist its
+  search, fetch and shell calls all come back denied: the sage answers from
+  training data or reports that it could not check. With the allowlist the search
+  runs. Keep the flag last in `command`, because it accepts a list of tool names
+  and would otherwise swallow the flag that follows it.
+- **BALTHASAR needs nothing extra.** Its search executes on the provider's side,
+  so `--sandbox read-only` does not block it — the sandbox governs this machine's
+  files, not the model's own tools. A search shows up as a `web search:` line in
+  `BALTHASAR.stderr`.
+- **CASPER needs `--permission-mode auto`.** Without it the run stops at a tool
+  approval prompt that nobody is there to answer and ends early with
+  `stopReason: "Cancelled"`, leaving no usable answer.
+
+CASPER also sometimes puts a sentence of prose before the JSON object it was
+asked for. The host extracts the JSON part (`SKILL.md` Step 5), so this is not a
+failure; expect it if you write your own adapter around `grok`.
 
 ## Installing and authenticating the default sages
 
@@ -212,6 +236,10 @@ Why it is shaped that way:
 - **`--print-timeout` defaults to 5 minutes**, shorter than the 600-second
   `timeout_seconds`. Set it to at least `timeout_seconds` or `agy` gives up
   before the council's own limit; the value is a Go duration string (`10m`).
+- **Web search is unverified for this CLI.** Whether `agy` can search the web in
+  headless mode, and which permission flag that would need, was not tested. Check
+  it before seating `agy` in a research-mode council: a sage that cannot search
+  still produces a confident answer, it just rests on training data.
 
 The operational caveat worth knowing: **`agy` exits 0 even when it produced no
 answer.** When the read permission is denied it prints a notice

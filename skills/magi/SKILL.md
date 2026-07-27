@@ -64,6 +64,13 @@ of this skill — see `references/sages.md` to swap one out.
   are in `references/sages.md`. Missing CLIs are detected by preflight, not
   assumed.
 - `jq` must be on PATH; the script needs it to read its configuration.
+- **Research mode depends on the sages being able to search the web**, and each
+  CLI gates tool use differently when running headless. The bundled config carries
+  the flags that permit it for the three default sages. If a sage has been swapped
+  out, check its search permissions before convening a research council: a CLI
+  that denies its own search tool answers from training data instead, and one that
+  waits for tool approval ends the run cancelled with no usable answer. The
+  per-sage details are in `references/sages.md`.
 - Answers are stored unencrypted under the run directory (default
   `${TMPDIR:-/tmp}/magi-runs/`), which the skill never deletes. Tell the user
   where it is; deleting it is their call.
@@ -401,6 +408,7 @@ audit log, and stop.
 | Debate exhausted (two rounds with three sages, one with two) | Report no consensus with the disagreement breakdown, stating how many rounds ran; do not decide for the user |
 | Config declares more than three sages | Script exits 2; the tally rules support three at most |
 | Sage asks a clarifying question instead of answering | Treat as invalid answer for this round; if two or more do it, stop and sharpen the question with the user |
+| Research answer shows no sign of searching, or the sage reports a denied tool or a cancelled run | Its adapter is missing the flags that permit web search (`references/sages.md`). Record the sage as degraded for this round, fix the config before the next council, and do not re-send inside this one |
 
 ## Usage Examples
 
