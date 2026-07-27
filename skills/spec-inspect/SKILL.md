@@ -102,28 +102,14 @@ Execute the following checks sequentially. Add detected issues to an issues list
   Suggestion: "Add coverage for each requirement in design.md"
   ```
 
-#### Check 2: Required Section Validation [WARNING]
-**Purpose**: Confirm each spec has the expected structure.
-
-**Required sections**:
-- **requirement.md**: Overview, Functional Requirements, Non-Functional Requirements, Constraints, Assumptions
-- **design.md**: Architecture Overview, Technology Stack, Data Model, API Design (if applicable), Security Design
-- **tasks.md**: Task List, Priority
+#### Check 2: Required Structure and Requirement Boundaries [WARNING]
+**Purpose**: Confirm each spec has the expected sections, a non-empty scope boundary, and testable requirements.
 
 **Procedure**:
-1. Extract Markdown headings (`#` or `##`) from each file
-2. Check for required sections (partial match, case-insensitive)
+1. Run the selected `references/requirement-boundary-check.md` / `.ja.md` against requirement.md.
+2. For design.md, require Architecture Overview, Technology Stack, Data Model, API Design when applicable, and Security Design. For tasks.md, require Task List and Priority.
 
-**Detection pattern**:
-- **[WARNING]** Required section missing
-  ```
-  ID: WARNING-{seq}
-  Title: "Required section '{section_name}' is missing"
-  File: {filename}
-  Line: 1
-  Description: "{filename} should contain a '{section_name}' section"
-  Suggestion: "Add a '{section_name}' section"
-  ```
+**Output**: One `WARNING-{seq}` per missing required section, empty selected out-of-scope section, or `REQ` / `NFR` block without a non-empty acceptance-criteria list.
 
 #### Check 3: Contradiction Detection [WARNING]
 **Purpose**: Detect contradictory statements across specification documents.

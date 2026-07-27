@@ -115,7 +115,7 @@ Phase Detection
 
     ↓
 Dialogue Mode
-    ├─ Quick mode (--quick) → Generate directly
+    ├─ Quick mode (--quick) → Confirm inferred non-goals, then generate
     └─ Dialogue → AskUserQuestion: Gather requirements
 
     ↓
@@ -310,7 +310,7 @@ ends with real document content.
 
 | Option | Description | Applicable Phase |
 |--------|-------------|-----------------|
-| `--quick` | Generate without dialogue | init |
+| `--quick` | Generate after one inferred non-goal confirmation | init |
 | `--auto --issue <n>` | Non-interactive full generation from a GitHub Issue (no dialogue; see `references/auto-mode.md`) | full |
 | `--deep` | Socratic deep-dive dialogue | init |
 | `--personas` | Multi-perspective analysis/review | init, design |
@@ -331,9 +331,9 @@ When invoked without parameters or continuing from conversation:
 ### Quick Mode (--quick)
 
 Generate from a brief project description:
-1. Infer typical requirements from the description
-2. Generate based on best practices
-3. Complete without dialogue
+1. Infer typical requirements and a non-empty non-goal list
+2. Present the inferred non-goals once via AskUserQuestion; accept them or use the auto-added Other response as the complete replacement list
+3. Generate after the non-goals are confirmed
 
 ### Auto Mode (--auto --issue <n>)
 

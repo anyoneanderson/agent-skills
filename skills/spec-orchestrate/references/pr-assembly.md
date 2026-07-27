@@ -35,6 +35,9 @@ From `state.rounds` (`spec_review` and the per-task implementation reviews):
   place they surface — deferred, never silently dropped. Turn `trial` /
   `required_check` / `follow_up` findings into follow-up issues at PR time and
   link them here.
+- Acceptance decisions from each `review-spec-{round}.md`: list every
+  `rejected: out_of_scope` finding with the matched Scope Baseline quotation.
+  This lets reviewers audit dismissed findings without opening local run files.
 - If a role swap or arbitration occurred, one line per `state.arbitrations` entry
   (signal + decision), so a reader sees why the run swapped owners or landed a
   draft.
@@ -51,6 +54,7 @@ From `state.rounds` (`spec_review` and the per-task implementation reviews):
   - [ ] **Critical / fix_before: required_check** design.md §5.1 — stale success can be re-issued; fix before the check becomes required (#124)
   - [ ] **Improvement / fix_before: follow_up** `CR-STYLE-004` design.md §4.2 — naming nit (#125)
   - Minor: `CR-STYLE-002` design.md §3.1 — wording nit, deferred
+- Rejected as out of scope: missing PDF export matched `PDF export is not included` (requirement.md line 84)
 - Arbitration: S1 at spec_review round 4 → reviewer swapped codex→claude
 - Reduced cross-AI assurance: T001 round 1 preferred claude → actual codex runtime-native (`fresh_subagent`; peer unavailable)
 ```

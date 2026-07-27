@@ -12,7 +12,7 @@ Extract and organize requirements from user dialogue or existing conversation hi
 ```
 Conversation history exists → Extract requirements from conversation
 No conversation history → Explore requirements through dialogue
---quick specified → Infer and generate from project description
+--quick specified → Infer non-goals, confirm once, then generate from project description
 --analyze specified → Analyze existing codebase
 ```
 
@@ -127,6 +127,15 @@ options:
 - If Round 2 leaves no open questions, skip Round 3
 - If the user chooses "Other" with free text, ask follow-up questions if needed
 
+#### Required Scope Boundary
+
+Before generation, obtain at least one concrete capability, scenario, or responsibility that this feature will not cover.
+
+- **Dialogue mode**: Include "What is explicitly out of scope for this feature?" in an AskUserQuestion requirements round. Offer one to three context-derived exclusions and let the auto-added Other response supply the complete list. Do not complete generation while the answer is empty.
+- **Quick mode**: Infer a non-empty list from the request and YAGNI boundaries, show the complete list in one AskUserQuestion confirmation, and write only after confirmation. Offer `Use inferred list (Recommended)` and state that choosing the auto-added Other option replaces the inferred list with the user's complete list. If Other is empty, repeat the confirmation instead of generating.
+- **Auto mode**: Follow `auto-mode.md`; do not ask a question.
+- **Conversation history, existing specs, and `--analyze`**: Unless `--auto` is active, use the dialogue-mode confirmation. Present an existing non-empty boundary as the proposed list instead of silently preserving or replacing it.
+
 #### Socratic Deep-Dive (--deep)
 
 Explore from fundamentals using AskUserQuestion. Uses more rounds than standard.
@@ -179,16 +188,20 @@ State what, why, and how things change, short enough (a few paragraphs) that a s
 Project purpose and background
 
 ## 2. Functional Requirements
-[REQ-001] Feature name
-- Detailed description
-- User story
+### [REQ-001] Feature name
+- Description: Detailed behavior
+- User story: Who needs it and why
+- Acceptance Criteria:
+  - [ ] Observable condition that proves the requirement is satisfied
 
-[REQ-002] Feature name
+### [REQ-002] Feature name
 ...
 
 ## 3. Non-Functional Requirements
-[NFR-001] Performance requirements
-[NFR-002] Security requirements
+### [NFR-001] Performance requirement
+- Description: Measurable quality requirement
+- Acceptance Criteria:
+  - [ ] Observable threshold or verification result
 ...
 
 ## 4. Constraints
@@ -200,9 +213,14 @@ Project purpose and background
 [ASM-001] Assumption
 ...
 
-## 6. Glossary
+## 6. Out of Scope
+- Concrete capability, scenario, or responsibility this feature will not cover
+
+## 7. Glossary
 Domain-specific term definitions
 ```
+
+Every `REQ` and `NFR` block must contain a non-empty `Acceptance Criteria:` list. The Out of Scope section must contain at least one concrete item; placeholders such as `None`, `TBD`, or `N/A` do not satisfy the contract.
 
 #### ID Prefixes
 
