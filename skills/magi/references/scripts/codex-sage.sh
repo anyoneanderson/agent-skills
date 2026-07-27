@@ -29,18 +29,22 @@
 # to the list call keeps plugin-supplied servers out of the result, so every name
 # it returns is one that `-c` can switch off.
 #
-# It fails closed. If that list cannot be obtained or cannot be parsed, codex exec
-# is not started: not knowing which servers to block is no reason to send the
-# question anyway.
+# It fails closed. If that list cannot be obtained, cannot be parsed, or holds a
+# name this script cannot turn into an override, codex exec is not started: not
+# knowing which servers to block is no reason to send the question anyway. No name
+# is ever skipped — skipping one is exactly how a server would stay enabled.
+#
+# The list is a snapshot taken at startup. A configuration change made between the
+# listing and codex's own load would not be blocked; see "known limits" in
+# references/sages.md.
 #
 # Requires codex-cli 0.145.0 or newer, the version `mcp list --json` and the
 # `--disable` flag were verified against (2026-07-27). An older codex rejects the
 # unknown flag, this wrapper stops, and the sage is recorded as no answer — the
 # council degrades, and the question still does not leak.
 #
-# Exit codes: whatever `codex exec` returns | 2 = the MCP server list could not be
-# determined | 3 = codex reported a server name that cannot be expressed as a
-# `-c` override.
+# Exit codes: whatever `codex exec` returns | 2 = the set of servers to disable
+# could not be established.
 
 set -euo pipefail
 
@@ -61,7 +65,9 @@ if ! SERVER_JSON="$(codex mcp list --json --disable plugins)"; then
 fi
 
 # Shape check before extraction, so an empty roster — valid, and common — is told
-# apart from output this script cannot interpret.
+# apart from output this script cannot interpret. It checks only that every entry
+# carries a string name; whether that string can become an override is checked per
+# name below, where the message can quote the offending server.
 if ! printf '%s' "$SERVER_JSON" |
   jq -e 'type == "array" and all(.[]; type == "object" and (.name | type) == "string")' >/dev/null 2>&1; then
   err "cannot read the MCP server list: 'codex mcp list --json' did not return an array of objects carrying a name"
@@ -71,16 +77,17 @@ fi
 
 DISABLE_ARGS=()
 while IFS= read -r name; do
-  [ -n "$name" ] || continue
   case "$name" in
-    *[!A-Za-z0-9_-]*)
-      # A name outside this set cannot be turned into a reliable dotted `-c` path,
-      # and leaving that server enabled is the very leak this script prevents.
-      # Stop instead: a sage recorded as failed is recoverable, a question sent to
-      # an undisclosed provider is not.
-      err "cannot disable MCP server '${name}': the name is not plain [A-Za-z0-9_-], so it cannot be expressed as a -c override"
+    '' | *[!A-Za-z0-9_-]*)
+      # An empty name, or one outside this character set, cannot be turned into a
+      # reliable dotted `-c` path. Skipping it would leave that server enabled,
+      # which is the leak this script exists to prevent, so the run stops here: a
+      # sage recorded as failed is recoverable, a question sent to an undisclosed
+      # provider is not. An empty name also appears when codex reports a name
+      # containing a newline, which this line protocol cannot carry.
+      err "cannot disable MCP server \"${name}\": a server name must be non-empty and plain [A-Za-z0-9_-] to become a -c override"
       err "rename that server, or remove it from the codex configuration, before convening the council"
-      exit 3
+      exit 2
       ;;
   esac
   DISABLE_ARGS+=(-c "mcp_servers.${name}.enabled=false")

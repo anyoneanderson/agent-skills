@@ -23,10 +23,11 @@
 #                             {MAGI_SCRIPTS_DIR}, as the default codex adapter
 #                             does to reach its wrapper (fixtures/fake-sage.sh)
 #
-# The last three cases test codex-sage.sh instead of magi-run.sh, with
+# The last four cases test codex-sage.sh instead of magi-run.sh, with
 # fixtures/fake-codex.sh copied to <case>/bin/codex and put first on PATH. They
 # assert the arguments that reach `codex exec`, because that is where the MCP
-# blocking either happens or silently does not.
+# blocking either happens or silently does not, and that nothing reaches it at all
+# when the wrapper cannot establish the full set of servers to block.
 #
 # Keep fixture timeouts small: a bug that hangs a sage should cost this suite
 # seconds, not the ten minutes the real council allows.
@@ -833,6 +834,31 @@ case_codex_wrapper_fails_closed() {
   end_case
 }
 
+case_codex_wrapper_rejects_unusable_name() {
+  begin_case "the codex wrapper refuses to start codex when a server name cannot become an override"
+  local dir
+  dir="$(case_dir codex-wrapper-name)"
+
+  # A blank name is the dangerous one: skipping it would leave that server
+  # enabled, and the sage would look perfectly healthy.
+  printf '%s\n' '[{"name":"firecrawl"},{"name":""}]' > "${dir}/blank.json"
+  WRAP_LIST_FILE="${dir}/blank.json"
+  run_codex_wrapper "$dir" --sandbox read-only -
+  expect_rc 2 "$WRAP_RC" "a roster holding a blank name"
+  expect_absent "${dir}/exec-argv.txt" "codex exec is never reached"
+  expect_contains "${dir}/wrapper.err" 'cannot disable MCP server ""' "the empty name is shown as \"\""
+
+  # A name with characters that cannot be expressed as a dotted -c path stops the
+  # run for the same reason.
+  printf '%s\n' '[{"name":"my server"}]' > "${dir}/symbol.json"
+  WRAP_LIST_FILE="${dir}/symbol.json"
+  run_codex_wrapper "$dir" --sandbox read-only -
+  expect_rc 2 "$WRAP_RC" "a roster holding a name with a space"
+  expect_absent "${dir}/exec-argv.txt" "codex exec is still never reached"
+  expect_contains "${dir}/wrapper.err" 'cannot disable MCP server "my server"' "the offending name is quoted"
+  end_case
+}
+
 case_round_label_validation() {
   begin_case "dispatch is refused when the round label contains path characters"
   local dir out
@@ -879,6 +905,7 @@ case_scripts_dir_placeholder
 case_codex_wrapper_disables_mcp
 case_codex_wrapper_empty_roster
 case_codex_wrapper_fails_closed
+case_codex_wrapper_rejects_unusable_name
 case_round_label_validation
 
 rm -f "$CASE_LOG"

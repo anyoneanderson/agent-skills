@@ -204,17 +204,34 @@ wrapper stops (see below) and BALTHASAR is recorded as no answer. The council
 degrades to two sages and the question still does not leak — but if BALTHASAR
 fails on every run, check `codex --version` first.
 
-The wrapper **fails closed** in two situations, both meaning "the set of servers
-to block is unknown":
+The wrapper **fails closed** with exit 2 in three situations, all of them meaning
+"the full set of servers to block could not be established":
 
-- The roster call fails, or returns something that is not an array of objects with
-  a name: exit 2. codex's own message is left on stderr next to the refusal.
-- codex reports a server whose name is not plain `[A-Za-z0-9_-]`, which cannot be
-  expressed as a dotted `-c` path: exit 3. Rename or remove that server.
+- The roster call fails. codex's own message is left on stderr next to the
+  refusal, which is where an unknown-flag error from an older release shows up.
+- The roster is not an array of objects carrying a name.
+- A name is empty, or holds anything outside `[A-Za-z0-9_-]`, so it cannot become
+  a dotted `-c` path. Rename or remove that server. Note that such a name is never
+  skipped in order to disable the rest: skipping is precisely how one server would
+  stay enabled while the sage looked healthy.
 
-Either way BALTHASAR appears as `no answer (error)` with the reason in
+In each case BALTHASAR appears as `no answer (error)` with the reason in
 `BALTHASAR.stderr`, and nothing is sent. A failed sage is recoverable, a question
 sent to an undisclosed provider is not.
+
+#### Known limit: the roster is a snapshot
+
+The disable list is built once, immediately before `codex exec` starts. If the
+codex configuration changes in that window — `codex mcp add` from another terminal,
+an editor saving `config.toml` — a server added there is not in the list and
+therefore not disabled. **Do not change codex's MCP configuration while a council
+is running.**
+
+This is a guard against accidents, not against a hostile process. Anyone able to
+rewrite that configuration during the run could equally rewrite the sage config or
+this wrapper, so treating the window as a security boundary would be misleading.
+It is documented because an operator adding a server mid-run is a plausible
+mistake, and because a reader deserves to know what the blocking does not cover.
 
 **Swapping a sage means re-establishing this yourself.** The config validator
 checks structure, not tool permissions. For whatever CLI you seat, find its
