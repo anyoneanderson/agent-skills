@@ -1,0 +1,12 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "TESTSAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "A display name that appears in no other config. Seeing TESTSAGE in summary.json proves the override was read and the bundled default was not."
+    }
+  ]
+}

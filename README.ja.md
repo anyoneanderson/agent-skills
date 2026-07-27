@@ -26,6 +26,7 @@
 | [cmux-delegate](skills/cmux-delegate/) | 別のcmuxペインまたはワークスペースでAIエージェントにタスクを委任 |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | cmux経由で別AIエージェントにコードや仕様書の独立レビューを依頼 |
 | [agent-delegate](skills/agent-delegate/) | もう一方のAIエージェントにタスク委譲や敵対的レビューをヘッドレスで依頼（cmux不要）。解析可能なreport.jsonを返す |
+| [magi](skills/magi/) | 系統の異なる3つのLLM CLIへ同じ問いを独立に送り、採決結果または裏取り済みの調査レポートを、どの賢者が何を答えたかのマトリクスつきで返す |
 | [skill-suggest](skills/skill-suggest/) | プロジェクトの技術スタックを自動解析し、skills.shレジストリから最適なスキルを提案・インストール |
 | [harness-init](skills/harness-init/) | Harness Engineering 制御ループ（Planner/Generator/Evaluator エージェント・hooks・ガードスクリプト）をプロジェクトに導入 |
 | [harness-plan](skills/harness-plan/) | epic を計画: product-spec を起草し sprint roadmap を導出、sprint ごとに tracker Issue を起票 |
@@ -56,6 +57,7 @@ npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill agent-delegate -g -y
+npx skills add anyoneanderson/agent-skills --skill magi -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 
 # Harness Engineering（自律）— 先に spec-rules-init + spec-workflow-init を入れる

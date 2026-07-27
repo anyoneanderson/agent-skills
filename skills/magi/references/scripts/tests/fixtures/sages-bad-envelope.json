@@ -1,0 +1,19 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "GARBLEDSAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": ".result",
+      "notes": "Exits 0 but prints plain text where its extract filter expects a JSON envelope. An answer that cannot be extracted is degraded, so the sage must end up error, not ok."
+    },
+    {
+      "name": "QUICKSAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "Answers normally, so the round proves collection continues past an unreadable answer."
+    }
+  ]
+}

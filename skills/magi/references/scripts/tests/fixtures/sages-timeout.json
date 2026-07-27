@@ -1,0 +1,20 @@
+{
+  "timeout_seconds": 2,
+  "sages": [
+    {
+      "name": "STUCKSAGE",
+      "cli": "sleep",
+      "command": ["sleep", "30"],
+      "input": "stdin",
+      "extract": "raw",
+      "notes": "Never answers. The perl alarm wrapper must stop it after timeout_seconds, which the shell reports as exit 142."
+    },
+    {
+      "name": "QUICKSAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "Answers immediately, so the round proves a stuck sage does not hide a healthy one."
+    }
+  ]
+}

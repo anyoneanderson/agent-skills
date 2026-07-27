@@ -26,6 +26,7 @@ Reusable AI agent skills for specification-driven and autonomous (harness) devel
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
 | [agent-delegate](skills/agent-delegate/) | Delegate a task to, or get an adversarial review from, the other AI agent headlessly (no cmux); returns a parseable report.json |
+| [magi](skills/magi/) | Put a question to three independent LLM CLIs from different vendors and return a tallied verdict or a cross-checked research report, with a matrix of who said what |
 | [skill-suggest](skills/skill-suggest/) | Auto-detect project tech stack and suggest optimal skills from skills.sh registry |
 | [harness-init](skills/harness-init/) | Install a Harness Engineering control loop (Planner/Generator/Evaluator agents, hooks, guard scripts) into a project |
 | [harness-plan](skills/harness-plan/) | Plan an epic: draft a product-spec, derive a sprint roadmap, and emit one tracker Issue per sprint |
@@ -56,6 +57,7 @@ npx skills add anyoneanderson/agent-skills --skill cmux-fork -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-delegate -g -y
 npx skills add anyoneanderson/agent-skills --skill cmux-second-opinion -g -y
 npx skills add anyoneanderson/agent-skills --skill agent-delegate -g -y
+npx skills add anyoneanderson/agent-skills --skill magi -g -y
 npx skills add anyoneanderson/agent-skills --skill skill-suggest -g -y
 
 # Harness Engineering (autonomous) — install spec-rules-init + spec-workflow-init first
