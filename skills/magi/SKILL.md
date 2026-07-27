@@ -154,8 +154,9 @@ constrained to the shape; the others rely on the prompt instruction alone.
 ```bash
 summary="$("$magi_run" \
   --prompt-file "${out_dir}/round1/prompt.md" \
-  --out-dir "$out_dir" --round round1 \
-  [--sages MELCHIOR,BALTHASAR] [--schema-file "${out_dir}/schema.json"] | tail -1)"
+  --out-dir "$out_dir" --round round1 | tail -1)"
+# Add --schema-file "${out_dir}/schema.json" to constrain the sages that support
+# it, and --sages MELCHIOR,BALTHASAR to dispatch to a subset.
 ```
 
 The last line of stdout is the path of `summary.json`. Exit 2 means a
@@ -216,8 +217,8 @@ Only when all sages hold different positions.
    not needed:
 
    ```bash
-   summary="$("$magi_run" \
-     --out-dir "$out_dir" --round debate1 [--sages MELCHIOR,BALTHASAR] | tail -1)"
+   summary="$("$magi_run" --out-dir "$out_dir" --round debate1 | tail -1)"
+   # In a degraded council, add --sages with the two available names.
    ```
 
 5. Re-tally with the same rules. A `compromise` is a new position, compared by
@@ -381,7 +382,7 @@ mkdir -p "${out_dir}/round1"
   --out-dir "$out_dir" --round round1 --sages BALTHASAR,CASPER
 ```
 
-Run `"$magi_run" --help` for the full argument contract.
+Run the script with `--help` for the full argument contract.
 
 ## Notes
 
