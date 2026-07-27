@@ -1344,6 +1344,227 @@ check_runtime_record_order() {
   done
 }
 
+check_intake_gitignore_contract() {
+  local file="$1"
+  awk '
+    /^```/ {
+      if (in_fence) {
+        if ($0 ~ /^```[[:space:]]*$/) {
+          if (candidate && marker && stdout_json && stdout_run_json && stdout_run_jsonl && last_run_txt) valid=1
+          in_fence=candidate=0
+        }
+      } else {
+        in_fence=1
+        candidate=($0 ~ /^```(gitignore)?[[:space:]]*$/)
+        marker=stdout_json=stdout_run_json=stdout_run_jsonl=last_run_txt=0
+      }
+      next
+    }
+    in_fence && candidate {
+      if ($0 ~ /^# spec-orchestrate run records/) marker=1
+      if ($0 == "*/*-stdout.json") stdout_json=1
+      if ($0 == "*/*-stdout.*.json") stdout_run_json=1
+      if ($0 == "*/*-stdout.*.jsonl") stdout_run_jsonl=1
+      if ($0 == "*/*-last.*.txt") last_run_txt=1
+    }
+    END {exit !valid}
+  ' "$file"
+}
+
+check_pipeline_run_records_contract() {
+  local file="$1" marker="$2"
+  awk -v marker="$marker" '
+    index($0, marker)==1 {in_section=1; found_section=1}
+    in_section && /^##[[:space:]]/ && index($0, marker)!=1 {in_section=0}
+    in_section {
+      if (index($0, "`*/*-stdout.json`") > 0) stdout_json=1
+      if (index($0, "`*/*-stdout.*.json`") > 0) stdout_run_json=1
+      if (index($0, "`*/*-stdout.*.jsonl`") > 0) stdout_run_jsonl=1
+      if (index($0, "`*/*-last.*.txt`") > 0) last_run_txt=1
+    }
+    END {exit !(found_section && stdout_json && stdout_run_json && stdout_run_jsonl && last_run_txt)}
+  ' "$file"
+}
+
+check_improve_yaml_contract() {
+  local file="$1"
+  awk '
+    /^```yaml[[:space:]]*$/ {in_yaml=1; next}
+    in_yaml && /^```[[:space:]]*$/ {in_yaml=in_improve=0; next}
+    in_yaml && /^improve:[[:space:]]/ {in_improve=1; found_improve=1; next}
+    in_improve && /^[[:alnum:]_][[:alnum:]_-]*:[[:space:]]/ {in_improve=0}
+    in_improve {
+      if ($0 ~ /^[[:space:]]+skills_repo:/) skills_repo_count++
+      if ($0 == "  skills_repo: \"~/path/to/agent-skills\"") neutral=1
+      if (index($0, "/Users/") || index($0, "sunagakeita") ||
+          index($0, "keitasunaga") || index($0, "anyoneanderson") ||
+          index($0, "~/Documents/zenchaine/")) forbidden=1
+    }
+    END {exit !(found_improve && neutral && skills_repo_count==1 && !forbidden)}
+  ' "$file"
+}
+
+check_runtime_record_and_skills_repo_contract() {
+  local root="$1"
+  check_intake_gitignore_contract \
+    "$root/skills/spec-orchestrate/references/phases/intake.md" || return 1
+  check_intake_gitignore_contract \
+    "$root/skills/spec-orchestrate/references/phases/intake.ja.md" || return 1
+  check_pipeline_run_records_contract \
+    "$root/skills/spec-orchestrate/references/pipeline-config.md" '**Run records**' || return 1
+  check_pipeline_run_records_contract \
+    "$root/skills/spec-orchestrate/references/pipeline-config.ja.md" '**運転記録**' || return 1
+  check_improve_yaml_contract \
+    "$root/skills/spec-orchestrate/references/pipeline-config.md" || return 1
+  check_improve_yaml_contract \
+    "$root/skills/spec-orchestrate/references/pipeline-config.ja.md"
+}
+
+copy_runtime_record_contract_documents() {
+  local root="$1" relative
+  for relative in \
+    skills/spec-orchestrate/references/phases/intake.md \
+    skills/spec-orchestrate/references/phases/intake.ja.md \
+    skills/spec-orchestrate/references/pipeline-config.md \
+    skills/spec-orchestrate/references/pipeline-config.ja.md; do
+    mkdir -p "$root/$(dirname "$relative")"
+    cp "$REPO_ROOT/$relative" "$root/$relative"
+  done
+}
+
+replace_literal_in_file() {
+  local file="$1" token="$2" replacement="$3" bad
+  bad="$(mktemp "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-document-mutation.XXXXXX")"
+  awk -v token="$token" -v replacement="$replacement" '
+    {
+      line=$0
+      while ((position=index(line, token)) > 0) {
+        line=substr(line, 1, position - 1) replacement substr(line, position + length(token))
+        changed++
+      }
+      print line
+    }
+    END {if (changed==0) exit 1}
+  ' "$file" > "$bad" || { rm -f "$bad"; return 1; }
+  mv "$bad" "$file"
+}
+
+insert_after_exact_line() {
+  local file="$1" expected="$2" inserted="$3" bad
+  bad="$(mktemp "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-document-insertion.XXXXXX")"
+  awk -v expected="$expected" -v inserted="$inserted" '
+    {print}
+    $0==expected {print inserted; changed++}
+    END {if (changed!=1) exit 1}
+  ' "$file" > "$bad" || { rm -f "$bad"; return 1; }
+  mv "$bad" "$file"
+}
+
+remove_runtime_record_format() {
+  local file="$1" relative="$2" token="$3" bad
+  case "$relative" in
+    */phases/intake*)
+      bad="$(mktemp "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-format-mutation.XXXXXX")"
+      awk -v token="$token" '
+        $0==token {$0="__missing_runtime_record_format__"; changed++}
+        {print}
+        END {if (changed!=1) exit 1}
+      ' "$file" > "$bad" || { rm -f "$bad"; return 1; }
+      mv "$bad" "$file"
+      ;;
+    */pipeline-config*)
+      replace_literal_in_file "$file" "\`$token\`" '`__missing_runtime_record_format__`'
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+check_runtime_record_and_skills_repo_mutations() {
+  local dir relative token forbidden
+  dir="$(new_work_dir)"
+  copy_runtime_record_contract_documents "$dir"
+  check_runtime_record_and_skills_repo_contract "$dir" || { rm -rf "$dir"; return 1; }
+
+  for relative in \
+    skills/spec-orchestrate/references/phases/intake.md \
+    skills/spec-orchestrate/references/phases/intake.ja.md \
+    skills/spec-orchestrate/references/pipeline-config.md \
+    skills/spec-orchestrate/references/pipeline-config.ja.md; do
+    for token in \
+      '*/*-stdout.json' \
+      '*/*-stdout.*.json' \
+      '*/*-stdout.*.jsonl' \
+      '*/*-last.*.txt'; do
+      copy_runtime_record_contract_documents "$dir"
+      remove_runtime_record_format "$dir/$relative" "$relative" "$token" || {
+        rm -rf "$dir"
+        return 1
+      }
+      if check_runtime_record_and_skills_repo_contract "$dir"; then
+        rm -rf "$dir"
+        return 1
+      fi
+      copy_runtime_record_contract_documents "$dir"
+      remove_runtime_record_format "$dir/$relative" "$relative" "$token" || {
+        rm -rf "$dir"
+        return 1
+      }
+      case "$relative" in
+        */phases/intake*) printf '\n%s\n' "$token" >> "$dir/$relative" ;;
+        */pipeline-config*) printf '\noutside run records section: `%s`\n' "$token" >> "$dir/$relative" ;;
+        *) rm -rf "$dir"; return 1 ;;
+      esac
+      if check_runtime_record_and_skills_repo_contract "$dir"; then
+        rm -rf "$dir"
+        return 1
+      fi
+    done
+  done
+
+  for relative in \
+    skills/spec-orchestrate/references/pipeline-config.md \
+    skills/spec-orchestrate/references/pipeline-config.ja.md; do
+    copy_runtime_record_contract_documents "$dir"
+    replace_literal_in_file "$dir/$relative" '~/path/to/agent-skills' '~/path/to/not-agent-skills' || {
+      rm -rf "$dir"
+      return 1
+    }
+    if check_runtime_record_and_skills_repo_contract "$dir"; then
+      rm -rf "$dir"
+      return 1
+    fi
+    copy_runtime_record_contract_documents "$dir"
+    replace_literal_in_file "$dir/$relative" '~/path/to/agent-skills' '~/path/to/not-agent-skills' || {
+      rm -rf "$dir"
+      return 1
+    }
+    printf '\noutside improve YAML block:\n  skills_repo: "~/path/to/agent-skills"\n' >> "$dir/$relative"
+    if check_runtime_record_and_skills_repo_contract "$dir"; then
+      rm -rf "$dir"
+      return 1
+    fi
+    for forbidden in \
+      '/Users/' \
+      'sunagakeita' \
+      'keitasunaga' \
+      'anyoneanderson' \
+      '~/Documents/zenchaine/'; do
+      copy_runtime_record_contract_documents "$dir"
+      insert_after_exact_line "$dir/$relative" \
+        '  skills_repo: "~/path/to/agent-skills"' \
+        "  forbidden_mutation: \"$forbidden\"" || {
+        rm -rf "$dir"
+        return 1
+      }
+      if check_runtime_record_and_skills_repo_contract "$dir"; then
+        rm -rf "$dir"
+        return 1
+      fi
+    done
+  done
+  rm -rf "$dir"
+}
+
 check_document_contracts() {
   local fixture="$1" test_id="$2"
   check_contract_fixture "$fixture" &&
@@ -1389,7 +1610,10 @@ case_caller_sync_poll_timeout_contract() {
   check_contract_positive_and_negative T-A12 polling en heartbeat-interval en '91 seconds'
 }
 case_bilingual_contract_and_runtime_records() {
-  check_contract_positive_and_negative T-A13 runtime-record-files ja polling ja '31秒'
+  check_contract_positive_and_negative T-A13 runtime-record-files ja polling ja '31秒' ||
+    die 'bilingual document contract fixture or section contract rejected'
+  check_runtime_record_and_skills_repo_mutations ||
+    die 'runtime record or skills_repo scoped positive and negative checks failed'
 }
 
 check_compatibility_fixture() {
