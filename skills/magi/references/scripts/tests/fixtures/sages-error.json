@@ -1,0 +1,20 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "BOOMSAGE",
+      "cli": "sh",
+      "command": ["sh", "-c", "printf 'boom\\n' >&2; exit 3"],
+      "input": "stdin",
+      "extract": "raw",
+      "notes": "Fails the way a CLI with a bad flag or an expired login does: a message on stderr and a non-zero exit."
+    },
+    {
+      "name": "QUICKSAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "Answers normally, so the round proves collection continues past a failed sage."
+    }
+  ]
+}

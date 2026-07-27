@@ -1,0 +1,28 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "ECHOSAGE",
+      "cli": "sh",
+      "command": ["sh", "-c", "jq -Rs '{result: .}'"],
+      "input": "stdin",
+      "extract": ".result",
+      "notes": "Stands in for a CLI that reads the prompt on stdin and answers inside a JSON envelope (claude -p --output-format json). It wraps the prompt it received into {\"result\": ...}, so a correct extraction returns the prompt text."
+    },
+    {
+      "name": "FILESAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "Stands in for a CLI that takes the prompt as a file path and answers on bare stdout (grok --prompt-file, or Antigravity with extract: raw)."
+    },
+    {
+      "name": "ANSWERSAGE",
+      "cli": "sh",
+      "command": ["sh", "-c", "cat > \"$1\"", "sh", "{ANSWER_FILE}"],
+      "input": "stdin",
+      "extract": "answer-file",
+      "notes": "Stands in for a CLI that writes its final message to a file instead of stdout (codex exec --output-last-message). $1 is the substituted {ANSWER_FILE}."
+    }
+  ]
+}

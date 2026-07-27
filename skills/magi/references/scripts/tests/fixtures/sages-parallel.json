@@ -1,0 +1,29 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "SLOWSAGE_A",
+      "cli": "sh",
+      "command": ["sh", "-c", "sleep 1; cat"],
+      "input": "stdin",
+      "extract": "raw",
+      "notes": "Waits one second before answering. Three of these finish in about one second when they run in parallel, and in about three when they do not."
+    },
+    {
+      "name": "SLOWSAGE_B",
+      "cli": "sh",
+      "command": ["sh", "-c", "sleep 1; cat"],
+      "input": "stdin",
+      "extract": "raw",
+      "notes": "Same as SLOWSAGE_A."
+    },
+    {
+      "name": "SLOWSAGE_C",
+      "cli": "sh",
+      "command": ["sh", "-c", "sleep 1; cat"],
+      "input": "stdin",
+      "extract": "raw",
+      "notes": "Same as SLOWSAGE_A."
+    }
+  ]
+}

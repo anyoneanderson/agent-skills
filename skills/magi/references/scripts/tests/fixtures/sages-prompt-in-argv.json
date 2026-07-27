@@ -1,0 +1,12 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "LEAKSAGE",
+      "cli": "sh",
+      "command": ["sh", "-c", "printf '%s' \"$1\"", "sh", "{PROMPT}"],
+      "extract": "raw",
+      "notes": "Invalid on purpose: {PROMPT} would expand the question into argv, where any local process can read it with ps. Config validation must reject this file, so no test ever dispatches it."
+    }
+  ]
+}

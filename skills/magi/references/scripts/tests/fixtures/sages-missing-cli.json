@@ -1,0 +1,19 @@
+{
+  "timeout_seconds": 5,
+  "sages": [
+    {
+      "name": "GONESAGE",
+      "cli": "magi-no-such-cli",
+      "command": ["magi-no-such-cli", "--prompt-file", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "A sage whose CLI is not installed. preflight must record it as missing instead of dispatching to it."
+    },
+    {
+      "name": "HERESAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "An installed sage, so preflight.json shows one available and one missing rather than an all-or-nothing result."
+    }
+  ]
+}

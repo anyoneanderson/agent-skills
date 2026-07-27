@@ -1,0 +1,14 @@
+{
+  "timeout_seconds": 15,
+  "sages": [
+    {
+      "name": "PROBESAGE",
+      "cli": "sh",
+      "command": ["sh", "-c", "printf 'args=[%s]\\n' \"$*\"; cat", "sh"],
+      "input": "stdin",
+      "extract": "raw",
+      "schema_args": ["--json-schema", "{SCHEMA}"],
+      "notes": "Reports its own argument list on the first line of its answer, then echoes the prompt it read from stdin. That makes both halves of the contract observable: schema_args reaching argv, and the prompt body never doing so."
+    }
+  ]
+}
