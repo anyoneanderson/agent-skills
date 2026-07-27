@@ -34,6 +34,9 @@ PR は spec-implement の最終ステップが作成する。オーケストレ�
   これらで止まらないため、浮上する場所は PR 本文である — 先送りであって、黙って
   捨てられることはない。`trial` / `required_check` / `follow_up` の finding は PR
   作成時に後続 issue にしてここへリンクする。
+- 各`review-spec-{round}.md`の受理判断を列挙する。
+  `rejected: out_of_scope`としたfindingごとに、対応するスコープ基準の引用を記載する。
+  PRのレビュアーは、ローカルの運転記録を開かずに棄却理由を確認できる。
 - ロール入れ替えや裁定があれば `state.arbitrations` の各エントリを1行（シグナル +
   裁定）。読み手が、なぜ担当が入れ替わったか / なぜ draft 着地したかを分かるように。
 - `state.review_fallbacks` が空でなければ、artifact・round・preferred/actual AI role・
@@ -48,6 +51,7 @@ PR は spec-implement の最終ステップが作成する。オーケストレ�
   - [ ] **Critical / fix_before: required_check** design.md §5.1 — stale success can be re-issued; fix before the check becomes required (#124)
   - [ ] **Improvement / fix_before: follow_up** `CR-STYLE-004` design.md §4.2 — naming nit (#125)
   - Minor: `CR-STYLE-002` design.md §3.1 — wording nit, deferred
+- Rejected as out of scope: PDF出力の欠落は`PDF出力は扱わない`と一致（requirement.md 84行）
 - Arbitration: S1 at spec_review round 4 → reviewer swapped codex→claude
 - cross-AI 保証の縮退: T001 round 1 は preferred claude → actual codex runtime-native（`fresh_subagent`、peer 利用不能）
 ```

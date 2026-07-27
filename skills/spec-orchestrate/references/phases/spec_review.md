@@ -46,6 +46,34 @@ fixes is `implementation` only for secret leak / data loss / merge-condition
 bypass / infeasibility). This matters especially for a resuming backend, which
 otherwise keeps drilling into the same area it explored last round.
 
+<!-- out-of-scope-acceptance:start -->
+**Out-of-scope acceptance filter:** After validating the reviewer's raw output
+and recomputing its raw Gate, inspect each finding that claims a case, scenario,
+or capability is missing. Compare that claim with the non-empty `Out of Scope`
+or `Non-Goals` section in `requirement.md` before adding it to the fix queue.
+
+1. Reject the finding only when the same capability or scenario is explicitly
+   excluded. Keyword overlap or a broader inferred exclusion is not enough.
+2. Do not filter contradictions, infeasible requirements, claims that a stated
+   non-goal makes an accepted requirement impossible, or claims that the
+   non-goal conflicts with the request or Issue that sourced the spec.
+3. Append an `Acceptance Decisions` entry to the review file with the finding
+   title or ordinal, the matched non-goal quotation and line,
+   `rejected: out_of_scope`, and the reason. Keep the raw finding unchanged.
+4. Exclude rejected findings from effective `fix_required`, fingerprints,
+   class keys, Gate, and the fix queue. Record the effective Gate with the
+   acceptance decisions; retain the raw Gate as unfiltered evidence.
+5. During round 1, append a `Scope Baseline` under `Acceptance Decisions` with
+   every non-goal's exact text and line in `.specs/{feature}/review-spec-1.md`.
+   Resumed and later rounds must read that file as the baseline and may reject
+   findings only against unchanged baseline entries; a non-goal added or changed
+   after review began is a non-match, so the finding remains in the fix queue.
+6. Carry every finding without an explicit baseline match into the normal fix
+   loop. Never expand Out of Scope merely to dismiss a finding. If the user
+   changes the source request or Issue, regenerate and inspect the specs, then
+   restart review with a new baseline instead of rewriting it in place.
+<!-- out-of-scope-acceptance:end -->
+
 **Cross-AI backend (agent-delegate):**
 1. Round 1: launch agent-delegate `--mode review --target <spec_reviewer>`
    (read-only) with the spec file list, adversarial perspectives, and any prior
@@ -110,8 +138,9 @@ the spec author. Record one `state.review_fallbacks` entry per round. If a fresh
 native reviewer cannot be guaranteed, block instead of reviewing in the
 orchestrator context.
 
-After either backend completes, read the review file's Gate line, severity
-counts, and `fix_before` tags.
+After either backend completes, read the raw Gate line, severity counts, and
+`fix_before` tags, validate the raw result, then apply the out-of-scope filter
+and calculate the effective Gate.
 
 ## Output
 
@@ -128,12 +157,13 @@ counts, and `fix_before` tags.
   carry a valid `fix_before` value; a `fix_before: implementation` finding must
   state who triggers it, what breaks, and from which milestone on. A finding
   missing these is treated as malformed (same re-run-once rule).
-- **Recompute the Gate from the `fix_before` tags** — FAIL iff at least one
+- **Recompute the raw Gate from all `fix_before` tags first** — FAIL iff at least one
   finding carries the gate-blocking stage. Never adopt the reviewer's `Gate`
   line at face value: the delegation script verifies structure only, not that
-  the line matches the findings. A `Gate` line that contradicts the tally is
-  malformed output (same re-run-once rule).
-- Only `fix_before: implementation` findings drive the fix loop. Findings at
+  the line matches the findings. A raw `Gate` line that contradicts the raw
+  tally is malformed output (same re-run-once rule). Then apply the acceptance
+  filter and recompute the effective Gate from accepted findings.
+- Only accepted `fix_before: implementation` findings drive the fix loop. Findings at
   `trial` / `required_check` / `follow_up`, and Minor findings, are recorded
   and carried forward — transcribed to the PR body (see `../pr-assembly.md`),
   not fixed in this loop.
@@ -142,9 +172,9 @@ counts, and `fix_before` tags.
 
 - Append this round to `rounds.spec_review`: round number, critical /
   improvement / minor counts, `fix_required` (the count of
-  `fix_before: implementation` findings), finding fingerprints (computed per
+  accepted `fix_before: implementation` findings), finding fingerprints (computed per
   `../stall-detection.md`, over the fix-loop findings only, i.e.
-  `fix_before: implementation`), class keys (path + section, per
+  accepted `fix_before: implementation`), class keys (path + section, per
   `../stall-detection.md` S4), and the gate result. This entry is the sole
   input to stall detection.
 - agent-delegate backend only: record the reviewer `thread_id` under
@@ -159,10 +189,10 @@ counts, and `fix_before` tags.
 
 ## Transitions
 
-- Any `fix_before: implementation` finding, no stall → **spec_generate** (fix,
+- Any accepted `fix_before: implementation` finding, no stall → **spec_generate** (fix,
   then re-review — resuming agent-delegate sessions, sessionless with
   carried-over findings for native review). Deferred findings (`trial` /
   `required_check` / `follow_up`) and Minor findings are not fixed here; they
   are already recorded and are transcribed to the PR body.
-- Gate PASS (no `implementation` finding) → **approval**
+- Effective Gate PASS (no accepted `implementation` finding) → **approval**
 - stall signal fires → **arbitration** (`../stall-detection.md`)

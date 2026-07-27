@@ -59,6 +59,13 @@ Apply the **YAGNI principle** (see SKILL.md): build only what the Issue asks
 for. Do not add auth, analytics, i18n, or infrastructure that the Issue does not
 mention.
 
+Populate `## 6. Out of Scope` with at least one concrete capability, scenario,
+or responsibility excluded by the Issue or the applicable YAGNI boundary. If
+the Issue does not state the boundary, record the inferred boundary's rationale
+as an `ASM-XXX`; never leave the section empty or use `None`, `TBD`, or `N/A`.
+Every `REQ` and `NFR` block must also contain a non-empty `Acceptance Criteria:`
+list with an observable pass/fail condition.
+
 ### 4. Record ambiguity as assumptions (the substitute for questions)
 
 Every point where the interactive path would call AskUserQuestion becomes an
@@ -110,3 +117,4 @@ paths and the list of assumptions written, then returns control to the caller
 4. [ ] Every inferred decision is recorded as an `ASM-XXX` in requirement.md
 5. [ ] Output language matches the Issue language
 6. [ ] Projection consistency pass completed after generation or revision
+7. [ ] Out of Scope is non-empty and every REQ/NFR has acceptance criteria

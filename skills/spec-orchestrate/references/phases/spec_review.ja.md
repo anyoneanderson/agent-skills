@@ -43,6 +43,32 @@ Gate の判定には使わない。Gate が集計と食い違わないよう、�
 これは resume するバックエンドで特に効く — 指示しないと前ラウンドに探索した領域を
 掘り続ける。
 
+<!-- out-of-scope-acceptance:start -->
+**非目標との受理照合:** オーケストレーターはレビュアーの生の出力を検証して生のGateを
+再集計した後、ケース、状況、機能が書かれていないと主張するfindingを、
+`requirement.md`の空でない「非目標」または「対象外」と比較してから修正キューへ入れる。
+
+1. 同じ機能または状況が明示的に除外されている場合だけfindingを棄却する。
+   キーワードが重なるだけの場合や、より広い除外を推測しないと一致しない場合は棄却しない。
+2. 矛盾、実装不能、非目標が受理済み要求を不可能にするという指摘、または非目標が
+   仕様の情報源となった依頼やIssueと衝突するという指摘には、この照合を適用しない。
+3. レビューファイルへ`受理判断`を追記し、findingのタイトルまたは順番、対応する非目標の
+   引用と行、`rejected: out_of_scope`、理由を記録する。
+   生のfindingは変更しない。
+4. 棄却したfindingを有効な`fix_required`、fingerprint、class key、Gate、修正キューから
+   除外する。
+   受理判断に有効Gateを記録し、生のGateは未照合出力の証拠として残す。
+5. ラウンド1では`受理判断`の下に`スコープ基準`を追記し、すべての非目標の正確な文面と
+   行を`.specs/{feature}/review-spec-1.md`へ記録する。
+   resume時と後続ラウンドでは、このファイルを基準として読み、findingを棄却できるのは、
+   変更されていない基準項目と一致する場合だけとする。
+   レビュー開始後に追加または変更した非目標は一致とみなさず、findingを修正キューに残す。
+6. 明示的な基準との一致がないfindingは通常の修正ループへ渡す。
+   指摘を棄却するために非目標を後から広げてはならない。
+   ユーザーが情報源の依頼またはIssueを変更した場合は、仕様の生成とinspectをやり直し、
+   基準をその場で書き換えずに新しい基準でレビューを開始する。
+<!-- out-of-scope-acceptance:end -->
+
 **Cross-AI backend（agent-delegate）:**
 1. ラウンド1: agent-delegate
    `--mode review --target <spec_reviewer>`（read-only）を、仕様ファイル一覧・
@@ -104,8 +130,8 @@ valid terminal report の `meta.run_id` が `expected_run_id` と一致し、`st
 `state.review_fallbacks` を1件記録する。新規 native reviewer を保証できなければ、
 オーケストレーター文脈でレビューせず blocked にする。
 
-いずれのバックエンドでも、完了後にレビューファイルの Gate 行、severity 件数、
-`fix_before` タグを読む。
+いずれのバックエンドでも、完了後にレビューファイルの生のGate行、severity件数、
+`fix_before`タグを読み、生の結果を検証してから非目標との照合を行い、有効Gateを計算する。
 
 ## 出力
 
@@ -122,20 +148,21 @@ valid terminal report の `meta.run_id` が `expected_run_id` と一致し、`st
   有効な `fix_before` 値が必要で、`fix_before: implementation` の finding には
   「誰が・どの操作で・何が壊れるか」「どのマイルストーン以降に成立するか」の記述が
   必要。欠けている場合は形式不正として扱う（同じ1回再実行の規則）。
-- **Gate は `fix_before` タグから再集計する** — ゲートを止める段階の finding が
+- **最初に全`fix_before`タグから生のGateを再集計する** — ゲートを止める段階のfindingが
   1件でもあれば FAIL。レビュアーの `Gate` 行を鵜呑みにしないこと: 委譲スクリプトが
-  検査するのは構造の存在だけで、Gate 行と findings の一致は検査しない。集計と矛盾する
-  `Gate` 行は形式不正として扱う（同じ1回再実行の規則）。
-- 修正ループを回すのは `fix_before: implementation` の finding のみ。`trial` /
+  検査するのは構造の存在だけで、Gate 行と findings の一致は検査しない。生の集計と矛盾する
+  Gate行は形式不正として扱う（同じ1回再実行の規則）。その後に受理照合を適用し、
+  受理したfindingだけから有効Gateを再計算する。
+- 修正ループを回すのは受理した`fix_before: implementation`のfindingのみ。`trial` /
   `required_check` / `follow_up` の finding と Minor は記録して持ち越し、PR 本文へ
   転記する（`../pr-assembly.ja.md`）。このループでは修正しない。
 
 ## state 更新
 
 - このラウンドを `rounds.spec_review` に追加: ラウンド番号、critical / improvement
-  / minor 件数、`fix_required`（`fix_before: implementation` の finding 件数）、
+  / minor 件数、`fix_required`（受理した`fix_before: implementation`のfinding件数）、
   findings 指紋（`../stall-detection.ja.md` に従い、修正ループ対象 =
-  `fix_before: implementation` の finding のみで計算）、クラスキー（パス +
+  受理した`fix_before: implementation`のfindingのみで計算）、クラスキー（パス +
   セクション。`../stall-detection.ja.md` の S4）、ゲート結果。このエントリが停滞検知の
   唯一の入力。
 - agent-delegate backend のみ: reviewer `thread_id` を `threads.spec_reviewer` に
@@ -150,9 +177,9 @@ valid terminal report の `meta.run_id` が `expected_run_id` と一致し、`st
 
 ## 遷移
 
-- `fix_before: implementation` の finding あり・停滞なし → **spec_generate**
+- 受理した`fix_before: implementation`のfindingあり・停滞なし → **spec_generate**
   （修正して再レビュー — agent-delegate session は resume、native review は
   findings を持ち越したセッションレス）。先送りの finding（`trial` / `required_check` /
   `follow_up`）と Minor はここで修正せず、既に記録済みで PR 本文へ転記する。
-- Gate PASS（`implementation` の finding なし）→ **approval**
+- 有効Gate PASS（受理した`implementation`のfindingなし）→ **approval**
 - 停滞シグナル成立 → **arbitration**（`../stall-detection.ja.md`）
