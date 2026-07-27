@@ -34,7 +34,7 @@ limits:
 review:                   # 任意 — レビューゲートのマイルストーン
   fix_before_stages: [implementation, trial, required_check, follow_up]
 improve:                  # retrospective 自動改善 — improve-apply.ja.md 参照
-  skills_repo: "~/Documents/zenchaine/agent-skills"
+  skills_repo: "~/path/to/agent-skills"
   auto_apply: true
   line_budget: 300
 ```
@@ -54,8 +54,10 @@ improve:                  # retrospective 自動改善 — improve-apply.ja.md �
   上記の4値が既定。マイルストーンが異なるプロジェクトはこの一覧を定義し直す。
   オーケストレーターがレビュー文脈に渡し、レビュアーはこの段階名で findings に
   タグを付ける（`phases/spec_review.ja.md` と敵対的レビュープロンプトを参照）。
-- **improve**: retrospective 自己改善ブロック。フィールドと動作は
-  `improve-apply.ja.md` にある。このファイルはスキーマ上の位置づけだけを固定する。
+- **improve**: retrospective 自己改善ブロック。`skills_repo`のプレースホルダは、
+  インストール済みコピーではなく、利用者自身のagent-skillsソースリポジトリへのパスで
+  置き換える。フィールドと動作は`improve-apply.ja.md`にある。このファイルはスキーマ上の
+  位置づけだけを固定する。
 
 ## pipeline-state.json
 
@@ -311,7 +313,10 @@ jq --arg d "$drift_summary" \
 `retrospective.md` / `pipeline-metrics.jsonl` / `.orchestrate-active.json`、
 agent-delegate の `*-report.json` / `*-heartbeat.json` / `*-owner.json` /
 `*-owner.lock/` / `*-report.candidate.*.json` / `*-last.txt` /
-`*-stdout.jsonl` / `*-stderr.log` / `*.pid`。
+`*/*-last.*.txt` / `*/*-stdout.json` / `*-stdout.jsonl` /
+`*/*-stdout.*.json` / `*/*-stdout.*.jsonl` / `*-stderr.log` / `*.pid`。
+`*/*-stdout.*.jsonl` のワイルドカード部分は、ファイル名にrun IDを含むCodexのstdout
+記録を対象にする。
 これらは**既定でコミットしない**。理由:
 
 - バイナリ証跡（スクリーンショット）は diff でレビューできない。

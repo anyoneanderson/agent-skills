@@ -60,7 +60,11 @@ pipeline-metrics.jsonl
 */*-owner.lock/
 */*-report.candidate.*.json
 */*-last.txt
+*/*-last.*.txt
+*/*-stdout.json
 */*-stdout.jsonl
+*/*-stdout.*.json
+*/*-stdout.*.jsonl
 */*-stderr.log
 */*.pid
 ```

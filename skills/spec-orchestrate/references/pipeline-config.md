@@ -34,7 +34,7 @@ limits:
 review:                   # optional — review gate milestones
   fix_before_stages: [implementation, trial, required_check, follow_up]
 improve:                  # retrospective auto-improvement — see improve-apply.md
-  skills_repo: "~/Documents/zenchaine/agent-skills"
+  skills_repo: "~/path/to/agent-skills"
   auto_apply: true
   line_budget: 300
 ```
@@ -55,8 +55,10 @@ improve:                  # retrospective auto-improvement — see improve-apply
   redefines the list; the orchestrator passes it into the review context so the
   reviewer tags findings with these stage names (see
   `phases/spec_review.md` and the adversarial review prompt).
-- **improve**: the retrospective self-improvement block. Its fields and behavior
-  are in `improve-apply.md`; this file only fixes their place in the schema.
+- **improve**: the retrospective self-improvement block. Replace the
+  `skills_repo` placeholder with the path to your own agent-skills source
+  repository, not an installed copy. Its fields and behavior are in
+  `improve-apply.md`; this file only fixes their place in the schema.
 
 ## pipeline-state.json
 
@@ -319,7 +321,10 @@ behavior). They are human-readable and belong to the feature's design record.
 `retrospective.md`, `pipeline-metrics.jsonl`, `.orchestrate-active.json`, and
 agent-delegate runtime records `*-report.json`, `*-heartbeat.json`,
 `*-owner.json`, `*-owner.lock/`, `*-report.candidate.*.json`, `*-last.txt`,
-`*-stdout.jsonl`, `*-stderr.log`, and `*.pid`.
+`*/*-last.*.txt`, `*/*-stdout.json`, `*-stdout.jsonl`,
+`*/*-stdout.*.json`, `*/*-stdout.*.jsonl`, `*-stderr.log`, and `*.pid`.
+The wildcard suffix in `*/*-stdout.*.jsonl` covers Codex stdout records that
+include a run ID in the filename.
 These are **not committed by default**. The reasons:
 
 - Binary evidence (screenshots) cannot be reviewed in a diff.
