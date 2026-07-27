@@ -111,5 +111,7 @@ Before submitting a new or updated SKILL.md, verify:
 - [ ] AskUserQuestion content is bilingual (`"English" / "日本語"`)
 - [ ] Reference files follow `*.md` / `*.ja.md` pattern
 - [ ] Total line count is under 500
+- [ ] `bash scripts/check-skill-line-budget.sh` passes from the repository root
+- [ ] Skills selected for size reduction are at most 450 lines and `bash scripts/tests/check-skill-reference-split-contract.sh` passes
 - [ ] No hardcoded MCP tool names (e.g., `mcp__serena__`, `Context7`)
 - [ ] All referenced files exist

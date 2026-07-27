@@ -10,8 +10,10 @@
 - `SKILL.md` フロントマターの `name` がディレクトリ名と一致すること
 - 参照されているすべてのファイルが存在すること
 - ハードコードされた MCP ツール名がないこと（例: `mcp__serena__`, `Context7`）
-- SKILL.md が 500 行以下であること
-- 出典: AGENTS.md (L70-75)
+- SKILL.md が 500 行未満であること
+- `bash scripts/check-skill-line-budget.sh`で全スキルの行数を検査すること
+- reference分割対象では`bash scripts/tests/check-skill-reference-split-contract.sh`を実行すること
+- 出典: AGENTS.md（Testing節）
 
 ### [SHOULD] テスト命名規則
 - 実装ではなく振る舞いを記述する
@@ -52,8 +54,8 @@
 - 汎用的な説明を使用すること
 - 出典: AGENTS.md (L62)
 
-### [MUST] SKILL.md は 500 行以下
-- SKILL.md のファイル行数を 500 行以下に保つこと
+### [MUST] SKILL.md は 500 行未満
+- SKILL.md のファイル行数を 500 行未満に保つこと
 - 出典: AGENTS.md (L63)
 
 ### [MUST] AskUserQuestion を使用

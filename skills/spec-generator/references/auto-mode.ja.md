@@ -51,8 +51,7 @@ full ワークフローの生成ロジックを Issue 本文を要求の情報�
 4ファイルの生成後に`references/projection-consistency.ja.md`を実行する。
 仕様修正のたびに再実行し、パスするまで完了を報告しない。
 
-**YAGNI 原則**（SKILL.md 参照）を適用する: Issue が求めるものだけを作る。Issue
-に書かれていない認証・分析・国際化・インフラを足さない。
+[yagni-guardrails.ja.md](yagni-guardrails.ja.md)を直接適用する。Issueが求めるものだけを作り、Issueに書かれていない認証、分析、国際化、インフラを足さない。
 
 spec-generatorは`## 6. 非目標`に、Issueまたは適用するYAGNI境界から除外できる機能、
 状況、責務を具体的に1件以上書く。

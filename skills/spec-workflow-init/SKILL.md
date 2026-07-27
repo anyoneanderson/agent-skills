@@ -318,108 +318,11 @@ If an existing workflow file is detected (from Step 1 or during generation):
 
 ### Step 6: Sub-Agent Generation
 
-**Skip this step** if the user selected "Single agent" in Round 6 or selected "Skip generation" in Round 7.
-
-**Step 6a: Claude Code agents** (when Round 7 selection includes Claude):
-
-1. Select template language based on Language Rules:
-   - English → `references/agents/claude/workflow-*.md`
-   - Japanese → `references/agents/claude/workflow-*.ja.md`
-
-2. Read each template and replace placeholders:
-   - `{coding_rules_path}` → detected path (e.g., `docs/coding-rules.md`)
-   - `{workflow_path}` → output path from Step 3 (e.g., `docs/issue-to-pr-workflow.md`)
-   - `{test_command}`, `{lint_command}`, `{typecheck_command}`, `{build_command}`
-   - `{e2e_test_command}`, `{browser_e2e_command}`, `{coverage_command}`
-   - `{dev_style}` → selected development style
-   - `{branch_naming}` → selected naming convention
-   - Leave `model` unset so Claude Code sub-agents inherit the user's current model or default teammate model
-
-3. Create directory and write files:
-   ```bash
-   mkdir -p .claude/agents
-   ```
-   - `.claude/agents/workflow-implementer.md`
-   - `.claude/agents/workflow-reviewer.md`
-   - `.claude/agents/workflow-tester.md`
-   - `.claude/agents/workflow-planner.md` — spec / test.md generation (spec-orchestrate pipeline)
-   - `.claude/agents/workflow-evaluator.md` — acceptance test execution (spec-orchestrate pipeline)
-
-4. If files already exist, ask for overwrite confirmation (same as Step 5)
-
-**Step 6b: Codex agents** (when Round 7 selection includes Codex):
-
-1. Select template language based on Language Rules:
-   - English → `references/agents/codex/workflow-*.toml`
-   - Japanese → `references/agents/codex/workflow-*.ja.toml`
-
-2. Read each TOML template and replace placeholders in `developer_instructions`:
-   - Same variables as Claude Code agents
-   - Leave `model` and `model_reasoning_effort` unset so each custom agent inherits the user's current Codex model and reasoning effort
-
-3. Create directory and write files:
-   ```bash
-   mkdir -p .codex/agents
-   ```
-   - `.codex/agents/workflow-implementer.toml`
-   - `.codex/agents/workflow-reviewer.toml`
-   - `.codex/agents/workflow-tester.toml`
-   - `.codex/agents/workflow-planner.toml` — spec / test.md generation (spec-orchestrate pipeline)
-   - `.codex/agents/workflow-evaluator.toml` — acceptance test execution (spec-orchestrate pipeline)
-
-4. Update `.codex/config.toml`:
-   - Create file if it doesn't exist
-   - Add or update the global agents settings:
-     ```toml
-     [agents]
-     max_threads = 3
-     max_depth = 1
-     ```
-   - Add `[features] multi_agent = true` if not present
-   - Do not add `[agents.<name>] config_file = ...` entries. Codex discovers custom agents from `.codex/agents/*.toml`, and each TOML's `name` field is the agent identifier.
-
-5. If files already exist, ask for overwrite confirmation
-
-### Step 6c: Pipeline Config Generation
-
-Generate the default `.specs/pipeline.yml` that spec-orchestrate reads for role
-assignments, following `references/pipeline-yml-template.md` (`.ja.md` for
-Japanese output):
-
-1. If `.specs/pipeline.yml` already exists, report the path and skip — do not
-   overwrite it.
-2. Otherwise, create `.specs/` if missing and write the template verbatim.
-
-### Step 6d: Watchdog Hook Registration (spec-orchestrate)
-
-Register spec-orchestrate's watchdog Stop hook so a mid-flight pipeline run
-cannot silently stall at a phase boundary (see spec-orchestrate
-`references/pipeline-config.md` §Run Marker and Watchdog).
-
-1. Skip with a note if the script is not installed in this project:
-   ```bash
-   ls .claude/skills/spec-orchestrate/references/scripts/pipeline-watchdog.sh 2>/dev/null
-   ```
-2. Skip (already registered) if `.claude/settings.json` mentions
-   `pipeline-watchdog.sh`.
-3. Otherwise ask for confirmation:
-   ```
-   question: "Register the spec-orchestrate watchdog Stop hook in .claude/settings.json?" / ".claude/settings.json に spec-orchestrate の watchdog Stop hook を登録しますか？"
-   header: "Watchdog"
-   options:
-     - "Yes, register (Recommended)" / "はい、登録する（推奨）"
-     - "No, skip" / "いいえ、スキップ"
-   ```
-4. If approved, merge this entry into the `hooks.Stop` array of
-   `.claude/settings.json` (create the file or the array as needed, preserving
-   every existing entry):
-   ```json
-   {"hooks": {"Stop": [{"hooks": [{"type": "command",
-     "command": "bash .claude/skills/spec-orchestrate/references/scripts/pipeline-watchdog.sh"}]}]}}
-   ```
-
-The hook is inert outside pipeline runs: without a fresh
-`.specs/.orchestrate-active.json` marker it always allows the stop.
+Read [references/agent-and-pipeline-setup.md](references/agent-and-pipeline-setup.md)
+completely (`.ja.md` for Japanese), then execute its Steps 6a through 6d in
+order. Skip agent generation only when Round 6 selected Single agent or Round 7
+selected Skip generation; pipeline config and watchdog handling still follow
+the reference's independent conditions.
 
 ### Step 7: AGENTS.md / CLAUDE.md Reference Update
 

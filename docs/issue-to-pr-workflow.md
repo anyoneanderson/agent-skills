@@ -132,6 +132,8 @@ git checkout -b feature/{issue_number}-{slug}
 - [ ] 参照しているファイルがすべて存在する
 - [ ] ハードコードされた MCP ツール名（例: `mcp__serena__`, `Context7`）が無い
 - [ ] `SKILL.md` が 500 行未満
+- [ ] `bash scripts/check-skill-line-budget.sh` が成功
+- [ ] reference分割を変更した場合は `bash scripts/tests/check-skill-reference-split-contract.sh` が成功
 - [ ] `README.md` / `README.ja.md` のスキル表が更新されている
 
 ## 4. テスト

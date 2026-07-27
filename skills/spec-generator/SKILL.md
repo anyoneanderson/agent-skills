@@ -373,62 +373,8 @@ These IDs ensure traceability across documents.
 
 ## YAGNI Principle
 
-Do **not** include unless explicitly requested or discussed:
-
-### ❌ Authentication & Authorization
-- Complex permission management (when basic auth suffices)
-- Role-based access control with multiple roles (admin/user is usually enough)
-- Social login integration (when basic email/password auth is sufficient)
-- Fine-grained permission systems
-
-### ❌ Analytics & Monitoring
-- Advanced analytics/reporting dashboards
-- Detailed audit logging (unless compliance requirements exist)
-- Real-time metrics and monitoring
-- User behavior tracking
-- A/B testing infrastructure
-
-### ❌ Infrastructure & Scalability
-- Multi-tenant support (unless explicitly required)
-- API versioning (unless external integration requirements exist)
-- Async processing (unless performance requirements demand it)
-- Batch processing/scheduled jobs (unless specified)
-- Auto-scaling infrastructure
-- Load balancing configuration
-
-### ❌ User Experience
-- Real-time notifications/updates (unless explicitly required)
-- Advanced search/filtering (when basic search suffices)
-- Data export features (PDF, Excel, etc.)
-- Offline mode support
-- Push notifications
-
-### ❌ Development & Operations
-- Data migration plans (for brand new projects)
-- Multi-language/i18n support (unless specified)
-- Admin dashboards (when simple CRUD interfaces suffice)
-- Complex deployment pipelines
-- Automated backup systems
-
-### ✅ Include by Default
-
-- Basic authentication (email/password)
-- Simple CRUD operations
-- Basic error handling and validation
-- Essential security (HTTPS, password hashing, input sanitization)
-- Core business logic only
-- Simple, clear user interfaces
-- Basic data persistence
-
-**When in doubt**: Ask via AskUserQuestion rather than assuming the feature is needed.
-
-## Optional Enhancements
-
-When advanced analysis tools are available in your environment, consider using them for:
-- Systematic analysis of complex, interconnected requirements
-- Framework-specific best practices and pattern lookup
-- Existing codebase semantic analysis and symbol navigation
-- UI/UX pattern recommendations
+Read [references/yagni-guardrails.md](references/yagni-guardrails.md) completely
+(`.ja.md` for Japanese) before deciding scope; apply every listed guardrail.
 
 ## Post-Completion Actions
 
