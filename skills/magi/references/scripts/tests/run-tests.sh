@@ -186,7 +186,26 @@ run_magi() { # <case dir> <args...>
 
 sage_field() { # <summary.json> <sage name> <field>
   jq -r --arg name "$2" --arg field "$3" \
-    '.sages[] | select(.name == $name) | .[$field]' "$1"
+    '.sages[] | select(.name == $name) | .[$field]' "$1" 2>/dev/null || true
+}
+
+# Numeric field lookup for arithmetic tests. A missing row or an unreadable
+# summary yields -1, so a broken shape is reported as a failed assertion instead
+# of aborting the whole suite through `set -e`.
+sage_number() { # <summary.json> <sage name> <field>
+  local value
+  value="$(sage_field "$1" "$2" "$3")"
+  case "$value" in
+    '' | *[!0-9]*) printf '%s' '-1' ;;
+    *) printf '%s' "$value" ;;
+  esac
+}
+
+# First line of a sage's answer. The fake sage in sages-argv-probe.json reports
+# its own argument list there.
+answer_first_line() { # <summary.json> <sage name>
+  jq -r --arg name "$2" \
+    '.sages[] | select(.name == $name) | .answer | split("\n")[0]' "$1" 2>/dev/null || true
 }
 
 # The summary.json contract from design.md §4, asserted as one filter so a
@@ -194,6 +213,7 @@ sage_field() { # <summary.json> <sage name> <field>
 SUMMARY_CONTRACT='
   (.round | type) == "string"
   and (.prompt_file | type) == "string"
+  and (.sages | type) == "array"
   and (.sages | length) > 0
   and all(.sages[];
         (.name | type) == "string"
@@ -282,6 +302,10 @@ case_parallel_dispatch() {
 
   summary="${out}/round1/summary.json"
   expect_rc 0 "$RUN_RC" "dispatch"
+  # Named explicitly: `all` holds over an empty array, so a summary that lost its
+  # sage rows would otherwise satisfy every check below.
+  expect_json "$summary" '[.sages[].name] == ["SLOWSAGE_A", "SLOWSAGE_B", "SLOWSAGE_C"]' \
+    "all three waiting sages are reported"
   expect_json "$summary" 'all(.sages[]; .status == "ok")' "every waiting sage is ok"
   # Sequential execution costs at least three seconds. Each sage must still show
   # its own second of waiting, otherwise a fixture that stopped sleeping would
@@ -295,7 +319,7 @@ case_parallel_dispatch() {
 
 case_timeout_status() {
   begin_case "status is timeout when a sage runs past timeout_seconds"
-  local dir out summary
+  local dir out summary stuck_ms
   dir="$(case_dir timeout)"
   out="${dir}/out"
   printf 'A sage that never answers.\n' > "${dir}/prompt.md"
@@ -306,10 +330,21 @@ case_timeout_status() {
   summary="${out}/round1/summary.json"
   expect_rc 0 "$RUN_RC" "dispatch still succeeds"
   expect_json "$summary" "$SUMMARY_CONTRACT" "summary.json follows the contract"
+  expect_json "$summary" '[.sages[].name] == ["STUCKSAGE", "QUICKSAGE"]' "both sages are reported"
   expect_value timeout "$(sage_field "$summary" STUCKSAGE status)" "stuck sage status"
   # 128 + SIGALRM: the perl wrapper's alarm reached the sage process itself.
   expect_value 142 "$(sage_field "$summary" STUCKSAGE exit_code)" "stuck sage exit code"
   expect_value "" "$(sage_field "$summary" STUCKSAGE answer)" "stuck sage answer is empty"
+  # The recorded duration is the evidence that the alarm, not the sage, ended the
+  # round: a `sleep 30` that reported 30 seconds would mean the limit never fired,
+  # and one that reported milliseconds would mean it fired far too early. The
+  # bounds are loose because a busy machine can add a second of scheduling delay.
+  stuck_ms="$(sage_number "$summary" STUCKSAGE duration_ms)"
+  note_info "stuck sage ran for ${stuck_ms} ms against a 2 second limit"
+  [ "$stuck_ms" -lt 8000 ] ||
+    note_failure "stuck sage ran ${stuck_ms} ms; a 2 second timeout must stop it well before its own 30 second sleep"
+  [ "$stuck_ms" -ge 1900 ] ||
+    note_failure "stuck sage ran only ${stuck_ms} ms; the timeout fired before the configured 2 seconds"
   expect_contains "${out}/round1/STUCKSAGE.stderr" "exceeded the 2 second timeout" \
     "the run directory explains the timeout"
   expect_value ok "$(sage_field "$summary" QUICKSAGE status)" "the fast sage is still collected"
@@ -330,8 +365,9 @@ case_error_isolation() {
   summary="${out}/round1/summary.json"
   expect_rc 0 "$RUN_RC" "dispatch still succeeds"
   expect_json "$summary" "$SUMMARY_CONTRACT" "summary.json follows the contract"
+  expect_json "$summary" '[.sages[].name] == ["BOOMSAGE", "QUICKSAGE"]' "both sages are reported"
   expect_value error "$(sage_field "$summary" BOOMSAGE status)" "failing sage status"
-  expect_value 3 "$(sage_field "$summary" BOOMSAGE exit_code)" "failing sage exit code"
+  expect_value 1 "$(sage_field "$summary" BOOMSAGE exit_code)" "failing sage exit code"
   expect_value "" "$(sage_field "$summary" BOOMSAGE answer)" "failing sage answer is empty"
   expect_contains "${out}/round1/BOOMSAGE.stderr" "boom" "the failing sage's stderr is kept"
   expect_value ok "$(sage_field "$summary" QUICKSAGE status)" "healthy sage status"
@@ -351,6 +387,8 @@ case_unreadable_answer() {
 
   summary="${out}/round1/summary.json"
   expect_rc 0 "$RUN_RC" "dispatch still succeeds"
+  expect_json "$summary" "$SUMMARY_CONTRACT" "summary.json follows the contract"
+  expect_json "$summary" '[.sages[].name] == ["GARBLEDSAGE", "QUICKSAGE"]' "both sages are reported"
   expect_value error "$(sage_field "$summary" GARBLEDSAGE status)" "unreadable sage status"
   # Exit 0 with an unusable answer is the degraded case the host must see as a
   # failure, not as a silent empty opinion.
@@ -581,9 +619,10 @@ case_schema_args_appended() {
 
   summary="${out}/round1/summary.json"
   expect_rc 0 "$RUN_RC" "dispatch with a schema"
+  expect_json "$summary" '[.sages[].name] == ["PROBESAGE"]' "the probe sage is reported"
   expect_value ok "$(sage_field "$summary" PROBESAGE status)" "probe sage status"
   # The probe sage prints its own argument list on the first line of its answer.
-  argv_line="$(jq -r '.sages[0].answer | split("\n")[0]' "$summary")"
+  argv_line="$(answer_first_line "$summary" PROBESAGE)"
   expect_text_has "$argv_line" "--json-schema" "the schema flag reaches argv"
   expect_text_has "$argv_line" '"position"' "the schema text is substituted into argv"
   end_case
@@ -601,7 +640,8 @@ case_schema_args_omitted() {
 
   summary="${out}/round1/summary.json"
   expect_rc 0 "$RUN_RC" "dispatch without a schema"
-  argv_line="$(jq -r '.sages[0].answer | split("\n")[0]' "$summary")"
+  expect_json "$summary" '[.sages[].name] == ["PROBESAGE"]' "the probe sage is reported"
+  argv_line="$(answer_first_line "$summary" PROBESAGE)"
   expect_value "args=[]" "$argv_line" "the sage receives no extra arguments"
   end_case
 }
@@ -618,8 +658,9 @@ case_prompt_body_not_in_argv() {
 
   summary="${out}/round1/summary.json"
   expect_rc 0 "$RUN_RC" "dispatch"
+  expect_json "$summary" '[.sages[].name] == ["PROBESAGE"]' "the probe sage is reported"
   answer="$(sage_field "$summary" PROBESAGE answer)"
-  argv_line="$(jq -r '.sages[0].answer | split("\n")[0]' "$summary")"
+  argv_line="$(answer_first_line "$summary" PROBESAGE)"
   # The sage echoes stdin after its argument list, so one answer shows both that
   # the prompt arrived and that it arrived off the command line (design §8).
   expect_text_has "$answer" "MAGI-ARGV-LEAK-MARKER" "the prompt reaches the sage on stdin"
