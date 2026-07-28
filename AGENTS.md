@@ -74,7 +74,9 @@ Before submitting, verify:
 3. No hardcoded MCP tool names (e.g., `mcp__serena__`, `Context7`)
 4. SKILL.md is under 500 lines
 5. `bash scripts/check-skill-line-budget.sh` passes for the whole repository
-6. For reference-split changes, `bash scripts/tests/check-skill-reference-split-contract.sh` passes
+6. `bash skills/agent-delegate/references/scripts/tests/check_skill_quality.sh skills/*/SKILL.md` passes for the whole repository
+7. Changes to the quality checker pass `bash skills/agent-delegate/references/scripts/tests/check_skill_quality_contract.sh`
+8. For reference-split changes, `bash scripts/tests/check-skill-reference-split-contract.sh` passes
 
 ## コーディングルール
 

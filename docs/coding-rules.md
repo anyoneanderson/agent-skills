@@ -32,11 +32,12 @@
 - 出典: AGENTS.md (L26-48)
 
 ### [MUST] SKILL.md 本文は英語で記述
-- セクションヘッダー、チェック/ステップ説明、検出パターン、コードコメントすべて英語
+- SKILL.md 文書のセクションヘッダー、チェック/ステップ説明、検出パターン、コードコメントは英語
+- fenced code example 内の ATX 形式見出しは例示内容として扱い、文書見出しの言語規則から除外する
 - 出典: AGENTS.md (L55), docs/skill-style-guide.md (L7-14)
 
 ### [MUST] セクションヘッダーは英語
-- すべてのヘッダーを英語で記述する（`## Execution Flow`, not `## 実行フロー`）
+- SKILL.md の fenced code example 外にあるすべての ATX 形式文書ヘッダーを英語で記述する（`## Execution Flow`, not `## 実行フロー`）
 - 出典: docs/skill-style-guide.md (L90-101)
 
 ### [MUST] Language Rules セクション必須

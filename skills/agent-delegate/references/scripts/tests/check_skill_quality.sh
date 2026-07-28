@@ -31,6 +31,60 @@ description_text() {
   ' "$1"
 }
 
+markdown_headings() {
+  awk '
+    function marker_length(line, marker, count) {
+      count=0
+      while (substr(line, count + 1, 1) == marker) count++
+      return count
+    }
+    function opening_fence_indent_ok(line, i, char, spaces) {
+      spaces=0
+      for (i=1; i<=length(line); i++) {
+        char=substr(line, i, 1)
+        if (char == " ") {
+          spaces++
+          if (spaces > 3) return 0
+        } else if (char == "\t") {
+          return 0
+        } else {
+          break
+        }
+      }
+      return 1
+    }
+    NR == 1 && $0 == "---" { in_frontmatter=1; next }
+    in_frontmatter && $0 == "---" { in_frontmatter=0; next }
+    in_frontmatter { next }
+    {
+      opening_indent_ok=opening_fence_indent_ok($0)
+      trimmed=$0
+      sub(/^[[:space:]]*/, "", trimmed)
+      marker=substr(trimmed, 1, 1)
+      run_length=0
+      if (marker == "`" || marker == "~") run_length=marker_length(trimmed, marker)
+      if (in_fence) {
+        rest=substr(trimmed, run_length + 1)
+        if (opening_indent_ok && marker == fence_marker && run_length >= fence_length && rest ~ /^[[:space:]]*$/) {
+          in_fence=0
+        }
+        next
+      }
+      if (opening_indent_ok && (marker == "`" || marker == "~") && run_length >= 3) {
+        in_fence=1
+        fence_marker=marker
+        fence_length=run_length
+        next
+      }
+      if (opening_indent_ok && trimmed ~ /^#{1,6}[[:space:]]/) print trimmed
+    }
+    END {
+      if (in_frontmatter) exit 11
+      if (in_fence) exit 10
+    }
+  ' "$1"
+}
+
 check_reference_paths() {
   local file="$1" skill_dir reference english japanese
   skill_dir="$(cd "$(dirname "$file")" && pwd)"
@@ -50,7 +104,7 @@ check_reference_paths() {
 }
 
 check_skill() {
-  local file="$1" dir_name name license description description_length title non_ascii_heading
+  local file="$1" dir_name name license description description_length headings heading_status title non_ascii_heading
   [ -f "$file" ] || { fail "$file" "file does not exist"; return; }
   [ "$(sed -n '1p' "$file")" = '---' ] || fail "$file" "missing YAML frontmatter"
 
@@ -66,12 +120,21 @@ check_skill() {
   printf '%s\n' "$description" | grep -q 'English triggers:' || fail "$file" "missing English triggers"
   printf '%s\n' "$description" | grep -q '日本語トリガー:' || fail "$file" "missing Japanese triggers"
 
-  title="$(awk '/^---$/{count++; next} count==2 && /^# /{print; exit}' "$file")"
-  printf '%s\n' "$title" | grep -Eq "^# ${name} — [[:alnum:]]" || fail "$file" "title must use '# ${name} — Short Description'"
-  grep -q '^## Language Rules$' "$file" || fail "$file" "missing Language Rules"
-  grep -q '^## [A-Za-z0-9]' "$file" || fail "$file" "body must use English headings"
-  non_ascii_heading="$(grep -E '^#{2,6} ' "$file" | grep '[ぁ-んァ-ヶ一-龠]' || true)"
-  [ -z "$non_ascii_heading" ] || fail "$file" "headings must be English"
+  headings="$(markdown_headings "$file")"
+  heading_status=$?
+  case "$heading_status" in
+    0)
+      title="$(printf '%s\n' "$headings" | grep -m1 '^# ' || true)"
+      printf '%s\n' "$title" | grep -Eq "^# ${name} — [[:alnum:]]" || fail "$file" "title must use '# ${name} — Short Description'"
+      printf '%s\n' "$headings" | grep -q '^## Language Rules$' || fail "$file" "missing Language Rules"
+      printf '%s\n' "$headings" | grep -q '^## [A-Za-z0-9]' || fail "$file" "body must use English headings"
+      non_ascii_heading="$(printf '%s\n' "$headings" | grep '[ぁ-んァ-ヶ一-龠]' || true)"
+      [ -z "$non_ascii_heading" ] || fail "$file" "headings must be English"
+      ;;
+    10) fail "$file" "unclosed fenced code block" ;;
+    11) fail "$file" "unclosed YAML frontmatter" ;;
+    *) fail "$file" "could not parse Markdown headings" ;;
+  esac
 
   if grep -q 'AskUserQuestion' "$file"; then
     grep -qE 'AskUserQuestion|request_user_input' "$file" || fail "$file" "interactive choices must use AskUserQuestion"

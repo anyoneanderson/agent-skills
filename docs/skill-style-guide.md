@@ -89,7 +89,7 @@ Use the skill's kebab-case name, an em dash, and a concise English description.
 
 ### Section Headers
 
-All headers must be in English. Common headers:
+All ATX-style document headers in SKILL.md must be in English. ATX-style headings shown inside fenced code examples are illustrative content and are exempt from this rule. Common headers:
 
 | Header | Usage |
 |--------|-------|
@@ -107,11 +107,13 @@ Before submitting a new or updated SKILL.md, verify:
 - [ ] Frontmatter `name` matches directory name
 - [ ] Body is written in English
 - [ ] `## Language Rules` section is present
-- [ ] All section headers are in English
+- [ ] All document section headers outside fenced code examples are in English
 - [ ] AskUserQuestion content is bilingual (`"English" / "日本語"`)
 - [ ] Reference files follow `*.md` / `*.ja.md` pattern
 - [ ] Total line count is under 500
 - [ ] `bash scripts/check-skill-line-budget.sh` passes from the repository root
+- [ ] `bash skills/agent-delegate/references/scripts/tests/check_skill_quality.sh skills/*/SKILL.md` passes from the repository root
+- [ ] Changes to the quality checker pass `bash skills/agent-delegate/references/scripts/tests/check_skill_quality_contract.sh`
 - [ ] Skills selected for size reduction are at most 450 lines and `bash scripts/tests/check-skill-reference-split-contract.sh` passes
 - [ ] No hardcoded MCP tool names (e.g., `mcp__serena__`, `Context7`)
 - [ ] All referenced files exist
