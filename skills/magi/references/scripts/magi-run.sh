@@ -17,9 +17,8 @@
 # Notes for maintainers:
 #   - Target bash 3.2: stock macOS ships it. No mapfile, no associative arrays,
 #     no `wait -n`.
-#   - No GNU `timeout`: it is absent on macOS (CON-003). A `perl -e 'alarm N'`
-#     wrapper enforces the limit instead; the alarm survives exec, so the sage
-#     process itself dies of SIGALRM and bash reports exit 142.
+#   - No GNU `timeout`: it is absent on macOS (CON-003). A Perl/POSIX wrapper
+#     gives each sage its own process group and stops that group on timeout.
 #   - The question never reaches argv. A sage receives it either on stdin
 #     (`"input": "stdin"`) or as the path in {PROMPT_FILE}, because arguments are
 #     world-readable through `ps` on the same machine (design §8).
@@ -37,16 +36,17 @@ umask 077
 DEFAULT_TIMEOUT_SECONDS=600
 # The tally rules in SKILL.md assume three sages (or a degraded two).
 MAX_SAGES=3
-# 128 + SIGALRM(14) — the perl alarm wrapper firing. Same number on macOS/Linux.
+# Stable timeout code returned by the process-group wrapper on macOS and Linux.
 SIGALRM_EXIT=142
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SELF")"
 BUNDLED_SAGES_FILE="${SCRIPT_DIR}/sages.default.json"
 
-# `alarm` is armed before exec and inherited by the sage process. The indirect
-# object form of exec never falls back to a shell, even for a one-word command.
-ALARM_WRAPPER='alarm shift @ARGV; exec { $ARGV[0] } @ARGV or die "magi-run: cannot execute $ARGV[0]: $!\n"'
+# The wrapper stays outside the sage process group. On timeout it first gives the
+# group a short TERM grace period, then sends KILL and reaps the direct child.
+# Descendants that deliberately leave the group are outside this contract.
+TIMEOUT_WRAPPER='use POSIX qw(:sys_wait_h); my $seconds = shift @ARGV; my $pid = fork(); defined $pid or die "magi-run: fork failed: $!\n"; if ($pid == 0) { setpgrp(0, 0) or die "magi-run: setpgrp failed: $!\n"; exec { $ARGV[0] } @ARGV or die "magi-run: cannot execute $ARGV[0]: $!\n"; } my $timed_out = 0; $SIG{ALRM} = sub { $timed_out = 1; kill "TERM", -$pid; for (1 .. 10) { last unless kill 0, -$pid; select undef, undef, undef, 0.05; } kill "KILL", -$pid if kill 0, -$pid; }; alarm $seconds; my $waited; do { $waited = waitpid($pid, 0); } while ($waited == -1 && $!{EINTR}); my $status = $?; alarm 0; exit 142 if $timed_out; die "magi-run: waitpid failed: $!\n" if $waited == -1; exit(WIFEXITED($status) ? WEXITSTATUS($status) : WIFSIGNALED($status) ? 128 + WTERMSIG($status) : 1);'
 
 # --- arguments -------------------------------------------------------------
 
@@ -56,6 +56,8 @@ ROUND=""
 SAGES_FILTER=""
 SCHEMA_FILE=""
 PREFLIGHT_ONLY=0
+TIMEOUT_OVERRIDE=""
+CONFIDENTIAL=0
 
 # --- resolved state --------------------------------------------------------
 
@@ -77,7 +79,8 @@ RAW_ARGV=()
 usage_text() {
   cat <<'EOF'
 Usage: magi-run.sh --prompt-file <path> --out-dir <dir> --round <label>
-       [--sages NAME1,NAME2] [--schema-file <path>] [--preflight-only]
+       [--sages NAME1,NAME2] [--schema-file <path>] [--timeout <sec>]
+       [--confidential] [--preflight-only]
 
   --prompt-file     File holding the prompt for every selected sage. Required
                     unless --preflight-only is set, or every selected sage has a
@@ -90,6 +93,9 @@ Usage: magi-run.sh --prompt-file <path> --out-dir <dir> --round <label>
                     sage in the config.
   --schema-file     JSON schema file. Appended to the command of each sage that
                     declares schema_args, with {SCHEMA} replaced by its text.
+  --timeout         Positive integer overriding timeout_seconds from the config
+                    for this invocation. The effective value is in preflight.json.
+  --confidential    Append each selected sage's isolation_args before dispatch.
   --preflight-only  Check jq and the sage commands, write preflight.json, stop.
 
 Per-sage prompts: when <out-dir>/<round>/prompt-<SAGE>.md exists it overrides
@@ -103,7 +109,8 @@ expose the question to every local process.
 
 A command may also use {MAGI_SCRIPTS_DIR}, the absolute directory holding this
 script, to run a wrapper shipped next to it — the default codex adapter does that
-to switch off the operator's MCP servers (references/sages.md).
+transparently in Default scope and switches off configured external tools only
+when --confidential is set (references/sages.md).
 
 Sage config resolution, first match wins: $MAGI_SAGES_FILE, ./.magi/sages.json,
 ~/.magi/sages.json, bundled sages.default.json.
@@ -192,6 +199,10 @@ config_problems() {
           (if ($s | has("schema_args")) and (($s.schema_args | type) != "array"
                 or any($s.schema_args[]; type != "string"))
               then "sages[\($i)].schema_args must be an array of strings"
+              else empty end),
+          (if ($s | has("isolation_args")) and (($s.isolation_args | type) != "array"
+                or any($s.isolation_args[]; type != "string"))
+              then "sages[\($i)].isolation_args must be an array of strings"
               else empty end)
         ]
       end;
@@ -227,6 +238,9 @@ load_sages_file() {
   if ! is_uint "$TIMEOUT_SECONDS" || [ "$TIMEOUT_SECONDS" -le 0 ]; then
     err "invalid sage config: timeout_seconds must be a positive integer, got '${TIMEOUT_SECONDS}' (file: ${SAGES_FILE})"
     exit 2
+  fi
+  if [ -n "$TIMEOUT_OVERRIDE" ]; then
+    TIMEOUT_SECONDS="$TIMEOUT_OVERRIDE"
   fi
 }
 
@@ -408,6 +422,12 @@ run_sage() {
 
   read_sage_argv "$idx" '(.sages[$idx].command)' || return 1
   argv=("${RAW_ARGV[@]}")
+  if [ "$CONFIDENTIAL" -eq 1 ]; then
+    read_sage_argv "$idx" '(.sages[$idx].isolation_args // [])' || return 1
+    if [ "${#RAW_ARGV[@]}" -gt 0 ]; then
+      argv=("${argv[@]}" "${RAW_ARGV[@]}")
+    fi
+  fi
   if [ -n "$SCHEMA_FILE" ]; then
     read_sage_argv "$idx" '(.sages[$idx].schema_args // [])' || return 1
     if [ "${#RAW_ARGV[@]}" -gt 0 ]; then
@@ -431,7 +451,7 @@ run_sage() {
   started="$(now_ms)"
   # The subshell keeps any shell-level notice about the sage process (bash prints
   # "Alarm clock: 14" in some versions) inside that sage's stderr file.
-  ( perl -e "$ALARM_WRAPPER" "$TIMEOUT_SECONDS" "${cmd[@]}" ) \
+  ( perl -e "$TIMEOUT_WRAPPER" "$TIMEOUT_SECONDS" "${cmd[@]}" ) \
     < "$stdin_src" > "$stdout_file" 2> "$stderr_file" || rc=$?
   ended="$(now_ms)"
   # A killed sage often leaves no stderr at all; state the reason so the run
@@ -572,6 +592,8 @@ while [ $# -gt 0 ]; do
     --round) [ $# -ge 2 ] || { err "--round needs a value"; usage; }; ROUND="$2"; shift 2 ;;
     --sages) [ $# -ge 2 ] || { err "--sages needs a value"; usage; }; SAGES_FILTER="$2"; shift 2 ;;
     --schema-file) [ $# -ge 2 ] || { err "--schema-file needs a value"; usage; }; SCHEMA_FILE="$2"; shift 2 ;;
+    --timeout) [ $# -ge 2 ] || { err "--timeout needs a value"; usage; }; TIMEOUT_OVERRIDE="$2"; shift 2 ;;
+    --confidential) CONFIDENTIAL=1; shift ;;
     --preflight-only) PREFLIGHT_ONLY=1; shift ;;
     -h | --help) show_help ;;
     *) err "unknown argument: $1"; usage ;;
@@ -581,6 +603,10 @@ done
 # --- preconditions ---------------------------------------------------------
 
 [ -n "$OUT_DIR" ] || { err "missing --out-dir"; usage; }
+if [ -n "$TIMEOUT_OVERRIDE" ] && { ! is_uint "$TIMEOUT_OVERRIDE" || [ "$TIMEOUT_OVERRIDE" -le 0 ]; }; then
+  err "invalid --timeout '${TIMEOUT_OVERRIDE}': must be a positive integer"
+  exit 2
+fi
 require_jq
 
 if [ "$PREFLIGHT_ONLY" -ne 1 ]; then

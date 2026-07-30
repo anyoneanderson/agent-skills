@@ -27,7 +27,7 @@ list **every** sage you want, not just the one you are changing.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `timeout_seconds` | positive integer | Per-sage wall-clock limit, enforced by a `perl alarm` wrapper. Default 600 (10 minutes). A sage killed this way is recorded as `status: "timeout"` |
+| `timeout_seconds` | positive integer | Per-sage wall-clock limit. Default 600 (10 minutes). `--timeout <sec>` overrides it for one invocation; the effective value appears in `preflight.json` |
 | `sages` | array, 1 to 3 entries | The roster, in the order rows appear in `summary.json` and the result matrix |
 
 Three is the maximum. The tally rules in `SKILL.md` are built on three (or two
@@ -40,6 +40,11 @@ The host confirms with the user before dispatching and applies the two-sage
 rules — 2-0 passes, a 1-1 split gets a single debate round. A roster of one is
 rejected by the host at that point, since a single model is not a council.
 
+The runner starts each sage in a separate process group. When the effective
+timeout expires, it sends TERM to that group, waits a short bounded grace period,
+then sends KILL if needed and records exit code `142`. Other sage groups keep
+running. A descendant that deliberately leaves the group is outside this guarantee.
+
 ## Per-sage fields
 
 | Field | Required | Meaning |
@@ -47,15 +52,17 @@ rejected by the host at that point, since a single model is not a council.
 | `name` | yes | Display name, e.g. `MELCHIOR`. Becomes a file name in the run directory, so only `A-Z a-z 0-9 _ -`. Must be unique |
 | `cli` | yes | Command checked by preflight with `command -v`. This is the name reported as missing, and the name shown next to the sage in the matrix |
 | `command` | yes | Non-empty array of strings — argv, executed directly with no shell |
+| `isolation_args` | no | Array of strings appended after `command` only with `--confidential`. Use it to restrict tools without changing Default scope |
 | `input` | no | `"stdin"` means the prompt file is redirected to standard input. Omit it to pass the path via `{PROMPT_FILE}`. No other value is accepted |
 | `extract` | yes | How to get the answer body out: a jq filter, `"answer-file"`, or `"raw"` (see below) |
 | `schema_args` | no | Array of strings appended to `command` only on runs that pass `--schema-file` |
 | `notes` | no | Free text for whoever reads the config next. Ignored by the script |
 
-### Placeholders in `command` and `schema_args`
+### Placeholders in command arrays
 
-Substituted element by element, never through a shell, so a path containing
-spaces or an ampersand cannot be re-parsed as syntax.
+Placeholders in `command`, `isolation_args` and `schema_args` are substituted
+element by element, never through a shell, so a path containing spaces or an
+ampersand cannot be re-parsed as syntax.
 
 | Placeholder | Replaced with |
 |---|---|
@@ -95,6 +102,7 @@ sage (REQ-010).
       "name": "MELCHIOR",
       "cli": "claude",
       "command": ["claude", "-p", "--output-format", "json", "--allowedTools", "WebSearch", "WebFetch"],
+      "isolation_args": ["--safe-mode", "--no-chrome", "--mcp-config", "{\"mcpServers\":{}}", "--strict-mcp-config", "--tools", "WebSearch,WebFetch"],
       "input": "stdin",
       "extract": ".result"
     },
@@ -102,13 +110,15 @@ sage (REQ-010).
       "name": "BALTHASAR",
       "cli": "codex",
       "command": ["{MAGI_SCRIPTS_DIR}/codex-sage.sh", "--sandbox", "read-only", "--output-last-message", "{ANSWER_FILE}", "-"],
+      "isolation_args": ["--confidential"],
       "input": "stdin",
       "extract": "answer-file"
     },
     {
       "name": "CASPER",
       "cli": "grok",
-      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto", "--tools", "web_search,web_fetch", "--deny", "MCPTool(*)"],
+      "command": ["grok", "--prompt-file", "{PROMPT_FILE}", "--output-format", "json", "--permission-mode", "auto"],
+      "isolation_args": ["--tools", "web_search,web_fetch", "--deny", "MCPTool(*)"],
       "extract": ".text",
       "schema_args": ["--json-schema", "{SCHEMA}"]
     }
@@ -131,15 +141,17 @@ worth knowing:
 ### Web search permissions
 
 Research mode is only as good as the sages' ability to check the web, and each
-CLI gates tool use differently in headless mode. The defaults carry the flags
-that open it, verified on real runs 2026-07-27:
+CLI gates tool use differently in headless mode. Default scope preserves the
+operator's configured tools; Confidential scope applies the Web-only restrictions
+below, verified on the dates noted for each adapter:
 
 - **MELCHIOR needs `--allowedTools WebSearch WebFetch`.** Headless `claude -p`
   denies every tool that was not explicitly allowed, so without the allowlist its
   search, fetch and shell calls all come back denied: the sage answers from
   training data or reports that it could not check. With the allowlist the search
-  runs. Keep the flag last in `command`, because it accepts a list of tool names
-  and would otherwise swallow the flag that follows it.
+  runs. The permission stays in `command`, so Standard research can search while
+  preserving configured tools. Confidential scope separately restricts which
+  tools exist; an allow rule alone is not an isolation boundary.
 - **BALTHASAR needs nothing extra.** Its search executes on the provider's side,
   so `--sandbox read-only` does not block it — the sandbox governs this machine's
   files, not the model's own tools. A search shows up as a `web search:` line in
@@ -152,26 +164,26 @@ CASPER also sometimes puts a sentence of prose before the JSON object it was
 asked for. The host extracts the JSON part (`SKILL.md` Step 5), so this is not a
 failure; expect it if you write your own adapter around `grok`.
 
-### Keeping the question inside the announced providers
+### Default and Confidential tool scope
 
-`SKILL.md` tells the user which providers receive the question — three companies
-by default. That statement only holds if a sage cannot pass the question to a
-tool of its own, and a headless CLI inherits the operator's whole tool set,
-which usually includes MCP servers pointed at other companies' services. A
-search-shaped question can then reach a fourth provider without anything looking
-unusual in the transcript. Each default sage therefore starts with those tools
-blocked, verified 2026-07-27:
+Default scope intentionally inherits the operator's tool set. The question can
+therefore reach the three sage providers and providers behind configured MCP or
+extension tools. The host discloses this before dispatch. `--confidential`
+appends `isolation_args`; with the bundled config that limits the three default
+sages to Anthropic, OpenAI and xAI using the restrictions verified on the dates
+recorded below:
 
 | Sage | How MCP and plugin tools are blocked | What remains |
 |---|---|---|
-| MELCHIOR | `--allowedTools WebSearch WebFetch` is an allowlist, so an MCP tool is simply not on it | Nothing observed: an MCP call is denied like any other unlisted tool |
+| MELCHIOR | `--safe-mode` disables customizations and plugins, `--no-chrome` disables the browser integration, and `--strict-mcp-config` loads an explicitly empty MCP roster. `--tools WebSearch,WebFetch` leaves only those built-ins available | WebSearch and WebFetch. Claude Code 2.1.220 reduced the local configured MCP roster to none with these isolation flags on 2026-07-30 |
 | BALTHASAR | The bundled `codex-sage.sh` wrapper (below) | Nothing: the servers leave the tool registry entirely |
 | CASPER | `--tools web_search,web_fetch` limits the built-ins, `--deny 'MCPTool(*)'` refuses MCP calls | The MCP tool schemas are still listed to the model; only calling one is refused, with `Denied by permission policy: deny rule on mcp` |
 
 #### `codex-sage.sh`
 
-`codex exec` has no single "no MCP" flag, so the wrapper splits the work between
-two mechanisms, and the split is the part worth remembering:
+Without `--confidential`, the wrapper transparently starts `codex exec` with the
+given arguments and preserves configured tools. In Confidential scope it has no
+single "no MCP" flag, so it splits isolation between two mechanisms:
 
 - `--disable plugins --disable apps` handles servers supplied by plugins and
   apps. Those cannot be switched off individually — aiming
@@ -198,11 +210,10 @@ servers came back as "no such tool is registered".
 The adapter keeps `"cli": "codex"` while `command[0]` is the wrapper: preflight
 should report the CLI the user would have to install, which is `codex` itself.
 
-**Minimum version: codex-cli 0.145.0**, the release `mcp list --json` and
-`--disable` were verified against. An older codex rejects the unknown flag, so the
-wrapper stops (see below) and BALTHASAR is recorded as no answer. The council
-degrades to two sages and the question still does not leak — but if BALTHASAR
-fails on every run, check `codex --version` first.
+**Confidential scope requires codex-cli 0.145.0 or newer**, the release
+`mcp list --json` and `--disable` were verified against. An older codex rejects
+the unknown flag, so BALTHASAR is recorded as no answer. Default scope does not
+run this check. If only Confidential runs fail, check `codex --version` first.
 
 The wrapper **fails closed** with exit 2 in three situations, all of them meaning
 "the full set of servers to block could not be established":
@@ -215,7 +226,8 @@ The wrapper **fails closed** with exit 2 in three situations, all of them meanin
   skipped in order to disable the rest: skipping is precisely how one server would
   stay enabled while the sage looked healthy.
 
-In each case BALTHASAR appears as `no answer (error)` with the reason in
+These fail-closed checks run only in Confidential scope. In each failure case
+BALTHASAR appears as `no answer (error)` with the reason in
 `BALTHASAR.stderr`, and nothing is sent. A failed sage is recoverable, a question
 sent to an undisclosed provider is not.
 
@@ -233,10 +245,10 @@ this wrapper, so treating the window as a security boundary would be misleading.
 It is documented because an operator adding a server mid-run is a plausible
 mistake, and because a reader deserves to know what the blocking does not cover.
 
-**Swapping a sage means re-establishing this yourself.** The config validator
-checks structure, not tool permissions. For whatever CLI you seat, find its
-allowlist or deny flag and its plugin switch, confirm on a real run that an MCP
-tool cannot be called, and write what you verified into the adapter's `notes`.
+**Swapping a sage means defining Confidential scope yourself.** The validator
+checks the `isolation_args` shape, not whether the arguments work. Find the CLI's
+allowlist or deny flag and plugin switch, verify that configured external tools
+cannot be called with `--confidential`, and record the result in `notes`.
 
 ## Installing and authenticating the default sages
 
@@ -263,9 +275,9 @@ codex login status                         # confirm
 For an API key instead of a browser session:
 `printenv OPENAI_API_KEY | codex login --with-api-key`.
 
-**0.145.0 is the minimum here**, not just the version that happened to be tested:
-the bundled `codex-sage.sh` needs `mcp list --json` and `--disable`, and it refuses
-to run rather than proceed without them.
+**0.145.0 is the minimum for Confidential scope**, not just the version that
+happened to be tested: `codex-sage.sh` needs `mcp list --json` and `--disable`
+to isolate the run and refuses to continue without them.
 
 ### CASPER — Grok Build (`grok`)
 

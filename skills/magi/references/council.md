@@ -161,6 +161,35 @@ code fence.
 {"findings": [{"claim": "<one sentence>", "evidence": "<what supports it, and how current it is>", "source": "<URL, document, command output, or 'training data as of <date>'>"}]}
 ```
 
+### Deep research variant
+
+When the user selects Deep research, keep the Topic and Scope sections but use
+the following `What to do` and `Answer format` sections instead.
+
+```text
+## What to do
+
+1. Run at least five Web searches with distinct queries that test different
+   parts of the topic.
+2. Run at least one search for evidence that contradicts the question's premise
+   or the leading explanation you find.
+3. Report findings separately. Include only findings backed by an HTTP or HTTPS
+   source URL; omit every finding for which you cannot provide one.
+4. State each claim in one sentence and explain what the source supports and how
+   current it is.
+5. Return the complete list of search queries for the audit record.
+
+Do not call a provider-hosted Deep Research product. Perform these searches with
+the tools available in this sage environment.
+
+## Answer format
+
+Reply with one JSON object and nothing else. No prose before or after it, no
+code fence.
+
+{"findings": [{"claim": "<one sentence>", "evidence": "<what the source supports and how current it is>", "source": "<http:// or https:// URL>"}], "search_queries": ["<query 1>", "<query 2>", "<query 3>", "<query 4>", "<query 5 or later>"]}
+```
+
 ## 4. Research, deliberation — reviewing a solo finding
 
 One prompt **per sage**, written to `deliberation1/prompt-<SAGE>.md` and holding
@@ -282,6 +311,36 @@ Research, round 1:
     }
   },
   "required": ["findings"],
+  "additionalProperties": false
+}
+```
+
+Deep research, round 1:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim": { "type": "string" },
+          "evidence": { "type": "string" },
+          "source": { "type": "string", "pattern": "^https?://" }
+        },
+        "required": ["claim", "evidence", "source"],
+        "additionalProperties": false
+      }
+    },
+    "search_queries": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["findings", "search_queries"],
   "additionalProperties": false
 }
 ```
@@ -427,6 +486,8 @@ fear.
 
 - Keep rejected findings visible. One sage believing something the others reject
   is exactly the signal a single-model answer would have hidden.
+- In Deep research, list URL-less findings under Rejected as unverified. Keep
+  them auditable, but never send them to deliberation or adopt them.
 - When a claim is corroborated but the sages disagree on a detail — a date, a
   version, a number — adopt the claim and note the conflicting detail in the
   evidence column rather than silently picking one.

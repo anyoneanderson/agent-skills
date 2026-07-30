@@ -52,30 +52,22 @@ of this skill — see `references/sages.md` to swap one out.
 
 ## Prerequisites
 
-- **The question is sent to every configured sage's provider.** By default that
-  means three separate companies (Anthropic, OpenAI, xAI) receive the full text
-  of the question and any context pasted into it. Before convening the council
-  on anything confidential — customer data, credentials, unreleased plans,
-  client-identifying details — show the user which sages are configured and
-  confirm that sending the question to all of them is acceptable. If it is not,
-  do not convene the council; either narrow the question until it is safe to
-  send, or use a single trusted agent instead.
-- **That list of providers is only true because the sages' own tools are
-  blocked.** A headless CLI inherits the operator's tool set, which usually
-  includes servers pointed at other companies' services, and a sage could hand
-  the question to one of them without anything looking unusual. The bundled
-  config starts each default sage with those tools switched off. If you swap a
-  sage out, re-establish that blocking in the replacement adapter — otherwise the
-  count of providers you told the user is wrong. `references/sages.md` documents
-  what each default sage blocks and what to check in a new one.
+- **Default scope can send the question beyond the three sage providers.** The
+  full question and context go to Anthropic, OpenAI and xAI by default, and may
+  also reach providers of tools configured in those sage environments, such as
+  document stores or Web retrieval services. Disclose that scope before dispatch.
+  Confidential scope applies the bundled isolation arguments and limits the
+  bundled sages to those three companies. For sensitive material, let the user
+  choose Confidential, narrow the question, or stop. A replacement adapter must
+  supply and verify its own `isolation_args`; see `references/sages.md`.
 - The sage CLIs must be installed and authenticated. Setup and login commands
   are in `references/sages.md`. Missing CLIs are detected by preflight, not
   assumed.
 - `jq` must be on PATH; the script needs it to read its configuration.
 - **Research mode depends on the sages being able to search the web**, and each
-  CLI gates tool use differently when running headless. The bundled config carries
-  the flags that permit it for the three default sages. If a sage has been swapped
-  out, check its search permissions before convening a research council: a CLI
+  CLI gates tool use differently when running headless. Default scope uses the
+  configured permissions; Confidential scope retains only the bundled Web-search
+  permissions. If a sage has been swapped out, check both scopes before research: a CLI
   that denies its own search tool answers from training data instead, and one that
   waits for tool approval ends the run cancelled with no usable answer. The
   per-sage details are in `references/sages.md`.
@@ -140,7 +132,26 @@ When it is genuinely ambiguous, do not guess. Ask with bilingual options:
   - "Decision (vote)" / "decision（採決）" — three positions, tallied to a verdict
   - "Research (aggregate)" / "research（調査統合）" — three investigations, cross-checked
 
+After selecting `research`, use one AskUserQuestion step containing both
+bilingual selection questions:
+
+- question: "How deeply should the sages research?" / "賢者にどの深さで調査させますか？"
+  - "Standard research" / "標準リサーチ" — "Use the current prompt and normal search effort." / "現行プロンプトで通常の検索量を各賢者に任せます。"
+  - "Deep research" / "ディープリサーチ" — "Require five searches, contrary evidence, and URL-backed findings; three sages take longer and consume more provider quota." / "各賢者に5回以上の検索、反証検索、URL付き発見を義務付けます。時間と提供元クォータの消費が増えます。"
+- question: "Which tool scope should the sages use?" / "賢者にどのツール範囲を許可しますか？"
+  - "Default scope" / "既定のツール範囲" — "Keep configured tools; the question may reach their providers." / "設定済みツールを保ちます。問いがその提供元へ届く場合があります。"
+  - "Confidential scope" / "機密モード" — "Limit the bundled sages to Anthropic, OpenAI and xAI." / "同梱の賢者を Anthropic、OpenAI、xAI の3社に限定します。"
+
+For a decision, use Default scope unless the question may be confidential; then
+ask the same bilingual tool-scope question before dispatch. Record both choices
+in the audit directory. Deep research uses the Deep template in
+`references/council.md`; Standard uses the existing template.
+
 ### Step 3: Preflight
+
+Append the selected `--timeout <sec>` and `--confidential` options to preflight
+and every dispatched round. This keeps the effective timeout in `preflight.json`
+and prevents later rounds from silently changing tool scope.
 
 ```bash
 preflight="$("$magi_run" --out-dir "$out_dir" --preflight-only | tail -1)"
@@ -167,7 +178,7 @@ Required answer shapes (full templates in `references/council.md`):
 |---|---|
 | decision, round 1 | `{"position": "...", "rationale": "...", "confidence": "high\|medium\|low"}` |
 | decision, debate | `{"action": "keep\|switch\|compromise", "position": "...", "rationale": "...", "confidence": "..."}` |
-| research, round 1 | `{"findings": [{"claim": "...", "evidence": "...", "source": "..."}]}` |
+| research, round 1 | `{"findings": [{"claim": "...", "evidence": "...", "source": "..."}]}`; Deep also returns `search_queries` |
 | research, deliberation | `{"verdicts": [{"finding_id": "...", "verdict": "agree\|conditional\|reject", "rationale": "..."}]}` |
 
 Deliberation always uses the batched shape above, because one prompt normally
@@ -186,7 +197,8 @@ summary="$("$magi_run" \
   --prompt-file "${out_dir}/round1/prompt.md" \
   --out-dir "$out_dir" --round round1 | tail -1)"
 # Add --schema-file "${out_dir}/schema.json" to constrain the sages that support
-# it, and --sages MELCHIOR,BALTHASAR to dispatch to a subset.
+# it, --timeout 1200 when Deep needs longer, --confidential for Confidential
+# scope, and --sages MELCHIOR,BALTHASAR to dispatch to a subset.
 ```
 
 The last line of stdout is the path of `summary.json`. Exit 2 means a
@@ -263,7 +275,10 @@ Only when all sages hold different positions.
 
 ## Research Aggregation (research mode)
 
-1. Split each sage's `findings` into individual claims.
+1. Split each sage's `findings` into individual claims. In Deep research, retain
+   `search_queries` in the audit record and reject as unverified every finding
+   whose `source` is not an `http://` or `https://` URL. Keep rejected findings
+   visible in the final report, but do not send them to deliberation.
 2. Cluster claims that assert the same fact, even when the wording, framing or
    granularity differs. Two claims that agree on the fact but disagree on a
    detail (a date, a number, a version) are one cluster with a noted conflict,
@@ -404,12 +419,13 @@ audit log, and stop.
 
 | Situation | Response |
 |---|---|
-| Question may contain confidential material | Show the configured sages and confirm external transmission before dispatching |
+| Question may contain confidential material | Disclose Default and Confidential scope, then use the bilingual selection before dispatching |
 | `jq` missing | Script exits 2 and records `jq_available: false`; report the install command and stop |
 | `available_count` is 2 (a CLI is missing, or the config lists only two sages) | Ask "continue with two / abort" (bilingual) before dispatching |
 | `available_count` is 0 or 1 | Stop; report install and login commands, or the short config |
 | Script exits 2 | A precondition failed and nothing was sent; read its stderr, fix the cause, then dispatch again |
-| `status: timeout` | Sage exceeded `timeout_seconds` (default 600). Continue degraded, record `no answer (timeout)` |
+| Invalid `--timeout` | Script exits 2 before dispatch; pass a positive integer |
+| `status: timeout` | Sage exceeded the effective timeout in `preflight.json`. Continue degraded, record `no answer (timeout)` |
 | `status: error` | Sage failed or printed an unusable envelope; check its `stderr_file`. Quota exhaustion arrives this way |
 | Answer is not valid JSON after fence stripping | Treat as invalid answer; degrade, never rewrite it |
 | Fewer than two usable answers | Do not tally; present what arrived plus failure reasons and stop |

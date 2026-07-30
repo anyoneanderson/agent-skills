@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# codex-sage.sh — run `codex exec` with the operator's MCP servers, plugins and
-# apps switched off, so a council question reaches the OpenAI provider and
-# nothing else.
+# codex-sage.sh — run `codex exec`, preserving configured tools by default and
+# optionally switching them off for a confidential council run.
 #
-# Why this wrapper exists: a sage inherits whatever codex configuration the
-# operator already has, and that routinely includes MCP servers pointed at other
-# companies' services. Without this isolation, a question the skill announced as
-# going to three providers can be handed to a fourth by a tool call that neither
-# the host nor the user ever sees (design §8, provider boundary).
+# With no wrapper-specific flag, arguments pass directly to `codex exec`. The
+# runner appends `--confidential` from isolation_args only when the user selects
+# Confidential scope; this script consumes that flag and enables fail-closed
+# isolation before starting codex.
 #
 # The blocking is split between two mechanisms on purpose:
 #   - `--disable plugins --disable apps` covers servers supplied by plugins and
@@ -49,6 +47,20 @@
 set -euo pipefail
 
 err() { printf 'codex-sage: %s\n' "$*" >&2; }
+
+CONFIDENTIAL=0
+CODEX_ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = "--confidential" ]; then
+    CONFIDENTIAL=1
+  else
+    CODEX_ARGS+=("$arg")
+  fi
+done
+
+if [ "$CONFIDENTIAL" -eq 0 ]; then
+  exec codex exec "${CODEX_ARGS[@]+"${CODEX_ARGS[@]}"}"
+fi
 
 command -v jq >/dev/null 2>&1 || {
   err "jq not found on PATH, and it is required to read the MCP server list"
@@ -97,4 +109,5 @@ done < <(printf '%s' "$SERVER_JSON" | jq -r '.[].name')
 # empty, and bash 3.2 under `set -u` treats "${arr[@]}" on an empty array as an
 # unbound variable.
 exec codex exec --disable plugins --disable apps \
-  "${DISABLE_ARGS[@]+"${DISABLE_ARGS[@]}"}" "$@"
+  "${DISABLE_ARGS[@]+"${DISABLE_ARGS[@]}"}" \
+  "${CODEX_ARGS[@]+"${CODEX_ARGS[@]}"}"

@@ -1,0 +1,19 @@
+{
+  "timeout_seconds": 2,
+  "sages": [
+    {
+      "name": "TREESAGE",
+      "cli": "sh",
+      "command": ["sh", "{MAGI_SCRIPTS_DIR}/tests/fixtures/fake-timeout-descendant.sh", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "Starts a sleep descendant, records its PID beside the prompt, and waits. The runner must stop the whole process group on timeout."
+    },
+    {
+      "name": "QUICKSAGE",
+      "cli": "cat",
+      "command": ["cat", "{PROMPT_FILE}"],
+      "extract": "raw",
+      "notes": "Answers immediately to prove cleanup of the timed-out process group does not stop a healthy sage."
+    }
+  ]
+}

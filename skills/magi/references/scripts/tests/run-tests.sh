@@ -13,6 +13,8 @@
 #                             (jq filter, answer-file, raw)
 #   sages-parallel.json       three sages that each wait a second
 #   sages-timeout.json        a sage that never answers, timeout_seconds 2
+#   sages-timeout-descendant.json
+#                             a sage that records a child PID before timing out
 #   sages-error.json          a sage that writes stderr and exits 3
 #   sages-bad-envelope.json   a sage that exits 0 with an unextractable answer
 #   sages-missing-cli.json    a sage whose command is not installed
@@ -23,7 +25,7 @@
 #                             {MAGI_SCRIPTS_DIR}, as the default codex adapter
 #                             does to reach its wrapper (fixtures/fake-sage.sh)
 #
-# The last four cases test codex-sage.sh instead of magi-run.sh, with
+# The final Codex cases test codex-sage.sh instead of magi-run.sh, with
 # fixtures/fake-codex.sh copied to <case>/bin/codex and put first on PATH. They
 # assert the arguments that reach `codex exec`, because that is where the MCP
 # blocking either happens or silently does not, and that nothing reaches it at all
@@ -370,6 +372,93 @@ case_timeout_status() {
   end_case
 }
 
+case_timeout_stops_descendant() {
+  begin_case "a timed-out sage leaves no recorded descendant running while a healthy sage completes"
+  local dir out summary pid_file descendant_pid attempt
+  dir="$(case_dir timeout-descendant)"
+  out="${dir}/out"
+  printf 'Stop the complete timed-out process group.\n' > "${dir}/prompt.md"
+
+  RUN_CONFIG="${FIXTURES}/sages-timeout-descendant.json"
+  run_magi "$dir" --prompt-file "${dir}/prompt.md" --out-dir "$out" --round round1
+
+  summary="${out}/round1/summary.json"
+  pid_file="${dir}/prompt.md.descendant.pid"
+  expect_rc 0 "$RUN_RC" "dispatch still succeeds"
+  expect_file "$pid_file" "the timeout fixture records its descendant PID"
+  expect_value timeout "$(sage_field "$summary" TREESAGE status)" "timed-out sage status"
+  expect_value 142 "$(sage_field "$summary" TREESAGE exit_code)" "timed-out sage exit code"
+  expect_value ok "$(sage_field "$summary" QUICKSAGE status)" "healthy sage status"
+
+  descendant_pid="$(cat "$pid_file" 2>/dev/null || true)"
+  case "$descendant_pid" in
+    '' | *[!0-9]*) note_failure "recorded descendant PID is not numeric: '${descendant_pid}'" ;;
+    *)
+      attempt=0
+      while kill -0 "$descendant_pid" 2>/dev/null && [ "$attempt" -lt 50 ]; do
+        perl -e 'select undef, undef, undef, 0.02'
+        attempt=$((attempt + 1))
+      done
+      if kill -0 "$descendant_pid" 2>/dev/null; then
+        note_failure "recorded descendant PID ${descendant_pid} still exists after timeout cleanup"
+        kill "$descendant_pid" 2>/dev/null || true
+      fi
+      ;;
+  esac
+  end_case
+}
+
+case_timeout_override() {
+  begin_case "--timeout overrides config in preflight, execution, and timeout diagnostics"
+  local dir out summary elapsed_ms help_text
+  dir="$(case_dir timeout-override)"
+  out="${dir}/out"
+  printf 'Use the invocation timeout.\n' > "${dir}/prompt.md"
+
+  RUN_CONFIG="${FIXTURES}/sages-timeout.json"
+  run_magi "$dir" --prompt-file "${dir}/prompt.md" --out-dir "$out" --round round1 --timeout 1
+
+  summary="${out}/round1/summary.json"
+  expect_rc 0 "$RUN_RC" "dispatch with timeout override"
+  expect_json "${out}/preflight.json" '.timeout_seconds == 1' "preflight records the effective timeout"
+  expect_value timeout "$(sage_field "$summary" STUCKSAGE status)" "stuck sage status"
+  expect_value 142 "$(sage_field "$summary" STUCKSAGE exit_code)" "stuck sage exit code"
+  expect_value ok "$(sage_field "$summary" QUICKSAGE status)" "healthy sage status"
+  expect_contains "${out}/round1/STUCKSAGE.stderr" "exceeded the 1 second timeout" \
+    "the diagnostic uses the effective timeout"
+  elapsed_ms="$(sage_number "$summary" STUCKSAGE duration_ms)"
+  [ "$elapsed_ms" -lt 1900 ] ||
+    note_failure "override did not replace the configured 2 seconds: sage ran ${elapsed_ms} ms"
+
+  help_text="$(bash "$SCRIPT" --help 2>&1)"
+  expect_text_has "$help_text" '--timeout <sec>' "usage lists the timeout override"
+  end_case
+}
+
+case_invalid_timeout_rejected_before_dispatch() {
+  begin_case "invalid --timeout values stop with exit 2 before config loading or dispatch"
+  local dir value label target
+  dir="$(case_dir invalid-timeout)"
+
+  for value in 0 -1 1.5 nope; do
+    label="$(printf '%s' "$value" | tr -c 'A-Za-z0-9' '_')"
+    target="${dir}/out-${label}"
+    RUN_CONFIG="${dir}/missing-config.json"
+    run_magi "$dir" --out-dir "$target" --preflight-only --timeout "$value"
+    expect_rc 2 "$RUN_RC" "--timeout ${value}"
+    expect_contains "$RUN_ERR" "must be a positive integer" "--timeout ${value} diagnosis"
+    expect_absent "$target" "--timeout ${value} creates no output before rejection"
+  done
+
+  target="${dir}/out-missing"
+  RUN_CONFIG="${dir}/missing-config.json"
+  run_magi "$dir" --out-dir "$target" --preflight-only --timeout
+  expect_rc 2 "$RUN_RC" "--timeout without a value"
+  expect_contains "$RUN_ERR" "--timeout needs a value" "missing timeout diagnosis"
+  expect_absent "$target" "missing timeout creates no output before rejection"
+  end_case
+}
+
 case_error_isolation() {
   begin_case "status is error and the other sage is still collected when a sage exits non-zero"
   local dir out summary marker
@@ -538,6 +627,37 @@ case_bundled_default_config() {
   end_case
 }
 
+case_bundled_confidential_argv_contract() {
+  begin_case "the bundled MELCHIOR command is transparent by default and confidential fields fail closed"
+  expect_json "$BUNDLED_SAGES" '
+    (.sages[] | select(.name == "MELCHIOR")) as $sage
+    | ($sage.command | index("--safe-mode")) == null
+      and ($sage.command | index("--no-chrome")) == null
+      and ($sage.command | index("--mcp-config")) == null
+      and ($sage.command | index("--strict-mcp-config")) == null
+      and ($sage.command | index("--tools")) == null
+      and ($sage.isolation_args == [
+        "--safe-mode",
+        "--no-chrome",
+        "--mcp-config",
+        "{\"mcpServers\":{}}",
+        "--strict-mcp-config",
+        "--tools",
+        "WebSearch,WebFetch"
+      ])' "MELCHIOR keeps fail-closed flags in isolation_args only"
+  expect_json "$BUNDLED_SAGES" '
+    (.sages[] | select(.name == "BALTHASAR")) as $sage
+    | ($sage.isolation_args == ["--confidential"])
+      and ($sage.command | index("--confidential")) == null' \
+    "BALTHASAR enables its confidential wrapper path only through isolation_args"
+  expect_json "$BUNDLED_SAGES" '
+    (.sages[] | select(.name == "CASPER")) as $sage
+    | ($sage.isolation_args == ["--tools", "web_search,web_fetch", "--deny", "MCPTool(*)"])
+      and ($sage.command | index("--deny")) == null' \
+    "CASPER keeps its fail-closed tool fields in isolation_args only"
+  end_case
+}
+
 case_rejects_prompt_in_argv() {
   begin_case "the config is rejected when a sage puts the prompt body in argv"
   local dir out
@@ -647,6 +767,27 @@ case_schema_args_appended() {
   end_case
 }
 
+case_confidential_and_schema_args_composed() {
+  begin_case "confidential isolation_args precede schema_args and both preserve element substitution"
+  local dir out summary argv_line
+  dir="$(case_dir confidential-schema-args)"
+  out="${dir}/out"
+  printf 'Constrained confidential answer requested.\n' > "${dir}/prompt.md"
+  printf '{"type":"object","required":["position"]}\n' > "${dir}/schema.json"
+
+  RUN_CONFIG="${FIXTURES}/sages-argv-probe.json"
+  run_magi "$dir" --prompt-file "${dir}/prompt.md" --out-dir "$out" --round round1 \
+    --confidential --schema-file "${dir}/schema.json"
+
+  summary="${out}/round1/summary.json"
+  expect_rc 0 "$RUN_RC" "confidential dispatch with a schema"
+  argv_line="$(answer_first_line "$summary" PROBESAGE)"
+  expect_value \
+    'args=[--isolation-mode confidential --json-schema {"type":"object","required":["position"]}]' \
+    "$argv_line" "command, isolation_args, and schema_args composition"
+  end_case
+}
+
 case_schema_args_omitted() {
   begin_case "schema_args are omitted when no --schema-file is given"
   local dir out summary argv_line
@@ -662,6 +803,31 @@ case_schema_args_omitted() {
   expect_json "$summary" '[.sages[].name] == ["PROBESAGE"]' "the probe sage is reported"
   argv_line="$(answer_first_line "$summary" PROBESAGE)"
   expect_value "args=[]" "$argv_line" "the sage receives no extra arguments"
+  end_case
+}
+
+case_confidential_controls_isolation_args() {
+  begin_case "normal mode omits isolation_args and --confidential appends them"
+  local dir out summary argv_line
+  dir="$(case_dir confidential-argv)"
+  out="${dir}/out-default"
+  printf 'Observe tool-scope arguments.\n' > "${dir}/prompt.md"
+
+  RUN_CONFIG="${FIXTURES}/sages-argv-probe.json"
+  run_magi "$dir" --prompt-file "${dir}/prompt.md" --out-dir "$out" --round round1
+  summary="${out}/round1/summary.json"
+  expect_rc 0 "$RUN_RC" "default dispatch"
+  expect_value 'args=[]' "$(answer_first_line "$summary" PROBESAGE)" \
+    "Default mode does not append isolation_args"
+
+  out="${dir}/out-confidential"
+  RUN_CONFIG="${FIXTURES}/sages-argv-probe.json"
+  run_magi "$dir" --prompt-file "${dir}/prompt.md" --out-dir "$out" --round round1 --confidential
+  summary="${out}/round1/summary.json"
+  expect_rc 0 "$RUN_RC" "confidential dispatch"
+  argv_line="$(answer_first_line "$summary" PROBESAGE)"
+  expect_value 'args=[--isolation-mode confidential]' "$argv_line" \
+    "Confidential mode appends isolation_args exactly once"
   end_case
 }
 
@@ -763,8 +929,25 @@ run_codex_wrapper() { # <case dir> <args...>
   WRAP_LIST_RC=0
 }
 
-case_codex_wrapper_disables_mcp() {
-  begin_case "the codex wrapper disables every MCP server codex reports"
+case_codex_wrapper_default_transparent() {
+  begin_case "the default codex wrapper path forwards argv without listing or disabling tools"
+  local dir argv
+  dir="$(case_dir codex-wrapper-default)"
+
+  run_codex_wrapper "$dir" --sandbox read-only --output-last-message "${dir}/answer.txt" -
+
+  expect_rc 0 "$WRAP_RC" "the Default wrapper run"
+  expect_absent "${dir}/list-argv.txt" "Default mode does not inspect the MCP roster"
+  argv="$(tr '\n' ' ' < "${dir}/exec-argv.txt")"
+  expect_value "--sandbox read-only --output-last-message ${dir}/answer.txt - " "$argv" \
+    "Default mode forwards the configured arguments unchanged"
+  expect_text_lacks "$argv" "--disable" "Default mode does not disable configured tools"
+  expect_text_lacks "$argv" "mcp_servers." "Default mode does not add MCP overrides"
+  end_case
+}
+
+case_codex_wrapper_confidential_disables_mcp() {
+  begin_case "the confidential codex wrapper disables every MCP server codex reports"
   local dir argv list_argv name
   dir="$(case_dir codex-wrapper-disable)"
   printf '%s\n' \
@@ -772,7 +955,8 @@ case_codex_wrapper_disables_mcp() {
     > "${dir}/servers.json"
 
   WRAP_LIST_FILE="${dir}/servers.json"
-  run_codex_wrapper "$dir" --sandbox read-only --output-last-message "${dir}/answer.txt" -
+  run_codex_wrapper "$dir" --sandbox read-only --confidential \
+    --output-last-message "${dir}/answer.txt" -
 
   expect_rc 0 "$WRAP_RC" "the wrapper run"
   list_argv="$(tr '\n' ' ' < "${dir}/list-argv.txt")"
@@ -794,13 +978,13 @@ case_codex_wrapper_disables_mcp() {
 }
 
 case_codex_wrapper_empty_roster() {
-  begin_case "the codex wrapper starts codex when no MCP server is configured"
+  begin_case "the confidential codex wrapper starts codex when no MCP server is configured"
   local dir argv
   dir="$(case_dir codex-wrapper-empty)"
   printf '[]\n' > "${dir}/servers.json"
 
   WRAP_LIST_FILE="${dir}/servers.json"
-  run_codex_wrapper "$dir" --sandbox read-only -
+  run_codex_wrapper "$dir" --sandbox read-only --confidential -
 
   expect_rc 0 "$WRAP_RC" "the wrapper run with an empty roster"
   argv="$(tr '\n' ' ' < "${dir}/exec-argv.txt")"
@@ -810,14 +994,14 @@ case_codex_wrapper_empty_roster() {
 }
 
 case_codex_wrapper_fails_closed() {
-  begin_case "the codex wrapper refuses to start codex when the MCP roster is unusable"
+  begin_case "the confidential codex wrapper refuses to start codex when the MCP roster is unusable"
   local dir
   dir="$(case_dir codex-wrapper-closed)"
 
   # An older codex-cli rejects the unknown --disable flag, which is the realistic
   # way this call fails.
   WRAP_LIST_RC=1
-  run_codex_wrapper "$dir" --sandbox read-only -
+  run_codex_wrapper "$dir" --sandbox read-only --confidential -
   expect_rc 2 "$WRAP_RC" "a failing roster call"
   expect_absent "${dir}/exec-argv.txt" "codex exec is never reached"
   expect_contains "${dir}/wrapper.err" "refusing to start codex exec" "the refusal is stated"
@@ -827,7 +1011,7 @@ case_codex_wrapper_fails_closed() {
   # servers to block is unknown.
   printf 'not json at all\n' > "${dir}/servers.json"
   WRAP_LIST_FILE="${dir}/servers.json"
-  run_codex_wrapper "$dir" --sandbox read-only -
+  run_codex_wrapper "$dir" --sandbox read-only --confidential -
   expect_rc 2 "$WRAP_RC" "an unreadable roster"
   expect_absent "${dir}/exec-argv.txt" "codex exec is still never reached"
   expect_contains "${dir}/wrapper.err" "cannot read the MCP server list" "the reason names the roster"
@@ -835,7 +1019,7 @@ case_codex_wrapper_fails_closed() {
 }
 
 case_codex_wrapper_rejects_unusable_name() {
-  begin_case "the codex wrapper refuses to start codex when a server name cannot become an override"
+  begin_case "the confidential codex wrapper refuses when a server name cannot become an override"
   local dir
   dir="$(case_dir codex-wrapper-name)"
 
@@ -843,7 +1027,7 @@ case_codex_wrapper_rejects_unusable_name() {
   # enabled, and the sage would look perfectly healthy.
   printf '%s\n' '[{"name":"firecrawl"},{"name":""}]' > "${dir}/blank.json"
   WRAP_LIST_FILE="${dir}/blank.json"
-  run_codex_wrapper "$dir" --sandbox read-only -
+  run_codex_wrapper "$dir" --sandbox read-only --confidential -
   expect_rc 2 "$WRAP_RC" "a roster holding a blank name"
   expect_absent "${dir}/exec-argv.txt" "codex exec is never reached"
   expect_contains "${dir}/wrapper.err" 'cannot disable MCP server ""' "the empty name is shown as \"\""
@@ -852,7 +1036,7 @@ case_codex_wrapper_rejects_unusable_name() {
   # run for the same reason.
   printf '%s\n' '[{"name":"my server"}]' > "${dir}/symbol.json"
   WRAP_LIST_FILE="${dir}/symbol.json"
-  run_codex_wrapper "$dir" --sandbox read-only -
+  run_codex_wrapper "$dir" --sandbox read-only --confidential -
   expect_rc 2 "$WRAP_RC" "a roster holding a name with a space"
   expect_absent "${dir}/exec-argv.txt" "codex exec is still never reached"
   expect_contains "${dir}/wrapper.err" 'cannot disable MCP server "my server"' "the offending name is quoted"
@@ -886,6 +1070,9 @@ case_sources_parse
 case_three_ok_answers
 case_parallel_dispatch
 case_timeout_status
+case_timeout_stops_descendant
+case_timeout_override
+case_invalid_timeout_rejected_before_dispatch
 case_error_isolation
 case_unreadable_answer
 case_preflight_missing_cli
@@ -893,16 +1080,20 @@ case_refuses_missing_cli
 case_env_override
 case_project_over_home_config
 case_bundled_default_config
+case_bundled_confidential_argv_contract
 case_rejects_prompt_in_argv
 case_per_sage_prompt
 case_sages_filter
 case_unknown_sage_name
 case_schema_args_appended
+case_confidential_and_schema_args_composed
 case_schema_args_omitted
+case_confidential_controls_isolation_args
 case_prompt_body_not_in_argv
 case_prompt_file_preconditions
 case_scripts_dir_placeholder
-case_codex_wrapper_disables_mcp
+case_codex_wrapper_default_transparent
+case_codex_wrapper_confidential_disables_mcp
 case_codex_wrapper_empty_roster
 case_codex_wrapper_fails_closed
 case_codex_wrapper_rejects_unusable_name
