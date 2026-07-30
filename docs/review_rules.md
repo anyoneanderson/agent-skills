@@ -20,7 +20,7 @@
 - `[MUST]` SKILL.md 本文は英語で記述すること
 - `[MUST]` `## Language Rules` セクションが存在すること
 - `[MUST]` AskUserQuestion テキストはバイリンガル（`"English" / "日本語"`）
-- `[MUST]` セクションヘッダーは英語であること
+- `[MUST]` SKILL.md の fenced code example 外にある ATX 形式文書セクションヘッダーは英語であること（フェンス内の例示見出しは除外）
 - `[MUST]` タイトル形式: `# skill-name — Short Description`
 - `[SHOULD]` セクション順序: フロントマター → タイトル → 紹介 → Language Rules → コア → Error Handling → Usage Examples
 
@@ -35,6 +35,7 @@
 ## 5. テスト
 
 - `[MUST]` プレサブミットチェック: フロントマター name 一致、参照ファイル存在、MCP ツール名なし、500 行未満
+- `[MUST]` `bash skills/agent-delegate/references/scripts/tests/check_skill_quality.sh skills/*/SKILL.md`でリポジトリ内の全`SKILL.md`を検査する
 - `[MUST]` `bash scripts/check-skill-line-budget.sh`でリポジトリ内の全`SKILL.md`を検査する
 - `[MUST]` reference分割を変更した場合は`bash scripts/tests/check-skill-reference-split-contract.sh`を実行する
 - `[SHOULD]` テスト名は振る舞いを記述する

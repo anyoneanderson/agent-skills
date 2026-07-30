@@ -5,6 +5,7 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$(cd "$TEST_DIR/.." && pwd)/agent-delegate.sh"
 HARNESS="$TEST_DIR/heartbeat_harness.sh"
 QUALITY="$TEST_DIR/check_skill_quality.sh"
+QUALITY_CONTRACT="$TEST_DIR/check_skill_quality_contract.sh"
 STUB_DIR="$TEST_DIR/stubs"
 FIXTURE_DIR="$TEST_DIR/fixtures"
 REPO_ROOT="$(git -C "$TEST_DIR" rev-parse --show-toplevel)"
@@ -58,12 +59,12 @@ dry_validate_case() {
   case "$kind" in suite|meta) : ;; *) die "$case_name has invalid kind: $kind" ;; esac
   [ -n "$expected" ] || die "$case_name has no expected artifact"
   [ -f "$FIXTURE_DIR/$fixture" ] || die "$case_name fixture does not exist: $fixture"
-  /bin/bash -n "$SCRIPT" "$HARNESS" "$QUALITY" "$TEST_DIR/run_tests.sh" "$STUB_DIR/codex" "$STUB_DIR/claude"
+  /bin/bash -n "$SCRIPT" "$HARNESS" "$QUALITY" "$QUALITY_CONTRACT" "$TEST_DIR/run_tests.sh" "$STUB_DIR/codex" "$STUB_DIR/claude"
   if grep -En '(^|[[:space:]])sleep([[:space:]]|$)|https?://|(^|[[:space:]])(curl|wget)([[:space:]]|$)' \
-      "$HARNESS" "$STUB_DIR/codex" "$STUB_DIR/claude" >/dev/null; then
+      "$HARNESS" "$QUALITY_CONTRACT" "$STUB_DIR/codex" "$STUB_DIR/claude" >/dev/null; then
     die "$case_name depends on sleep, network, or a real peer"
   fi
-  [ -x "$HARNESS" ] && [ -x "$QUALITY" ] && [ -x "$STUB_DIR/codex" ] && [ -x "$STUB_DIR/claude" ] ||
+  [ -x "$HARNESS" ] && [ -x "$QUALITY" ] && [ -x "$QUALITY_CONTRACT" ] && [ -x "$STUB_DIR/codex" ] && [ -x "$STUB_DIR/claude" ] ||
     die "$case_name requires executable harness/checker/stubs"
   printf 'DRY_RUN_OK\t%s\t%s\t%s\n' "$case_name" "$fixture" "$expected"
 }
@@ -1970,12 +1971,14 @@ case_monitor_only_publishers() {
 }
 
 case_allowed_scope_and_skill_style() {
-  local changed bad_dir
+  local changed bad_dir skill_files
   changed="$(git -C "$REPO_ROOT" status --porcelain | sed 's/^...//' | sed 's/^"//;s/"$//' || true)"
   while IFS= read -r path; do
     [ -z "$path" ] && continue
     case "$path" in
-      README.md|README.ja.md|skills/agent-delegate/SKILL.md|skills/agent-delegate/references/contract.md|skills/agent-delegate/references/contract.ja.md) : ;;
+      AGENTS.md|README.md|README.ja.md|docs/coding-rules.md|docs/review_rules.md|docs/skill-style-guide.md) : ;;
+      skills/agent-delegate/SKILL.md|skills/agent-delegate/references/contract.md|skills/agent-delegate/references/contract.ja.md) : ;;
+      skills/mcp-convert/SKILL.md) : ;;
       skills/agent-delegate/references/scripts/agent-delegate.sh|skills/agent-delegate/references/scripts/tests/*) : ;;
       skills/spec-orchestrate/SKILL.md|skills/spec-orchestrate/references/role-dispatch.md|skills/spec-orchestrate/references/role-dispatch.ja.md) : ;;
       skills/spec-orchestrate/references/phases/spec_generate.md|skills/spec-orchestrate/references/phases/spec_generate.ja.md) : ;;
@@ -1988,7 +1991,10 @@ case_allowed_scope_and_skill_style() {
   done <<EOF
 $changed
 EOF
-  bash "$QUALITY" "$REPO_ROOT/skills/agent-delegate/SKILL.md" "$REPO_ROOT/skills/spec-orchestrate/SKILL.md" "$REPO_ROOT/skills/spec-implement/SKILL.md" "$REPO_ROOT/skills/spec-evaluate/SKILL.md" >/dev/null
+  bash "$QUALITY_CONTRACT" >/dev/null
+  skill_files=("$REPO_ROOT"/skills/*/SKILL.md)
+  [ -f "${skill_files[0]}" ] || die 'quality checker found no SKILL.md files'
+  bash "$QUALITY" "${skill_files[@]}" >/dev/null
   bad_dir="$(new_work_dir)/wrong-name"; mkdir -p "$bad_dir"; cp "$REPO_ROOT/skills/agent-delegate/SKILL.md" "$bad_dir/SKILL.md"
   if bash "$QUALITY" "$bad_dir/SKILL.md" >/dev/null 2>&1; then rm -rf "$(dirname "$bad_dir")"; die "quality checker accepted a broken directory/name relation"; fi
   rm -rf "$(dirname "$bad_dir")"

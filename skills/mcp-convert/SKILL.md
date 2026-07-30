@@ -26,7 +26,7 @@ description: |
 license: MIT
 ---
 
-# mcp-convert
+# mcp-convert — Convert MCP Configuration
 
 Convert Claude Code MCP settings into Codex CLI MCP configuration.
 
