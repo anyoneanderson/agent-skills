@@ -73,12 +73,14 @@ It acts as an execution engine that:
    └── Verify CLAUDE.md conditional rules pass
 
 8. PR Creation
-   ├── Follow workflow's PR template
+   ├── Treat the body as a review index and follow the project's PR template
+   ├── Select facts that change correctness, risk, scope, verification, or merge judgment
+   ├── Keep detailed run records local instead of copying them wholesale
    ├── --base {base_branch} (dynamically determined from workflow)
    ├── Link to issue (Closes #{N})
    ├── File follow-up issues for deferred findings (fix_before: trial /
-   │   required_check / follow_up) and link them in the PR body; on failure
-   │   keep the finding text in the body with a warning
+   │   required_check / follow_up); keep only their link, effect, and landing
+   │   rationale in the PR body; on failure keep the finding text with a warning
    └── Monitor CI (if specified in workflow)
 ```
 
@@ -616,7 +618,9 @@ The review gate replaces the simple self-review with a structured process:
 4. **Fix loop** (max 3 iterations):
    - Fix `fix_before: implementation` findings → re-review only changed code
    - Deferred findings (`trial` / `required_check` / `follow_up`) and Minor
-     are logged and carried to the PR body, not fixed in this loop
+     are logged, not fixed in this loop. Move deferred findings to follow-up
+     Issues and carry only decision-relevant summaries to the PR body. Include a
+     Minor finding only when it changes review or merge judgment
    - After 3rd iteration: unresolved `implementation` findings → ask user
 5. **Second opinion** (if cmux dispatch + second-opinion enabled):
    - After self-review loop passes
@@ -947,7 +951,9 @@ phase (`implement`), artifact/task id, round, `host_runtime` at review time,
 preferred/actual role, backend, reason, and independence. spec-orchestrate is
 the sole state writer and appends these records to `state.review_fallbacks`;
 standalone spec-implement lists them in its completion summary. The PR surfaces
-each entry as reduced cross-AI assurance.
+the fallback only when it reduces review assurance, and summarizes the preferred
+and actual roles, reason, and effect on merge judgment instead of copying the
+structured record.
 
 ### Fix Loop Routing
 
@@ -980,7 +986,9 @@ satisfies the contract's resume rule.
 Do not silently choose a fallback. spec-implement returns worker role changes
 and independent review fallbacks to its caller. spec-orchestrate, as sole state
 writer, records them in `state.role_overrides` / `state.review_fallbacks` and
-puts both in the PR body; standalone reports them without writing pipeline state.
+selects only decision-relevant summaries for the PR body; standalone reports the
+records in its completion summary without writing pipeline state and applies the
+same selection rule when it creates a PR.
 
 Never inline agent-delegate's internal implementation; depend only on the flags and
 `report.json` schema in its contract.

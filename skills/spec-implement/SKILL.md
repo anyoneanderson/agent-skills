@@ -263,6 +263,21 @@ After all tasks complete:
 
 ### Phase 8: PR Creation
 
+Treat the PR body as a review index, not an audit log, specification, or
+implementation diary. Before composing it, inspect the repository's pull request
+template and PR-writing rules. When a project template exists, preserve its
+headings, order, required fields, and checkboxes.
+
+Select only facts whose removal would change a reviewer's judgment about
+correctness, risk, scope, verification, or merge readiness. Summarize changed
+behavior, design rationale, affected scope, known constraints, verification, and
+review focus. Keep complete review rounds, all findings, acceptance tables,
+evidence manifests, task progress, and arbitration history in their durable local
+records; do not copy them wholesale into the PR body.
+
+When no project template exists, use headings that serve these roles: summary,
+background or reason, changes, verification, known constraints, and review focus.
+
 ```bash
 gh pr create \
   --title "{type}: {description} (closes #{N})" \
@@ -278,10 +293,15 @@ gh pr create \
 **Deferred findings**: for each review finding carried with `fix_before:
 trial` / `required_check` / `follow_up`, create a follow-up issue (`gh issue
 create` — finding text, severity, `fix_before` stage, file/section, link back
-to the PR; same-class findings may share one issue) and link it next to the
-finding in the PR body. If issue creation fails or `gh` is unavailable, keep
-the full finding text in the PR body with a warning — a deferred finding must
-never survive only in a run record.
+to the PR; same-class findings may share one issue). Keep the full finding in
+that Issue. Put only the Issue link, its effect on changed behavior, and why the
+current PR can land before the follow-up in the PR body. If issue creation fails
+or `gh` is unavailable, keep the full finding text in the PR body with a warning
+— a deferred finding must never survive only in a run record.
+
+Summarize a review fallback in the PR only when it reduces review assurance.
+State the preferred and actual reviewer roles, why the fallback occurred, and
+its effect on merge judgment; do not dump every structured fallback record.
 
 ## Error Handling
 
