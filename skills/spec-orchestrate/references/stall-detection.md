@@ -196,7 +196,9 @@ Every arbitration is written to state and surfaced to humans:
    ```
 2. Transcribe it where a human will see it:
    - auto with an Issue origin → `gh issue comment <N>` with the signal and decision.
-   - otherwise → the PR body (the `## Unresolved` / review-history sections).
+   - otherwise → keep the full record in state; if the decision changes merge
+     readiness or review assurance, summarize that effect and the next action
+     in the draft PR body under the project's applicable heading.
 
 A stall that is silently resolved is a bug: the record is what lets a reviewer
 understand why a run swapped owners or landed a draft.

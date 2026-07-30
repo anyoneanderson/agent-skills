@@ -241,7 +241,7 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
    - Identifies ambiguous expressions
    - Generates `inspection-report.md` with findings
 
-4. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue with checklists, links to spec files, and completion criteria.
+4. **spec-to-issue** reads `.specs/{project}/` and creates a GitHub Issue as an execution contract: problem, completed state, behavior, scope boundaries, acceptance criteria, constrained decisions, and spec links. Project Issue templates take priority, and phase-by-phase tasks are not copied by default.
 
 5. **spec-rules-init** generates quality rules from project conventions:
    - `docs/coding-rules.md` — Implementation quality gates
@@ -282,6 +282,7 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
     - Role assignment per phase via `.specs/pipeline.yml` (claude ⇄ codex), resolved host-aware: matching roles use runtime-native subagents, opposite roles use agent-delegate with an explicit target
     - Single-AI fallback: if the preferred cross-AI reviewer is unavailable, launches a fresh read-only host-native reviewer subagent, records reduced assurance, and blocks only when reviewer independence cannot be guaranteed
     - Detects stalled review loops by machine signals (finding fingerprints) and adjudicates: swap roles or land a draft PR
+    - Builds the PR body as a review index under the project's PR template: behavior, rationale, impact, constraints, verification, and review focus; detailed rounds, acceptance tables, and evidence manifests stay in local run records
     - State lives in `pipeline-state.json`; interrupted runs resume from the last completed phase
     - Retrospective aggregates run records into improvement proposals and can auto-apply safe ones (branch → PR → auto-merge; contracts and SKILL.md always require human review)
 

@@ -1,175 +1,127 @@
-# Issue Template & Extraction Rules
+# Issue Template and Selection Rules
 
-## Issue Body Template
+## Document Role and Reader
 
-Compose the issue body following this template.
-Replace `{...}` with values extracted from spec files. Omit entire sections if the source section doesn't exist.
+The Issue body is an execution contract, not a copy of the specification or a planning diary.
+Its reader is an implementer who has not followed the earlier discussion and must decide what problem to solve, what result is required, which boundaries apply, and how completion will be judged.
+
+Link to the specification for supporting detail.
+Keep in the Issue only information whose removal would change an implementation decision or completion judgment.
+
+## Project Template Takes Priority
+
+Before composing the body, inspect the repository's Issue forms, Issue templates, contribution rules, and required fields.
+When a project template exists, preserve its headings, order, fields, and checkboxes.
+Map the selected information into that structure instead of appending the default template below.
+
+Use the default template only when no project template applies.
+Omit an optional section when the specifications provide no relevant content; do not invent filler.
+
+## Default Issue Body Template
 
 ```markdown
-## Overview
+## Problem
 
-**Warning: Read the spec documents thoroughly before starting implementation.**
+{The current behavior or missing capability and the concrete problem it causes.}
 
-{Overview section from requirement.md}
+## Outcome
 
-## Spec Documents
+{One or two sentences describing the observable state after completion.}
 
-See `.specs/{FEATURE_DIR}/` directory
+## Current Behavior
 
-- [Requirements Document](../blob/{BRANCH}/.specs/{FEATURE_DIR}/requirement.md)
-- [Design Document](../blob/{BRANCH}/.specs/{FEATURE_DIR}/design.md)
-- [Task List](../blob/{BRANCH}/.specs/{FEATURE_DIR}/tasks.md)
+{What the system does now. For a new capability, state the missing path or manual workaround.}
 
-## Key Features
+## Expected Behavior
 
-{Extract major features as bullet list from requirement.md}
-- Feature 1
-- Feature 2
-- Feature 3
+{What triggers the behavior, which component acts, what it does, and where the result is stored or returned.}
 
-## Implementation Checklist
+## Scope
 
-{Group by phase from tasks.md}
+### Included
 
-### Phase 1: {Phase Name} ({Duration})
-- [ ] Task 1
-- [ ] Task 2
+- {Work required to deliver the expected behavior.}
 
-### Phase 2: {Phase Name} ({Duration})
-- [ ] Task 1
-- [ ] Task 2
+### Excluded
 
-## Technology Stack
+- {A nearby responsibility that is intentionally not part of this Issue.}
 
-{Extract from tech requirements in requirement.md}
-- Tech 1
-- Tech 2
+## Acceptance Criteria
 
-## Definition of Done
+- [ ] {An observable result that proves the outcome.}
+- [ ] {A failure or boundary behavior that must hold.}
 
-{Extract from "Definition of Done" in tasks.md. Use defaults if not found}
-- [ ] All required features are implemented
-- [ ] Tests are passing
-- [ ] Code review is complete
+## Binding Decisions
 
-## Notes
+- {A design choice the implementer must preserve and the reason it is constrained.}
 
-{Extract from "Notes" in tasks.md. Omit if not found}
+## Open Questions
+
+- {An undecided choice, the decision criterion, and who must decide it.}
+
+## Specification
+
+- [Requirements](../blob/{BRANCH}/.specs/{FEATURE_DIR}/requirement.md)
+- [Design](../blob/{BRANCH}/.specs/{FEATURE_DIR}/design.md)
+- [Tasks](../blob/{BRANCH}/.specs/{FEATURE_DIR}/tasks.md)
 ```
 
-## Issue Title
+## Selection Procedure
 
-```
-[Feature] {FEATURE_NAME}
-```
+Read `requirement.md`, `design.md`, and `tasks.md` as candidate sources rather than sections to copy.
+Select information in this order:
 
-Determining `FEATURE_NAME`:
-1. Extract from the first `# ` line in requirement.md
-2. Strip suffixes: `要件定義書`, `要件定義`, `仕様書`, `Requirements`, `Specification`, `Spec`, `Requirements Document`
-3. Trim leading/trailing whitespace
+1. Identify the problem and the observable completed state from the requirements.
+2. Describe current and expected behavior with the actor, trigger, processing, and destination when those details affect implementation.
+3. Separate included and excluded scope so adjacent work cannot be mistaken for a requirement.
+4. Convert requirement-level acceptance criteria into checkboxes that can be verified from observable behavior.
+5. Keep a design decision only when changing it would violate a constraint, compatibility requirement, security boundary, or external contract; include the reason.
+6. Keep an open question only when implementation cannot safely choose an answer; state the decision criterion and decision owner.
+7. Link the specification for architecture detail, task decomposition, estimates, and background evidence.
+
+Do not automatically reproduce key-feature lists, phase-by-phase tasks, task estimates, a technology stack, investigation history, or every note from the specification.
+Include one of those details only when it changes how the implementer must build the feature or how the reviewer will decide that it is complete.
+
+## Title
+
+Use `[Feature] {FEATURE_NAME}` unless the project's template or contribution rules define another title format.
+
+Determine `FEATURE_NAME` by:
+
+1. reading the first `# ` heading in `requirement.md`;
+2. stripping `Requirements Document`, `Requirements`, `Specification`, `Spec`, `要件定義書`, `要件定義`, or `仕様書`; and
+3. trimming surrounding whitespace.
 
 Examples:
-- `# Member Management Requirements Document` → `[Feature] Member Management`
-- `# メンバー管理機能 要件定義書` → `[Feature] メンバー管理機能`
-- `# Authentication System Requirements` → `[Feature] Authentication System`
 
-## Extraction Rules
+- `# Member Management Requirements Document` becomes `[Feature] Member Management`.
+- `# メンバー管理機能 要件定義書` becomes `[Feature] メンバー管理機能`.
 
-### Title Extraction
+## Source Mapping
 
-Get the first line starting with `# ` in requirement.md and strip these patterns:
-- `要件定義書`, `要件定義`, `仕様書`
-- `Requirements`, `Requirements Document`, `Specification`, `Spec`
+Use the source documents as follows:
 
-### Overview Extraction
+- `requirement.md`: problem, outcome, current and expected behavior, scope, and acceptance criteria.
+- `design.md`: binding decisions, constraints, compatibility boundaries, and unresolved design choices.
+- `tasks.md`: supporting implementation detail and additional completion evidence; do not copy its phase structure or task headings by default.
 
-From requirement.md, get content between `## Overview` or `## 概要` and the next `## `.
-Exclude the heading line itself.
+If the specification lacks a concrete acceptance criterion, report the omission before creating the Issue.
+Do not replace it with generic statements such as "tests pass" or "code review is complete," because those do not prove the feature outcome.
 
-### Key Features Extraction
+## GitHub Issue Creation
 
-Collect lines from requirement.md matching these patterns:
-- `### 1.`, `### 2.` ... (numbered sections) → convert section name to bullet item
-- `### Feature Name` style sections → convert to bullet item
+Create the Issue with the repository's supported GitHub client using the selected title, body, labels, and assignee.
+Avoid shell interpolation of untrusted body content; pass the body through a file or an equivalent literal-input mechanism when available.
 
-Example: `### 1. Member List Screen` → `- Member List Screen`
+## Project Assignment
 
-### Phase & Task Extraction
+If `--project` is specified, add the created Issue URL to that project using the repository owner resolved from the current repository.
 
-Parse tasks.md for this structure:
+## Specification Link Branch
 
-```
-## Phase 1: Foundation (1-2 days)    ← Phase heading
-### 1.1 Create Type Definitions      ← Task heading (becomes checklist item)
-- [ ] Subtask 1                      ← Ignored (too granular)
-```
+Resolve `{BRANCH}` in this order:
 
-Extraction method:
-- Lines starting with `## Phase` or `## フェーズ` → phase headings
-- `### ` lines within a phase → checklist items `- [ ] {task name}`
-- `- [ ]` subtasks are NOT included (prevents issue body bloat)
-
-### Tech Stack Extraction
-
-Search requirement.md for these sections (in priority order):
-1. `## Technology Stack`
-2. `## Technical Requirements`
-3. `## 技術要件`
-4. `## 技術スタック`
-
-Use bullet items from the section as-is.
-
-### Done Criteria Extraction
-
-Search tasks.md for `## Definition of Done` or `## 完了の定義` section.
-If not found, use defaults:
-
-```markdown
-- [ ] All required features are implemented
-- [ ] Tests are passing
-- [ ] Code review is complete
-```
-
-### Notes Extraction
-
-Search tasks.md for `## Notes` or `## 注意事項` section.
-Omit this section entirely if not found.
-
-## gh issue create Command
-
-```bash
-gh issue create \
-  --title "[Feature] {FEATURE_NAME}" \
-  --body "$(cat <<'EOF'
-{Composed issue body}
-EOF
-)" \
-  ${LABELS:+--label "$LABELS"} \
-  ${ASSIGNEE:+--assignee "$ASSIGNEE"}
-```
-
-With labels: `--label "feature,spec-generated"`
-With assignee: `--assignee "username"`
-
-## Adding to Project
-
-After issue creation, if `--project` is specified:
-
-```bash
-gh project item-add {PROJECT_NUMBER} --owner {ORG} --url {ISSUE_URL}
-```
-
-`{ORG}` is obtained via `gh repo view --json owner -q '.owner.login'`.
-
-## Spec Link Branch
-
-Links to spec files use this format:
-```
-../blob/{BRANCH}/.specs/{FEATURE_DIR}/requirement.md
-```
-
-`{BRANCH}` resolution order:
 1. `--branch` argument
 2. `.specs/.config.yml` `default-branch`
-3. CLAUDE.md Git workflow settings
-4. Default: `main`
+3. Repository workflow instructions
+4. `main`

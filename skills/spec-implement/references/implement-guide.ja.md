@@ -73,12 +73,14 @@ spec-implement は、プロジェクト固有の設定ファイルを読み込�
    └── CLAUDE.md 条件付きルールの通過を確認
 
 8. PR作成
-   ├── ワークフローのPRテンプレートに従う
+   ├── PR本文をレビュー判断の索引として組み立て、プロジェクトのPRテンプレートに従う
+   ├── 正しさ、危険箇所、作業範囲、確認結果、マージ可否を変える情報だけを選ぶ
+   ├── 詳細な運転記録を一括転記せずローカルに残す
    ├── --base {base_branch}（ワークフローから動的決定）
    ├── Issueにリンク（Closes #{N}）
    ├── 先送りした指摘（fix_before: trial / required_check / follow_up）の
-   │   後続 issue を起票して PR 本文にリンク。失敗時は指摘全文を本文に残して
-   │   警告を添える
+   │   後続Issueを起票し、PR本文にはリンク、影響、今回着地できる理由だけを残す。
+   │   起票に失敗した場合は指摘全文と警告を本文に残す
    └── CI監視（ワークフローに記述がある場合）
 ```
 
@@ -615,8 +617,10 @@ AI 列の値 → 起動コマンドのマッピング:
      `fix_before: implementation` だけ。
 4. **修正ループ**（最大3回）:
    - `fix_before: implementation` の指摘を修正 → 変更箇所のみ再レビュー
-   - 先送りの指摘（`trial` / `required_check` / `follow_up`）と軽微は記録して
-     PR 本文へ持ち越す。このループでは修正しない
+   - 先送りの指摘（`trial` / `required_check` / `follow_up`）と軽微は記録し、
+     このループでは修正しない。先送りした指摘は後続Issueへ移し、PR本文には
+     判断を変える要約だけを残す。軽微な指摘はレビュー判断またはマージ判断を
+     変える場合だけ本文へ含める
    - 3回目で未解消の `implementation` 指摘 → ユーザーに判断を委ねる
 5. **セカンドオピニオン**（cmux dispatch + second-opinion 有効時）:
    - セルフレビューループ通過後
@@ -930,7 +934,9 @@ option 省略時は `--review-fallback block` とします。runtime が新規 r
 artifact/task id・round・レビュー時点の `host_runtime`・preferred/actual role・backend・
 reason・independence を持ちます。state を書くのは spec-orchestrate だけであり、返却 record
 を `state.review_fallbacks` へ追記します。単体の spec-implement は pipeline state を
-書かず、completion summary に列挙します。PR には cross-AI 保証の縮退を明記します。
+書かず、completion summary に列挙します。レビュー保証が下がる場合だけPRへ記載し、
+preferred role、actual role、理由、マージ判断への影響を要約します。構造化レコードを
+そのまま転記しません。
 
 ### 修正ループのルーティング
 
@@ -961,8 +967,9 @@ reason・independence を持ちます。state を書くのは spec-orchestrate �
 
 fallback を黙って選びません。spec-implement は worker role の変更と独立 review
 fallback を呼び出し元へ返します。唯一の state writer である spec-orchestrate が
-`state.role_overrides` / `state.review_fallbacks` へ記録して PR 本文へ記載します。
-単体実行では pipeline state を書かず、completion summary に表示します。
+`state.role_overrides` / `state.review_fallbacks` へ記録し、判断を変える要約だけをPR本文へ
+載せます。単体実行では pipeline state を書かず、completion summary に表示し、PR作成時は
+同じ情報選別規則を適用します。
 
 agent-delegate の内部実装を取り込んではいけません。依存するのは契約に定義されたフラグと
 `report.json` スキーマのみです。
