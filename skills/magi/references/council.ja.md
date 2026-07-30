@@ -152,6 +152,33 @@ JSON オブジェクト1つだけを返す。前後に文章を付けず、コ�
 {"findings": [{"claim": "<1文>", "evidence": "<何がそれを支えるか、どれだけ新しい情報か>", "source": "<URL / 文書名 / コマンド出力 / 「<時点>までの学習データ」>"}]}
 ```
 
+### ディープリサーチ用の差し替え
+
+ユーザーがディープリサーチを選んだときは、「主題」と「調査範囲」を残し、
+「やること」と「回答形式」を次の内容へ差し替える。
+
+```text
+## やること
+
+1. Web 検索を最低5回実行する。同じ言い換えを繰り返さず、主題の異なる側面を
+   確認するクエリを使う。
+2. 問いの前提、または調査で有力になった説明に反する証拠を探す検索を最低1回
+   実行する。
+3. 発見は1件ずつ報告する。HTTP または HTTPS の出典 URL がある発見だけを含め、
+   URL を示せない発見は除外する。
+4. 主張を1文で書き、出典が何を裏付けるかと、その情報がどれだけ新しいかを書く。
+5. 実行した検索クエリをすべて監査用に返す。
+
+提供元が用意する Deep Research 製品は呼び出さない。この賢者環境で利用できる
+ツールを使って検索を実行する。
+
+## 回答形式
+
+JSON オブジェクト1つだけを返す。前後に文章を付けず、コードフェンスも付けない。
+
+{"findings": [{"claim": "<1文>", "evidence": "<出典が何を支えるか、どれだけ新しい情報か>", "source": "<http:// または https:// の URL>"}], "search_queries": ["<検索1>", "<検索2>", "<検索3>", "<検索4>", "<検索5以降>"]}
+```
+
 ## 4. research / 審議 — 単独発見の評価
 
 **賢者ごとに1通**作り、`deliberation1/prompt-<賢者名>.md` へ書く。そこに載せる
@@ -268,6 +295,36 @@ research / round1:
     }
   },
   "required": ["findings"],
+  "additionalProperties": false
+}
+```
+
+ディープリサーチ / round1:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim": { "type": "string" },
+          "evidence": { "type": "string" },
+          "source": { "type": "string", "pattern": "^https?://" }
+        },
+        "required": ["claim", "evidence", "source"],
+        "additionalProperties": false
+      }
+    },
+    "search_queries": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["findings", "search_queries"],
   "additionalProperties": false
 }
 ```
@@ -410,6 +467,8 @@ research / 審議:
 
 - 棄却した発見も表に残す。1体が信じ、他の2体が否定した主張は、単一モデルの
   回答なら見えないままだった情報である。
+- ディープリサーチでは URL のない発見を未検証として棄却欄に載せる。監査記録には
+  残すが、審議へ回さず、採択もしない。
 - 主張は一致していても細部（日付・バージョン・数値）が食い違うときは、主張を
   採択したうえで食い違いを根拠欄に書く。どちらか一方を黙って選ばない。
 - 発見が0件の賢者も行を残し、理由を備考に書く。
