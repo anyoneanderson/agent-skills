@@ -1566,6 +1566,135 @@ check_runtime_record_and_skills_repo_mutations() {
   rm -rf "$dir"
 }
 
+# Extract the fenced block intake tells the agent to write verbatim into .specs/.gitignore.
+# The document-text checks above verify the block mentions the required formats; this extraction
+# lets the checks below verify what git actually does with the block.
+extract_intake_gitignore_block() {
+  local file="$1"
+  awk '
+    /^```/ {
+      if (in_fence) {
+        if (candidate && marker && $0 ~ /^```[[:space:]]*$/) {printf "%s", buffer; emitted=1; exit}
+        in_fence=candidate=marker=0; buffer=""
+      } else {
+        in_fence=1
+        candidate=($0 ~ /^```(gitignore)?[[:space:]]*$/)
+        marker=0; buffer=""
+      }
+      next
+    }
+    in_fence && candidate {
+      if ($0 ~ /^# spec-orchestrate run records/) marker=1
+      buffer = buffer $0 "\n"
+    }
+    END {exit !emitted}
+  ' "$file"
+}
+
+# Spec artifacts whose commit status pipeline-config.md leaves to the project.
+# The run-record .gitignore must never hide them.
+gitignore_projection_spec_artifacts() {
+  printf '%s\n' \
+    '.specs/sample-feature/requirement.md' \
+    '.specs/sample-feature/design.md' \
+    '.specs/sample-feature/tasks.md' \
+    '.specs/sample-feature/test.md'
+}
+
+# One representative filename per pattern the block lists. Every one must stay ignored.
+gitignore_projection_run_records() {
+  printf '%s\n' \
+    '.specs/pipeline-metrics.jsonl' \
+    '.specs/.orchestrate-active.json' \
+    '.specs/sample-feature/pipeline-state.json' \
+    '.specs/sample-feature/inspection-report.md' \
+    '.specs/sample-feature/.inspection_result.json' \
+    '.specs/sample-feature/review-1.md' \
+    '.specs/sample-feature/evaluate-1.md' \
+    '.specs/sample-feature/evidence/screenshot.png' \
+    '.specs/sample-feature/retrospective.md' \
+    '.specs/sample-feature/plan-report.json' \
+    '.specs/sample-feature/plan-heartbeat.json' \
+    '.specs/sample-feature/plan-owner.json' \
+    '.specs/sample-feature/plan-owner.lock/held' \
+    '.specs/sample-feature/plan-report.candidate.1.json' \
+    '.specs/sample-feature/plan-last.txt' \
+    '.specs/sample-feature/plan-last.1.txt' \
+    '.specs/sample-feature/plan-stdout.json' \
+    '.specs/sample-feature/plan-stdout.jsonl' \
+    '.specs/sample-feature/plan-stdout.1.json' \
+    '.specs/sample-feature/plan-stdout.1.jsonl' \
+    '.specs/sample-feature/plan-stderr.log' \
+    '.specs/sample-feature/plan.pid'
+}
+
+# Project the given block into a throwaway repository as .specs/.gitignore and let git itself
+# decide: spec artifacts must show up in git status, run records must not.
+# Global and system gitignore files are disabled so the verdict does not depend on the machine.
+check_gitignore_projection() {
+  local block="$1" dir status relative
+  dir="$(new_work_dir)"
+  if ! GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+      git -C "$dir" init --quiet >/dev/null 2>&1; then
+    rm -rf "$dir"
+    return 1
+  fi
+  mkdir -p "$dir/.specs/sample-feature"
+  printf '%s\n' "$block" > "$dir/.specs/.gitignore"
+  while IFS= read -r relative; do
+    mkdir -p "$dir/$(dirname "$relative")"
+    printf 'fixture\n' > "$dir/$relative"
+  done < <(gitignore_projection_spec_artifacts; gitignore_projection_run_records)
+
+  status="$(GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    git -C "$dir" status --porcelain --untracked-files=all)" || {
+    rm -rf "$dir"
+    return 1
+  }
+
+  while IFS= read -r relative; do
+    if ! printf '%s\n' "$status" | grep -Fxq "?? $relative"; then
+      rm -rf "$dir"
+      return 1
+    fi
+  done < <(gitignore_projection_spec_artifacts)
+
+  while IFS= read -r relative; do
+    if printf '%s\n' "$status" | grep -Fq "$relative"; then
+      rm -rf "$dir"
+      return 1
+    fi
+  done < <(gitignore_projection_run_records)
+
+  rm -rf "$dir"
+}
+
+check_gitignore_projection_mutations() {
+  local block block_ja mutated
+  block="$(extract_intake_gitignore_block \
+    "$REPO_ROOT/skills/spec-orchestrate/references/phases/intake.md")" || return 1
+  block_ja="$(extract_intake_gitignore_block \
+    "$REPO_ROOT/skills/spec-orchestrate/references/phases/intake.ja.md")" || return 1
+  # Both languages must dictate the same file; editing one alone changes what a project ignores
+  # depending on which document the agent read.
+  [ "$block" = "$block_ja" ] || return 1
+  check_gitignore_projection "$block" || return 1
+
+  # Over-matching 1: widening a run-record pattern also hides the spec artifacts.
+  mutated="$(printf '%s\n' "$block" | awk '{print ($0=="*/review-*.md") ? "*/*.md" : $0}')"
+  [ "$mutated" != "$block" ] || return 1
+  if check_gitignore_projection "$mutated"; then return 1; fi
+
+  # Over-matching 2: adding a pattern that reaches a spec artifact hides test.md.
+  mutated="$(printf '%s\n%s\n' "$block" '*/test*.md')"
+  if check_gitignore_projection "$mutated"; then return 1; fi
+
+  # Under-matching: dropping a run-record pattern lets that record reach git status.
+  mutated="$(printf '%s\n' "$block" | grep -vFx '*/*-stdout.json')"
+  [ "$mutated" != "$block" ] || return 1
+  if check_gitignore_projection "$mutated"; then return 1; fi
+}
+
 check_document_contracts() {
   local fixture="$1" test_id="$2"
   check_contract_fixture "$fixture" &&
@@ -1615,6 +1744,8 @@ case_bilingual_contract_and_runtime_records() {
     die 'bilingual document contract fixture or section contract rejected'
   check_runtime_record_and_skills_repo_mutations ||
     die 'runtime record or skills_repo scoped positive and negative checks failed'
+  check_gitignore_projection_mutations ||
+    die 'gitignore projection hid a spec artifact or exposed a run record'
 }
 
 check_compatibility_fixture() {
