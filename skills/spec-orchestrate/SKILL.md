@@ -207,6 +207,24 @@ Role keys resolve to an AI role first and an execution backend second through
 the spec author, implementer, reviewer, and E2E runner. If `pipeline.yml` is
 absent, the default roles apply and the app recipe is empty.
 
+## PR Body Contract
+
+The PR body is a review index for a repository-aware reviewer, not a copy of
+the pipeline's audit trail. Before composing it, read the project's pull
+request template and body rules; their headings and required fields take
+priority over orchestrator defaults.
+
+Select behavior changes, design rationale, impact, known constraints,
+verification outcomes, and review focus. Keep review round counts, every
+finding, acceptance tables, evidence manifests, and full arbitration history
+in local run records unless one item changes the review or merge decision.
+Move deferred findings to follow-up Issues and leave a concise impact summary
+and link in the PR. A merge-blocking unresolved item remains in a draft PR.
+
+The complete bilingual selection and draft/ready contract is in
+`references/pr-assembly.md` and `references/pr-assembly.ja.md`; the pr phase
+must use the reference matching `state.language`.
+
 ## Intake Summary
 
 The entry phase turns a request into a working spec directory and an initial

@@ -330,9 +330,10 @@ These are **not committed by default**. The reasons:
 - Binary evidence (screenshots) cannot be reviewed in a diff.
 - Evidence captured from a running system can carry personally identifiable
   information or confidential data into permanent git history.
-- Review-round files are redundant with the PR body, which already carries a
-  machine-generated review-history summary and an acceptance pass/fail table
-  with an evidence manifest.
+- Review-round files support resume, retrospective analysis, and follow-up
+  issue creation. The PR body selects only records that change a review or
+  merge decision, so the detailed files remain local instead of becoming PR
+  prose or git history.
 
 Resume does not require committing run records: interruption recovery runs off
 the local `pipeline-state.json` (see Resume Behavior), so the run records only

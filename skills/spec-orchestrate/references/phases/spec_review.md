@@ -165,8 +165,9 @@ and calculate the effective Gate.
   filter and recompute the effective Gate from accepted findings.
 - Only accepted `fix_before: implementation` findings drive the fix loop. Findings at
   `trial` / `required_check` / `follow_up`, and Minor findings, are recorded
-  and carried forward — transcribed to the PR body (see `../pr-assembly.md`),
-  not fixed in this loop.
+  and carried forward, not fixed in this loop. At PR time, durable follow-up
+  issues receive the full deferred findings; `../pr-assembly.md` selects only
+  the links and details that change a review judgment for the PR body.
 
 ## State Update
 
@@ -193,6 +194,6 @@ and calculate the effective Gate.
   then re-review — resuming agent-delegate sessions, sessionless with
   carried-over findings for native review). Deferred findings (`trial` /
   `required_check` / `follow_up`) and Minor findings are not fixed here; they
-  are already recorded and are transcribed to the PR body.
+  remain in run records for follow-up creation and selective PR assembly.
 - Effective Gate PASS (no accepted `implementation` finding) → **approval**
 - stall signal fires → **arbitration** (`../stall-detection.md`)

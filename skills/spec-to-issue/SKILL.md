@@ -52,27 +52,36 @@ Which spec do you want to create an issue from?
 ### 2. File Validation
 
 Required: `requirement.md` must exist. Otherwise, exit with error.
-Recommended: `tasks.md` (if missing, generate a basic checklist)
-Optional: `design.md` (used as supplementary info if present)
+Recommended: `design.md` and `tasks.md`.
+If either is missing, continue only when the remaining documents still define
+concrete scope and acceptance criteria; report the missing source before issue
+creation.
 
 ### 3. Spec Analysis
 
-Extract from each file:
+Treat the spec files as candidate sources, not as sections to copy.
+Extract and select:
 
 **requirement.md:**
 - Title: First `# ` line, strip suffixes like "Requirements", "要件定義書"
-- Overview: `## Overview` or `## 概要` section
-- Key features: Sections starting with `### 1.`, `### 2.`, etc.
-- Tech stack: `## Technology Stack` or `## 技術要件` section
+- The problem and observable completed state
+- Current and expected behavior
+- Included and excluded scope
+- Requirement-level acceptance criteria
+
+**design.md:**
+- Decisions constrained by compatibility, security, external contracts, or
+  another requirement, including the reason
+- Open questions that the implementer cannot safely decide alone
 
 **tasks.md:**
-- Phases: Lines starting with `## Phase` or `## フェーズ`
-- Tasks: `### ` headings within each phase, simplified for checklist
-- Done criteria: `## Definition of Done` or `## 完了の定義` section
-- Notes: `## Notes` or `## 注意事項` section
+- Supporting implementation detail and additional completion evidence
+- Do not copy phase headings, task headings, estimates, or technology lists by
+  default
 
-**design.md (optional):**
-- Architecture overview (as supplementary info)
+Keep a candidate only when removing it would change an implementation decision
+or completion judgment. See the selected language's issue-template reference
+for the complete selection procedure.
 
 ### 4. Resolve Project Settings
 
@@ -94,11 +103,21 @@ project-number: 7
 assignee: username
 ```
 
-### 5. Compose Issue Body
+### 5. Resolve the Project Template and Compose the Issue Body
+
+Inspect the repository's Issue forms, Issue templates, contribution rules, and
+required fields before composing the body. A project template takes priority:
+preserve its headings, order, fields, and checkboxes, and map the selected
+information into it.
 
 See template details in the appropriate reference file (based on Language Rules):
 - English: [references/issue-template.md](references/issue-template.md)
 - Japanese: [references/issue-template.ja.md](references/issue-template.ja.md)
+
+Without a project template, compose an execution contract that identifies the
+problem, completed state, current and expected behavior, included and excluded
+scope, acceptance criteria, binding decisions, and open questions. Link to the
+spec files for task decomposition and supporting detail.
 
 ### 6. Create Issue
 
@@ -108,8 +127,8 @@ See template details in the appropriate reference file (based on Language Rules)
 Creating Issue:
   Title: [Feature] Member Management
   Labels: feature, spec-generated
-  Phases: 3
-  Tasks: 12
+  Outcome: Members can be invited and assigned a repository role
+  Acceptance criteria: 4
 → Running gh issue create...
 Issue #42 created: https://github.com/org/repo/issues/42
 ```
@@ -149,9 +168,10 @@ If yes, run spec-to-issue on the same directory.
 |-----------|----------|
 | `.specs/` does not exist | Error: Spec directory not found |
 | `requirement.md` missing | Error: requirement.md is required |
-| `tasks.md` missing | Warning: Use basic checklist as fallback |
+| `design.md` or `tasks.md` missing | Continue only if concrete scope and acceptance criteria remain; otherwise stop and report the missing source |
 | `gh` CLI not authenticated | Error: Guide user to `gh auth login` |
-| Section not found | Use default value, show warning |
+| Concrete acceptance criteria missing | Stop before issue creation; do not invent generic completion checks |
+| Project template found | Preserve its required headings and fields instead of appending the built-in template |
 
 ## Usage Examples
 

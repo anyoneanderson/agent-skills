@@ -241,7 +241,7 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
    - 曖昧な表現の識別
    - 検査結果を `inspection-report.md` に生成
 
-4. **spec-to-issue** が `.specs/{project}/` を読み取り、チェックリスト・仕様書リンク・完了条件を含むGitHub Issueを作成。
+4. **spec-to-issue** が `.specs/{project}/` を読み取り、解く問題、完了後の状態、挙動、作業範囲、受入条件、設計を拘束する決定、仕様書リンクを持つ実行契約としてGitHub Issueを作成。プロジェクトのIssueテンプレートを優先し、フェーズ別タスクは既定で転記しない。
 
 5. **spec-workflow-init** が `docs/issue-to-pr-workflow.md` にプロジェクト固有の開発ワークフローを生成。
 
@@ -284,6 +284,7 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
     - フェーズ別の担当割りを `.specs/pipeline.yml` で設定（claude ⇄ codex）。host と一致する role は runtime-native subagent、反対側は target 明示の agent-delegate で実行
     - single-AI fallback: preferred cross-AI reviewer が利用不能なら、新規 read-only host-native reviewer subagent を起動して保証の縮退を記録。reviewer の独立性を保証できない場合だけ停止
     - 停滞したレビューループを機械シグナル（findings 指紋）で検知し裁定: 担当を入れ替えるか draft PR で着地
+    - プロジェクトのPRテンプレートに従い、変更後の挙動、判断理由、影響範囲、既知の制約、確認結果、レビュー観点を選んでレビュー索引を作成。詳細なラウンド、受け入れ合否表、Evidence Manifestはローカルの運転記録へ残す
     - 状態は `pipeline-state.json` に保存。中断しても最後の完了フェーズから再開
     - 振り返りでは実行記録を集計して改善提案を生成し、安全なものは自動適用（ブランチ → PR → 自動マージ。公開契約と SKILL.md は常に人間レビュー）
 

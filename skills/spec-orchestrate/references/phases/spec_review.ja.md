@@ -154,8 +154,9 @@ valid terminal report の `meta.run_id` が `expected_run_id` と一致し、`st
   Gate行は形式不正として扱う（同じ1回再実行の規則）。その後に受理照合を適用し、
   受理したfindingだけから有効Gateを再計算する。
 - 修正ループを回すのは受理した`fix_before: implementation`のfindingのみ。`trial` /
-  `required_check` / `follow_up` の finding と Minor は記録して持ち越し、PR 本文へ
-  転記する（`../pr-assembly.ja.md`）。このループでは修正しない。
+  `required_check` / `follow_up` の finding と Minor は記録して持ち越し、このループでは
+  修正しない。PR作成時にfinding全文を後続Issueへ保存し、`../pr-assembly.ja.md`に
+  従ってレビュー判断を変えるリンクと詳細だけをPR本文へ選ぶ。
 
 ## state 更新
 
@@ -180,6 +181,7 @@ valid terminal report の `meta.run_id` が `expected_run_id` と一致し、`st
 - 受理した`fix_before: implementation`のfindingあり・停滞なし → **spec_generate**
   （修正して再レビュー — agent-delegate session は resume、native review は
   findings を持ち越したセッションレス）。先送りの finding（`trial` / `required_check` /
-  `follow_up`）と Minor はここで修正せず、既に記録済みで PR 本文へ転記する。
+  `follow_up`）と Minor はここで修正せず、後続Issue作成とPR本文の情報選別に使う
+  運転記録へ残す。
 - 有効Gate PASS（受理した`implementation`のfindingなし）→ **approval**
 - 停滞シグナル成立 → **arbitration**（`../stall-detection.ja.md`）

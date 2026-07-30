@@ -1,117 +1,110 @@
-# PR Assembly — Evidence-Backed Pull Request
+# PR Assembly as a Review Index
 
-The pr phase opens the pull request. The mechanics of branch, commit, and base
-come from spec-implement; this file specifies the extra body sections the
-orchestrator adds so the PR carries its own proof — the adversarial review
-history and the acceptance evidence — and how a stalled run lands as a draft.
+The pr phase opens the pull request.
+The branch, commit, and base mechanics come from spec-implement; this file defines how the orchestrator turns the implementation, review, and evaluation results into a body that helps a repository-aware reviewer decide whether the change is sound and safe to merge.
 
 日本語版: [pr-assembly.ja.md](pr-assembly.ja.md)
 
-## Base: spec-implement + Workflow Conventions
+## Document Role and Reader
 
-The PR is created by spec-implement's final step. The orchestrator does not
-reinvent branch or PR conventions:
+The PR body is a review index, not an audit log, specification, or implementation diary.
+Its reader knows the repository and primary technologies but has not followed the pipeline run.
+The body must let that reader identify what changed, why the chosen design was used, what can be affected, what remains constrained or unknown, what was verified, and where review attention should go.
 
-- If `issue-to-pr-workflow.md` exists, its branch naming and PR conventions win.
-  spec-implement already reads it as its playbook.
-- If `coding-rules.md` exists, it is handed to spec-implement (which passes it to
-  spec-code); the orchestrator does not apply coding rules itself.
-- The orchestrator's only additions are the body sections below, appended to the
-  workflow's PR template.
+Run records remain the detailed source for pipeline resume, retrospective analysis, and follow-up issue creation.
+Do not copy them wholesale into the PR body.
 
-## Body Sections (generated from state, not memory)
+## Project Template Takes Priority
 
-All three sections are produced mechanically from `pipeline-state.json` and the
-result files — never from the orchestrator's recollection.
+Before composing the body, inspect the repository for a pull request template and PR-body rules.
+Use the project's headings, ordering, required checkboxes, and required fields when they exist.
+Map the selected information below into that structure instead of appending a second orchestrator-specific template.
 
-### `## Adversarial Review History`
+If no project template exists, use headings that express the same roles: summary, background or rationale, changes, verification, known constraints, and review focus.
+For a large change, put a three-line orientation near the top and state the recommended reading order.
 
-From `state.rounds` (`spec_review` and the per-task implementation reviews):
+## Selection Procedure
 
-- Per loop: the number of rounds and the final gate (PASS / FAIL-then-landed).
-- Deferred findings, listed with their stage: every finding carried forward
-  with `fix_before: trial` / `required_check` / `follow_up`, plus unresolved
-  **Minor** findings. The gate does not stop on these, so the PR body is the
-  place they surface — deferred, never silently dropped. Turn `trial` /
-  `required_check` / `follow_up` findings into follow-up issues at PR time and
-  link them here.
-- Acceptance decisions from each `review-spec-{round}.md`: list every
-  `rejected: out_of_scope` finding with the matched Scope Baseline quotation.
-  This lets reviewers audit dismissed findings without opening local run files.
-- If a role swap or arbitration occurred, one line per `state.arbitrations` entry
-  (signal + decision), so a reader sees why the run swapped owners or landed a
-  draft.
-- If `state.review_fallbacks` is non-empty, one line per entry naming the
-  artifact and round, preferred and actual AI roles, and `fresh_subagent`
-  independence. Label it **Reduced cross-AI assurance**; a same-AI independent
-  review must never be presented as cross-AI review.
+Build candidate facts from the diff, final specifications, `pipeline-state.json`, review results, evaluation results, and follow-up issues.
+Keep a fact only when removing it would change a reviewer's judgment about correctness, risk, scope, verification, or merge readiness.
 
-```markdown
-## Adversarial Review History
-- Spec review: 3 rounds, final Gate PASS
-- Implementation review (T003): 2 rounds, final Gate PASS
-- Deferred findings:
-  - [ ] **Critical / fix_before: required_check** design.md §5.1 — stale success can be re-issued; fix before the check becomes required (#124)
-  - [ ] **Improvement / fix_before: follow_up** `CR-STYLE-004` design.md §4.2 — naming nit (#125)
-  - Minor: `CR-STYLE-002` design.md §3.1 — wording nit, deferred
-- Rejected as out of scope: missing PDF export matched `PDF export is not included` (requirement.md line 84)
-- Arbitration: S1 at spec_review round 4 → reviewer swapped codex→claude
-- Reduced cross-AI assurance: T001 round 1 preferred claude → actual codex runtime-native (`fresh_subagent`; peer unavailable)
-```
+The selected body normally includes:
 
-### `## Acceptance Evidence`
+- the behavior after the change and the affected components or users;
+- the reason for the chosen design when a reviewer needs it to judge the implementation;
+- a scope expansion or shared-infrastructure change that is easy to miss in the diff;
+- known constraints, residual risks, and unverified behavior that affect merge or follow-up decisions;
+- verification outcomes stated as behavior that was confirmed, including a meaningful reason for any required check that does not apply;
+- a small set of review findings whose fixes explain important safeguards or design choices; and
+- the files, invariants, or interactions a reviewer should inspect first.
 
-From the final `evaluate-{n}.md`, including its Evidence Manifest:
+Do not include a detail merely because the pipeline recorded it.
+In particular, keep review round counts, every finding, the full acceptance pass/fail table, the Evidence Manifest, raw evidence paths or hashes, and the complete arbitration history in local run records.
+Link to committed specifications, relevant issues, or CI results when a reviewer needs the underlying detail.
 
-- The requirement-ID pass/fail table (case, requirement, verify, verdict).
-- An evidence manifest — filename, byte size, and sha256 — for each evidence
-  file, copied from the result file's manifest.
-- The evidence files themselves are run records and are **not committed or
-  attached** (see `pipeline-config.md` → Artifact Classification). The PR carries
-  the manifest, not the binaries: the hashes let a reviewer confirm the evidence
-  was not swapped after the run, without screenshots or logs entering git
-  history. Do not embed screenshots or raw review files in the PR body — the
-  review rounds are already summarized under Adversarial Review History above.
+## Deferred Findings
 
-```markdown
-## Acceptance Evidence
-| Case | Requirement | Verify | Verdict |
-|------|-------------|--------|---------|
-| T-A01 | REQ-001 | playwright | PASS |
-| T-A02 | NFR-001 | command | PASS |
+Create follow-up issues for findings carried with `fix_before: trial`, `required_check`, or `follow_up`.
+Store the full finding, severity, milestone, target, and originating review round in the follow-up issue.
+In the PR body, retain only the issue link, the effect on the changed behavior, and why the finding does not prevent the current PR from landing.
 
-### Evidence Manifest
-| File | Bytes | sha256 |
-|------|-------|--------|
-| evidence/2/T-A01-login.png | 51384 | a1b2c3d4… |
-| evidence/2/T-A02-latency.log | 892 | d4e5f6a7… |
-```
+Do not list Minor findings unless one changes a review decision or explains a visible limitation.
+Do not silently drop a deferred finding.
+If issue creation fails, keep the full finding and an issue-creation warning in the PR body until it has a durable destination.
 
-### `## Unresolved` (draft landing only)
+## Review and Evaluation Records
 
-Present only when the run landed via arbitration (a stall that could not be
-resolved). Lists the still-open **fix-loop findings** (spec review:
-`fix_before: implementation`; evaluate: failing cases) so the human who picks
-up the draft knows exactly what remains.
+Summarize a review result only when it helps the reviewer understand a safeguard, a non-obvious correction, or reduced assurance.
+For example, disclose a `native-independent` fallback because it changes the strength of the review claim, but do not list every successful review round.
+
+State verification as outcomes rather than a copied case table.
+For example, say that the service rejected out-of-scope identifiers before making a network request and name the command or CI check that confirmed it.
+Do not copy every passing case or the Evidence Manifest into the body.
+
+An `out_of_scope` rejection belongs in the body only when the diff may otherwise look incomplete.
+State the apparent omission, the adopted scope boundary, and a link to its specification or issue; keep the full adjudication in the run record.
+
+## Draft and Ready Pull Requests
+
+A ready PR must have a passing evaluate gate and no unresolved item that prevents merge.
+Open a draft PR when acceptance is failing or blocked, when a stall lands through arbitration, or when an untracked deferred finding has no durable destination.
+
+The draft body must state each merge-blocking unresolved item with its effect and next action.
+It does not need the complete review history that led to the blocker.
+
+## Example Without a Project Template
 
 ```markdown
-## Unresolved
-- [ ] **Critical** T-A05 [REQ-007] export fails for empty datasets — 2 rounds, not converged
-- [ ] **Improvement** design.md §4.4 — retry policy still unspecified
+Closes #42
+
+- The API now validates the request before creating a queued job.
+- The worker performs the long-running operation asynchronously.
+- The change affects the API and worker; the web application is unchanged.
+
+## Rationale
+
+The first production-like run exceeded the request deadline, so the API now returns an identifier and the worker completes the operation.
+
+## Changes
+
+1. The API validates input and creates the queued job.
+2. The worker processes the job and saves the validated result.
+3. Shared error forwarding was corrected because the production-like run exposed swallowed failures.
+
+## Verification
+
+- [x] Confirmed that invalid input creates neither a job nor a saved result.
+- [x] Confirmed that a successful worker run saves one validated result.
+
+## Known Constraints
+
+- The deployed service still lacks the credential required to enable this route (#57).
+
+## Review Focus
+
+Review the request boundary first, then the worker's save-before-validation guard, and finally the shared error-forwarding change.
 ```
 
-## Draft vs Ready
+## State Update
 
-| Outcome | PR state | Contains |
-|---------|----------|----------|
-| evaluate Gate PASS (all cases pass) | ready | Review History + Acceptance Evidence |
-| arbitration draft landing (stall) | **draft** | the above + `## Unresolved` (open fix-loop findings) |
-
-Never open a ready (non-draft) PR while acceptance cases are failing or blocked —
-a ready PR asserts the evaluate gate passed. A stalled run always lands as a
-draft so an unattended pipeline never marks unverified work ready for merge.
-
-## State Update (pr phase)
-
-After the PR is opened, record the PR URL and its draft flag in
-`pipeline-state.json`, then advance to retrospective (see `phases/pr.md`).
+After opening or updating the PR, record its URL, actual draft flag, and follow-up issue numbers in `pipeline-state.json`, then advance to retrospective as specified in `phases/pr.md`.

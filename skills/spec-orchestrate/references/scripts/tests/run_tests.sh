@@ -442,3 +442,4 @@ fi
 printf 'PASS\tcontract\thost-aware dispatch and independent review fallback\n'
 
 bash "$TEST_DIR/check-retrospective-resume-contract.sh"
+bash "$TEST_DIR/check-information-selection-contract.sh"

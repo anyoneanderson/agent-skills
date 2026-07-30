@@ -209,7 +209,8 @@ preferred cross-AI reviewer が利用不能な場合、`native-independent` は�
    結果を無効とし、通常の workspace drift 手順へ blocked で回す。
 4. 再レビューでもセッションレスの新規 reviewer を毎回起動する。
 5. レビュー時点の host runtime を含む record を `state.review_fallbacks` に追記し、
-   cross-AI 保証が縮退したことを PR 本文へ明記する。実装レビューでは spec-implement が
+   レビュー保証の主張が変わるため、cross-AI 保証が縮退したことを PR 本文へ明記する。
+   実装レビューでは spec-implement が
    構造化 record を返し、オーケストレーターが追記する。worker は pipeline state を
    書かない。
 
@@ -221,7 +222,7 @@ runtime がこれらを保証できなければ reviewer は利用不能とし�
 
 すべてのフォールバックで AI role と backend の分離を保つ。review 以外の role 変更は
 `state.role_overrides`、独立 review fallback は `state.review_fallbacks` に記録し、
-どちらも PR 本文へ記載する。
+レビュー保証、挙動、マージ可否を変えるものだけをPR本文へ記載する。
 
 - **runtime-native subagent が利用不能:** manual は worker role を反対の AI へ
   振り替えるか停止するかを人に確認する。auto は反対側の peer CLI が利用できる場合

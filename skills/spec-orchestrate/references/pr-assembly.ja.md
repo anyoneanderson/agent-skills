@@ -1,112 +1,110 @@
-# PR 組み立て — 証跡付き pull request
+# レビュー索引としてのPR組み立て
 
-pr フェーズは pull request を作成する。ブランチ・コミット・ベースの仕組みは
-spec-implement から来る。このファイルは、オーケストレーターが追加する本文セクション
-（敵対的レビュー履歴と受け入れ証跡）で PR に自らの証明を持たせる方法と、停滞した実行
-が draft で着地する扱いを規定する。
+prフェーズはpull requestを作成する。
+ブランチ、コミット、ベースの処理はspec-implementに従い、本書では実装、レビュー、受け入れ評価の結果から、リポジトリと主要技術を知るレビュワーが変更の妥当性と安全性を判断できる本文を組み立てる方法を定める。
 
 English version: [pr-assembly.md](pr-assembly.md)
 
-## ベース: spec-implement + ワークフロー規約
+## 文書の役割と読み手
 
-PR は spec-implement の最終ステップが作成する。オーケストレーターはブランチや PR
-規約を作り直さない:
+PR本文はレビュー判断の索引であり、監査記録、仕様書、実装日誌ではない。
+読み手はリポジトリと主要技術を知っているが、パイプラインの実行過程には参加していないレビュワーとする。
+変更後の挙動、採用した設計の理由、影響範囲、既知の制約と未確認事項、確認結果、重点的に読む箇所を本文から判断できるようにする。
 
-- `issue-to-pr-workflow.md` があれば、そのブランチ命名・PR 規約が優先。
-  spec-implement が既にこれを playbook として読む。
-- `coding-rules.md` があれば spec-implement に引き継ぐ（spec-implement が spec-code
-  に渡す）。オーケストレーター自身はコーディングルールを適用しない。
-- オーケストレーターの追加は、下記の本文セクションをワークフローの PR テンプレートに
-  付け足すことだけ。
+運転記録は中断再開、振り返り、後続Issue作成に使う詳細な記録としてローカルに残す。
+運転記録をPR本文へ一括転記しない。
 
-## 本文セクション（記憶ではなく state から生成）
+## プロジェクトテンプレートの優先
 
-3セクションはすべて `pipeline-state.json` と結果ファイルから機械的に生成する。
-オーケストレーターの記憶からは決して作らない。
+本文を作る前に、リポジトリのpull requestテンプレートとPR本文規約を確認する。
+テンプレートがある場合は、その見出し、順序、必須チェック項目、必須フィールドを使う。
+下記で選んだ情報をテンプレートへ配置し、オーケストレーター固有の見出し一式を追加しない。
 
-### `## Adversarial Review History`
+テンプレートがない場合は、要約、背景または修正理由、変更内容、動作確認、既知の制約、レビュー観点という役割を持つ見出しを使う。
+変更が大きい場合は、冒頭3行で変更を示し、読む順も記載する。
 
-`state.rounds`（`spec_review` とタスク別の実装レビュー）から:
+## 情報の選別手順
 
-- ループごと: ラウンド数と最終ゲート（PASS / FAIL のまま着地）。
-- 先送りした findings を段階付きで列挙: `fix_before: trial` / `required_check` /
-  `follow_up` で持ち越したすべての finding と、未解決の **Minor** findings。ゲートは
-  これらで止まらないため、浮上する場所は PR 本文である — 先送りであって、黙って
-  捨てられることはない。`trial` / `required_check` / `follow_up` の finding は PR
-  作成時に後続 issue にしてここへリンクする。
-- 各`review-spec-{round}.md`の受理判断を列挙する。
-  `rejected: out_of_scope`としたfindingごとに、対応するスコープ基準の引用を記載する。
-  PRのレビュアーは、ローカルの運転記録を開かずに棄却理由を確認できる。
-- ロール入れ替えや裁定があれば `state.arbitrations` の各エントリを1行（シグナル +
-  裁定）。読み手が、なぜ担当が入れ替わったか / なぜ draft 着地したかを分かるように。
-- `state.review_fallbacks` が空でなければ、artifact・round・preferred/actual AI role・
-  `fresh_subagent` 独立性を1件1行で記載する。**cross-AI 保証の縮退** と明示し、same-AI
-  の独立レビューを cross-AI review と表現してはいけない。
+差分、最終仕様、`pipeline-state.json`、レビュー結果、受け入れ評価結果、後続Issueから候補情報を集める。
+その情報を削ると、正しさ、危険箇所、作業範囲、確認結果、マージ可否に関するレビュワーの判断が変わる場合だけ本文へ残す。
 
-```markdown
-## Adversarial Review History
-- Spec review: 3 rounds, final Gate PASS
-- Implementation review (T003): 2 rounds, final Gate PASS
-- Deferred findings:
-  - [ ] **Critical / fix_before: required_check** design.md §5.1 — stale success can be re-issued; fix before the check becomes required (#124)
-  - [ ] **Improvement / fix_before: follow_up** `CR-STYLE-004` design.md §4.2 — naming nit (#125)
-  - Minor: `CR-STYLE-002` design.md §3.1 — wording nit, deferred
-- Rejected as out of scope: PDF出力の欠落は`PDF出力は扱わない`と一致（requirement.md 84行）
-- Arbitration: S1 at spec_review round 4 → reviewer swapped codex→claude
-- cross-AI 保証の縮退: T001 round 1 は preferred claude → actual codex runtime-native（`fresh_subagent`、peer 利用不能）
-```
+通常は次の情報を残す。
 
-### `## Acceptance Evidence`
+- 変更後の挙動と、影響を受けるコンポーネントまたは利用者
+- 実装の妥当性を判断するために必要な設計理由
+- 差分だけでは見落としやすい作業範囲の拡大や共通基盤の変更
+- マージ判断や後続作業を変える既知の制約、残余リスク、未確認事項
+- 確認できた挙動と、必須確認が該当しない場合の理由
+- 重要な防御や設計判断を説明する少数のレビュー指摘
+- 最初に読むファイル、不変条件、相互作用
 
-最終 `evaluate-{n}.md`（その Evidence Manifest を含む）から:
+パイプラインが記録したという理由だけで本文へ残さない。
+レビューラウンド数、全finding、受け入れ合否表、Evidence Manifest、証跡のパスやハッシュ、裁定履歴の全文はローカルの運転記録へ残す。
+詳細が必要な場合は、コミット済み仕様書、関連Issue、CI結果へリンクする。
 
-- 要件ID別の合否表（項目・要件・検証方法・判定）。
-- 各証跡ファイルの証跡マニフェスト — ファイル名・バイトサイズ・sha256 — を結果
-  ファイルのマニフェストから転記する。
-- 証跡ファイル自体は運転記録であり、**コミットも添付もしない**（`pipeline-config.ja.md`
-  の「成果物の分類」を参照）。PR はバイナリではなくマニフェストを載せる: ハッシュに
-  より、スクリーンショットやログを git 履歴に入れずに「実行後に証跡が差し替えられて
-  いない」ことをレビュアーが確認できる。スクリーンショットやレビュー生ファイルを PR
-  本文に埋め込まない — レビューラウンドは上の Adversarial Review History に要約済み。
+## 先送りしたfinding
 
-```markdown
-## Acceptance Evidence
-| Case | Requirement | Verify | Verdict |
-|------|-------------|--------|---------|
-| T-A01 | REQ-001 | playwright | PASS |
-| T-A02 | NFR-001 | command | PASS |
+`fix_before: trial`、`required_check`、`follow_up`のfindingは後続Issueを作成する。
+finding全文、severity、期限となる段階、対象、発生したレビューラウンドは後続Issueへ保存する。
+PR本文にはIssueへのリンク、変更後の挙動への影響、今回のPRを着地できる理由だけを残す。
 
-### Evidence Manifest
-| File | Bytes | sha256 |
-|------|-------|--------|
-| evidence/2/T-A01-login.png | 51384 | a1b2c3d4… |
-| evidence/2/T-A02-latency.log | 892 | d4e5f6a7… |
-```
+Minor findingは、レビュー判断を変える場合または目に見える制約を説明する場合に限って記載する。
+先送りしたfindingを黙って消さない。
+Issue作成に失敗した場合は、永続的な保存先を作るまでfinding全文とIssue作成失敗の警告をPR本文へ残す。
 
-### `## Unresolved`（draft 着地時のみ）
+## レビューと受け入れ評価の記録
 
-裁定経由で着地した（解決できなかった停滞）ときだけ付ける。未解決の
-**修正ループ対象の findings**（spec review: `fix_before: implementation`。
-evaluate: 不合格ケース）を列挙し、draft を引き取る人に残作業を正確に伝える。
+レビュー結果は、重要な防御、分かりにくい修正、レビュー保証の縮退を説明する場合だけ要約する。
+たとえば`native-independent` fallbackはレビュー保証の強さを変えるため記載するが、成功した全レビューラウンドは列挙しない。
+
+確認結果は合否表の複製ではなく、確認できた挙動として記載する。
+たとえば「サービスはネットワーク要求の前に対象外の識別子を拒否した」と、その確認に使ったコマンドまたはCIを示す。
+合格した全ケースやEvidence Manifestを本文へ転記しない。
+
+`out_of_scope`とした指摘は、差分が未完成に見える場合だけ本文へ残す。
+不足して見える内容、採用したスコープ境界、仕様書またはIssueへのリンクを記載し、裁定全文は運転記録へ残す。
+
+## draftとready
+
+ready PRは受け入れ評価が合格し、マージを妨げる未解決事項がない場合だけ作成する。
+受け入れ評価が不合格またはblocked、停滞裁定で着地、先送りfindingの永続的な保存先がない場合はdraft PRにする。
+
+draft本文には、マージを妨げる各未解決事項の影響と次の作業を記載する。
+未解決事項へ至ったレビュー履歴の全文は不要である。
+
+## プロジェクトテンプレートがない場合の例
 
 ```markdown
-## Unresolved
-- [ ] **Critical** T-A05 [REQ-007] export fails for empty datasets — 2 rounds, not converged
-- [ ] **Improvement** design.md §4.4 — retry policy still unspecified
+Closes #42
+
+- APIは要求を検証してからqueued jobを作成します。
+- workerは時間のかかる処理を非同期で実行します。
+- APIとworkerが対象で、web applicationは変更しません。
+
+## 修正理由
+
+本番相当の初回実行がリクエスト期限を超えたため、APIは識別子を返し、workerが処理を完了する方式へ変更しました。
+
+## 変更内容
+
+1. APIが入力を検証し、queued jobを作成します。
+2. workerがjobを処理し、検証済みの結果を保存します。
+3. 本番相当の実行でエラーの握りつぶしが見つかったため、共通のエラー転送も修正しました。
+
+## 動作確認
+
+- [x] 不正な入力ではjobも結果も作成されないことを確認しました。
+- [x] workerが正常終了すると検証済みの結果が1件保存されることを確認しました。
+
+## 既知の制約
+
+- デプロイ済みServiceには、この経路を有効にする認証情報がまだありません（#57）。
+
+## レビュワーに確認してほしいこと
+
+要求の境界、workerの保存前検証、共通エラー転送の順に確認してください。
 ```
 
-## draft か ready か
+## state更新
 
-| 結果 | PR 状態 | 内容 |
-|------|--------|------|
-| evaluate Gate PASS（全項目合格） | ready | Review History + Acceptance Evidence |
-| 裁定の draft 着地（停滞） | **draft** | 上記 + `## Unresolved`（未解決の修正ループ対象 findings） |
-
-受け入れ項目が不合格・blocked の間は ready（非 draft）PR を開かない — ready PR は
-evaluate ゲート通過を主張する。停滞した実行は常に draft で着地し、無人パイプラインが
-未検証の作業を merge 可能として ready にしないようにする。
-
-## state 更新（pr フェーズ）
-
-PR 作成後、PR URL と draft フラグを `pipeline-state.json` に記録し、retrospective に
-進む（`phases/pr.md` 参照）。
+PRを作成または更新した後、URL、実際のdraftフラグ、後続Issue番号を`pipeline-state.json`へ記録し、`phases/pr.ja.md`に従ってretrospectiveへ進む。

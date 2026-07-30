@@ -225,7 +225,8 @@ required**. When the preferred cross-AI reviewer is unavailable,
    for the normal workspace-drift procedure;
 4. launch a fresh sessionless reviewer again for every re-review round; and
 5. append a `state.review_fallbacks` entry containing the host runtime at review
-   time and disclose reduced cross-AI assurance in the PR body. For implement
+   time and disclose reduced cross-AI assurance in the PR body because it
+   changes the review claim. For implement
    reviews, spec-implement returns the structured entry and the orchestrator
    appends it; workers never write pipeline state.
 
@@ -237,8 +238,9 @@ implementer context is self-review and is never accepted.
 
 Every fallback must preserve the separation between AI role and backend.
 Non-review role changes are recorded in `state.role_overrides`; independent
-review fallbacks are recorded in `state.review_fallbacks`. Both appear in the PR
-body.
+review fallbacks are recorded in `state.review_fallbacks`. PR assembly includes
+only a role change or fallback that changes review assurance, behavior, or
+merge readiness.
 
 - **Runtime-native subagent unavailable:** manual asks whether to reassign the
   worker role to the opposite AI or stop. Auto reassigns to the opposite AI only
