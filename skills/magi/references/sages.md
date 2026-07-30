@@ -101,8 +101,8 @@ sage (REQ-010).
     {
       "name": "MELCHIOR",
       "cli": "claude",
-      "command": ["claude", "-p", "--output-format", "json"],
-      "isolation_args": ["--allowedTools", "WebSearch", "WebFetch"],
+      "command": ["claude", "-p", "--output-format", "json", "--allowedTools", "WebSearch", "WebFetch"],
+      "isolation_args": ["--safe-mode", "--no-chrome", "--mcp-config", "{\"mcpServers\":{}}", "--strict-mcp-config", "--tools", "WebSearch,WebFetch"],
       "input": "stdin",
       "extract": ".result"
     },
@@ -143,14 +143,15 @@ worth knowing:
 Research mode is only as good as the sages' ability to check the web, and each
 CLI gates tool use differently in headless mode. Default scope preserves the
 operator's configured tools; Confidential scope applies the Web-only restrictions
-below, verified on real runs 2026-07-27:
+below, verified on the dates noted for each adapter:
 
 - **MELCHIOR needs `--allowedTools WebSearch WebFetch`.** Headless `claude -p`
   denies every tool that was not explicitly allowed, so without the allowlist its
   search, fetch and shell calls all come back denied: the sage answers from
   training data or reports that it could not check. With the allowlist the search
-  runs. Keep the flag last in `isolation_args`, because it accepts a list of tool names
-  and would otherwise swallow the flag that follows it.
+  runs. The permission stays in `command`, so Standard research can search while
+  preserving configured tools. Confidential scope separately restricts which
+  tools exist; an allow rule alone is not an isolation boundary.
 - **BALTHASAR needs nothing extra.** Its search executes on the provider's side,
   so `--sandbox read-only` does not block it — the sandbox governs this machine's
   files, not the model's own tools. A search shows up as a `web search:` line in
@@ -169,11 +170,12 @@ Default scope intentionally inherits the operator's tool set. The question can
 therefore reach the three sage providers and providers behind configured MCP or
 extension tools. The host discloses this before dispatch. `--confidential`
 appends `isolation_args`; with the bundled config that limits the three default
-sages to Anthropic, OpenAI and xAI using the restrictions verified 2026-07-27:
+sages to Anthropic, OpenAI and xAI using the restrictions verified on the dates
+recorded below:
 
 | Sage | How MCP and plugin tools are blocked | What remains |
 |---|---|---|
-| MELCHIOR | `--allowedTools WebSearch WebFetch` is an allowlist, so an MCP tool is simply not on it | Nothing observed: an MCP call is denied like any other unlisted tool |
+| MELCHIOR | `--safe-mode` disables customizations and plugins, `--no-chrome` disables the browser integration, and `--strict-mcp-config` loads an explicitly empty MCP roster. `--tools WebSearch,WebFetch` leaves only those built-ins available | WebSearch and WebFetch. Claude Code 2.1.220 reduced the local configured MCP roster to none with these isolation flags on 2026-07-30 |
 | BALTHASAR | The bundled `codex-sage.sh` wrapper (below) | Nothing: the servers leave the tool registry entirely |
 | CASPER | `--tools web_search,web_fetch` limits the built-ins, `--deny 'MCPTool(*)'` refuses MCP calls | The MCP tool schemas are still listed to the model; only calling one is refused, with `Denied by permission policy: deny rule on mcp` |
 

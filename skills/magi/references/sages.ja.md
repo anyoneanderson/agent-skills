@@ -96,8 +96,8 @@ runner は賢者ごとに別のプロセスグループを作る。有効なタ�
     {
       "name": "MELCHIOR",
       "cli": "claude",
-      "command": ["claude", "-p", "--output-format", "json"],
-      "isolation_args": ["--allowedTools", "WebSearch", "WebFetch"],
+      "command": ["claude", "-p", "--output-format", "json", "--allowedTools", "WebSearch", "WebFetch"],
+      "isolation_args": ["--safe-mode", "--no-chrome", "--mcp-config", "{\"mcpServers\":{}}", "--strict-mcp-config", "--tools", "WebSearch,WebFetch"],
       "input": "stdin",
       "extract": ".result"
     },
@@ -136,13 +136,14 @@ runner は賢者ごとに別のプロセスグループを作る。有効なタ�
 
 research モードの品質は、賢者が実際に Web を確認できるかで決まる。既定のツール
 範囲では利用者が設定したツールを保ち、機密モードでは次の Web 専用制限を適用する。
-以下は 2026-07-27 に実際の実行で確認した内容である。
+各アダプターに記載した日付で実際の実行を確認している。
 
 - **MELCHIOR には `--allowedTools WebSearch WebFetch` が必要。** ヘッドレスの
   `claude -p` は明示的に許可されていないツールをすべて拒否する。この許可リストが
   無いと検索・取得・シェルの呼び出しがすべて拒否され、賢者は学習データだけで答え
-  るか、確認できなかったと報告する。許可リストを付けると検索が動く。このフラグは
-  ツール名の一覧を取るため、後続のフラグを飲み込まないよう `isolation_args` の末尾に置く。
+  るか、確認できなかったと報告する。許可リストを付けると検索が動く。この許可は
+  `command` に残すため、標準リサーチでも設定済みツールを保ったまま検索できる。
+  機密モードでは存在するツール自体を別途制限する。許可設定だけでは遮断にならない。
 - **BALTHASAR は追加のフラグ不要。** 検索は提供元のサーバー側で実行されるため、
   `--sandbox read-only` は妨げにならない。サンドボックスが制限するのはこのマシンの
   ファイルであり、モデル側のツールではない。検索が走ると
@@ -160,11 +161,11 @@ JSON 部分を抽出するため（`SKILL.md` の Step 5）これは失敗では
 既定のツール範囲は、利用者が設定したツールを意図的に引き継ぐ。そのため問いは3社
 の賢者提供元に加え、設定済みの MCP や拡張ツールの提供元へ届くことがある。ホストは
 送信前にこれを告知する。`--confidential` は `isolation_args` を追加し、同梱の3体を
-Anthropic、OpenAI、xAI に限定する。以下は 2026-07-27 に実測した制限である。
+Anthropic、OpenAI、xAI に限定する。以下は各欄に記録した日付で実測した制限である。
 
 | 賢者 | MCP・プラグイン系ツールの遮断方法 | 残る部分 |
 |---|---|---|
-| MELCHIOR | `--allowedTools WebSearch WebFetch` は許可リストなので、MCP ツールはそこに載らない | 観測された残余はない。MCP の呼び出しも他の未許可ツールと同様に拒否される |
+| MELCHIOR | `--safe-mode` でカスタマイズとプラグインを止め、`--no-chrome` でブラウザ連携を止め、`--strict-mcp-config` で空の MCP 一覧だけを読む。`--tools WebSearch,WebFetch` で組み込みツールも限定する | WebSearch と WebFetch。2026-07-30 に Claude Code 2.1.220 で、ローカルの設定済み MCP 一覧がこの遮断引数により0件になることを確認した |
 | BALTHASAR | 同梱の `codex-sage.sh` ラッパー（後述） | 残余なし。サーバー自体がツール登録から消える |
 | CASPER | `--tools web_search,web_fetch` で組み込みツールを絞り、`--deny 'MCPTool(*)'` で MCP 呼び出しを拒否する | MCP ツールのスキーマ一覧はモデルに見えたままで、呼び出しだけが `Denied by permission policy: deny rule on mcp` で拒否される |
 

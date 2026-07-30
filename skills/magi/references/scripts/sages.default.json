@@ -4,11 +4,11 @@
     {
       "name": "MELCHIOR",
       "cli": "claude",
-      "command": ["claude", "-p", "--output-format", "json"],
-      "isolation_args": ["--allowedTools", "WebSearch", "WebFetch"],
+      "command": ["claude", "-p", "--output-format", "json", "--allowedTools", "WebSearch", "WebFetch"],
+      "isolation_args": ["--safe-mode", "--no-chrome", "--mcp-config", "{\"mcpServers\":{}}", "--strict-mcp-config", "--tools", "WebSearch,WebFetch"],
       "input": "stdin",
       "extract": ".result",
-      "notes": "Claude Code headless. Prompt is piped via stdin. .result holds the final text. Default scope preserves configured tools. Confidential scope appends a Web-only allowlist; keep that variadic isolation_args field last."
+      "notes": "Claude Code headless. Prompt is piped via stdin. .result holds the final text. WebSearch/WebFetch stay allowed in Default scope. Confidential scope uses safe mode, an explicitly empty strict MCP config, no Chrome integration, and a Web-only built-in tool list so configured MCP, plugin, and provider tools are unavailable."
     },
     {
       "name": "BALTHASAR",

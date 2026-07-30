@@ -109,7 +109,8 @@ expose the question to every local process.
 
 A command may also use {MAGI_SCRIPTS_DIR}, the absolute directory holding this
 script, to run a wrapper shipped next to it — the default codex adapter does that
-to switch off the operator's MCP servers (references/sages.md).
+transparently in Default scope and switches off configured external tools only
+when --confidential is set (references/sages.md).
 
 Sage config resolution, first match wins: $MAGI_SAGES_FILE, ./.magi/sages.json,
 ~/.magi/sages.json, bundled sages.default.json.
