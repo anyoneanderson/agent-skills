@@ -368,9 +368,12 @@ recordへ書く。
 
 legacy ledgerで最初にactive recordを比較する前に、`retrospective-ledger.sh list-metrics`で
 `run_id`ごとの重複したversionなしrowを探す。物理的に最新のrowを残し、古い各duplicateへ
-`legacy_migration` supersede eventを追記する。安定したevent idは
-`supersede:<legacy-id>:legacy_migration`。履歴を書き換えず、1回のmigrationでselectorを
-一意にする。
+`legacy_migration` supersede eventを追記する。event idはhelperの出力から作る
+`supersede:<legacy-id>:legacy_migration`とする。`record_id`または`run_id`がないrowを読むと、
+helperはそれぞれ`legacy:<物理行>`と`legacy-run:<featureまたはunknown>:<物理行>`を補う。
+どちらの合成IDも1始まりの物理行位置に依存するため、JSON Linesの先頭へrowを挿入すると
+値が変わる。`list-metrics`が返した正規化後のIDを取得し、legacy rowより前へrowを挿入せずに
+migration eventを追記する。履歴を書き換えず、1回のmigrationでselectorを一意にする。
 
 resume対象のlegacy完了runでは、対応する最新metrics rowからstateの`run_id`をbackfillする。
 最後のlegacy rowも`legacy_migration`でsupersedeし、現在のstate、report、rowからversion付き
