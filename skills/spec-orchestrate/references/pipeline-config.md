@@ -387,9 +387,15 @@ pr, apply this order without an integrity-check gap:
 Before the first active-record comparison on a legacy ledger, use
 `retrospective-ledger.sh list-metrics` to find duplicate unversioned rows per
 `run_id`. Preserve the physically newest row and append `legacy_migration`
-supersede events for every older duplicate, using stable event ids
-`supersede:<legacy-id>:legacy_migration`. This one-time migration makes selection
-unambiguous without rewriting history.
+supersede events for every older duplicate, using event ids
+`supersede:<legacy-id>:legacy_migration` derived from the helper output. The
+helper normalizes missing `record_id` and `run_id` values as
+`legacy:<physical-row>` and
+`legacy-run:<feature-or-unknown>:<physical-row>`, respectively. The one-based
+physical row number makes both synthetic ids position-dependent, so prepending
+a JSON Lines entry changes them. Capture the normalized ids from `list-metrics`
+and append the migration events without inserting lines before the legacy rows.
+This one-time migration makes selection unambiguous without rewriting history.
 
 For the legacy completed run being resumed, backfill the state's `run_id` from
 its matching newest metrics row. Supersede that final legacy row with

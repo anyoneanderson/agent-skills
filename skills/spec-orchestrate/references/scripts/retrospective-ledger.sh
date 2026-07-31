@@ -8,6 +8,7 @@
 #   retrospective-ledger.sh active-count <metrics.jsonl> <run-id>
 #   retrospective-ledger.sh list-active <metrics.jsonl>
 #   retrospective-ledger.sh list-metrics <metrics.jsonl> [run-id]
+# Synthetic legacy record_id and run_id values depend on physical line position; prepending lines changes them.
 
 set -euo pipefail
 
@@ -40,7 +41,8 @@ normalized_records() {
         | if ((.record_type // "metrics") == "metrics") then
             . + {
               record_type: "metrics",
-              record_id: (.record_id // ("legacy:" + (($index + 1) | tostring)))
+              record_id: (.record_id // ("legacy:" + (($index + 1) | tostring))),
+              run_id: (.run_id // ("legacy-run:" + (.feature // "unknown") + ":" + (($index + 1) | tostring)))
             }
           else . end
       )

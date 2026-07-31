@@ -200,6 +200,33 @@ for file in "$IMPROVE_APPLY" "$IMPROVE_APPLY_JA"; do
 done
 printf 'PASS\tcontract\tretrospective resume bilingual fixture and mutations\n'
 
+runless_legacy_metrics="$tmp/runless-legacy-metrics.jsonl"
+printf '%s\n' \
+  '{"feature":"legacy-alpha","rounds_spec":1}' \
+  '{"feature":"legacy-beta","rounds_spec":2}' \
+  > "$runless_legacy_metrics"
+runless_active="$(bash "$LEDGER" list-active "$runless_legacy_metrics")" ||
+  fail "active selector rejected legacy rows without run ids"
+[ "$(printf '%s\n' "$runless_active" | jq -s 'length')" -eq 2 ] ||
+  fail "active selector did not return both legacy rows without run ids"
+[ "$(printf '%s\n' "$runless_active" | jq -sc '[.[].run_id]')" = \
+    '["legacy-run:legacy-alpha:1","legacy-run:legacy-beta:2"]' ] ||
+  fail "legacy rows without run ids were not assigned the expected unique synthetic values"
+runless_oldest_id="$(printf '%s\n' "$runless_active" | head -1 | jq -r .record_id)"
+runless_oldest_run="$(printf '%s\n' "$runless_active" | head -1 | jq -r .run_id)"
+runless_event="$(jq -nc --arg id "supersede:$runless_oldest_id:legacy_migration" \
+  --arg run "$runless_oldest_run" --arg target "$runless_oldest_id" \
+  '{record_type:"supersede",event_id:$id,run_id:$run,
+    supersedes:$target,reason:"legacy_migration"}')"
+bash "$LEDGER" supersede-once "$runless_legacy_metrics" "$runless_event" >/dev/null ||
+  fail "synthetic legacy run id could not be used for migration"
+[ "$(bash "$LEDGER" active-count "$runless_legacy_metrics" "$runless_oldest_run")" -eq 0 ] ||
+  fail "legacy row remained active after migration by synthetic run id"
+[ "$(bash "$LEDGER" active-count "$runless_legacy_metrics" \
+    "legacy-run:legacy-beta:2")" -eq 1 ] ||
+  fail "unrelated synthetic legacy run did not remain active after migration"
+printf 'PASS\tmigration\tlegacy metrics without run ids normalized and superseded\n'
+
 legacy_metrics="$tmp/legacy-metrics.jsonl"
 printf '%s\n' \
   '{"feature":"legacy","run_id":"legacy-run","rounds_spec":1}' \
