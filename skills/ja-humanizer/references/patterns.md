@@ -24,7 +24,7 @@ Example:
 
 ### Metaphorical verbs and stiff predicates
 
-Detect: verbs that avoid saying what the process actually is. Metaphorical verbs: 「閉じる」「配る」「動く」「切り替わる」「揃う」「効く」「刺さる」「乗る」「噛ませる」「倒す」「空振りする」. 「空振り」 (a swing and a miss) is a Claude habit that Japanese prose does not use; say what actually happened (「意味をなさない」「採用しない」). Stiff predicates: 「実現する」「可能にする」「提供する」「機能する」「担う」「果たす」「寄与する」「担保する」「整備する」「明確化する」. Nominalized verbs (「〜の向上」「〜の実現」「〜の可視化」) count too.
+Detect: verbs that avoid saying what the process actually is. Metaphorical verbs: 「閉じる」「配る」「動く」「切り替わる」「揃う」「効く」「刺さる」「乗る」「噛ませる」「倒す」「空振りする」. 「空振り」 (a swing and a miss) is a Claude habit that Japanese prose does not use; say what actually happened (「意味をなさない」「採用しない」). The same goes for 「壊れる」 applied to meaning, logic or style (「意味が壊れる」「論理が壊れる」): write what happens (「合わなくなる」「通らなくなる」). Stiff predicates: 「実現する」「可能にする」「提供する」「機能する」「担う」「果たす」「寄与する」「担保する」「整備する」「明確化する」. Nominalized verbs (「〜の向上」「〜の実現」「〜の可視化」) count too.
 
 Fix: replace with a verb that says who does what to what. Use operations a program or a person actually performs: stop, permit, send, store, compare, reject.
 

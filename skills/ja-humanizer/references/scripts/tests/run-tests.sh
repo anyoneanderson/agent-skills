@@ -141,6 +141,9 @@ expect_summary zenn-intro-after "$out" PASS "tier1=0"
 printf '%s\n' '英単語の目印は日本語では空振りします。' > "$TMP_ROOT/karaburi.md"
 node "$CHECKER" --mode narrative "$TMP_ROOT/karaburi.md" > "$TMP_ROOT/karaburi.out" 2>&1 || true
 expect_id karaburi "$TMP_ROOT/karaburi.out" abstract-verb
+printf '%s\n' '意味か論理が壊れる箇所だけを直します。' > "$TMP_ROOT/kowareru.md"
+node "$CHECKER" --mode narrative "$TMP_ROOT/kowareru.md" > "$TMP_ROOT/kowareru.out" 2>&1 || true
+expect_id kowareru "$TMP_ROOT/kowareru.out" abstract-verb
 
 # Review findings (PR #168): a lone 「ご検討いただけますと幸いです」 is not a request to choose, and a
 # condition that is a real prerequisite (consent) must not be turned into an unconditional request.

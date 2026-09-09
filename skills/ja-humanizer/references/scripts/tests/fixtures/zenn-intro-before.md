@@ -1,12 +1,3 @@
----
-title: "AI が書いた日本語の癖を等級で直す ja-humanizer を作った話"
-emoji: "✍️"
-type: "tech"
-topics: ["ai", "claudecode", "agentskills", "techwriting", "japanese"]
-published: true
-parent: ja-humanizer-intro
----
-
 AI に日本語の記事や PR 本文を書かせると、内容は合っているのに読んだ相手に「AI が書いた」と分かってしまいます。私は一年ほど、AI の下書きを手で直し続けてきました。その添削記録から、日本語を書く、直す、検査するための Agent Skill を作り、[agent-skills](https://github.com/anyoneanderson/agent-skills) に **ja-humanizer** として公開しました。
 
 この記事では、海外の humanizer を日本語にそのまま使えなかった理由、癖を等級に分けた根拠、検査スクリプトの実際の出力を書きます。
@@ -39,3 +30,66 @@ AI に日本語の記事や PR 本文を書かせると、内容は合ってい�
 日本語版として [gonta223/humanizer-ja](https://github.com/gonta223/humanizer-ja) が20パターンのチェックリストを公開していて、日本語の指紋をよく捉えています。ただ、私の添削記録にある「事実が無い」型の直しは、語のリストでは拾えませんでした。
 
 そこで、作業の流れと等級の考え方は blader/humanizer から借り、パターン表は日本語で作り直しました。文章の規範は k16shikano 氏の [japanese-tech-writing](https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d) を土台に、翻訳調の述語と、英語とカタカナの混ぜ方の規則を加えて内蔵しています。
+
+## 等級はどう決めたのか？
+
+「一つ見つけたときにどう扱うか」で決めました。
+
+| 等級 | 扱い | 例 |
+|---|---|---|
+| 第1級 | 一つ見つけたら直す | 評価語だけで事実の無い文、比喩動詞と硬い述語、演出と脅しの締め、クッション言葉 |
+| 第2級 | 直してよいが、文体見本にあれば残す | ラベルとコロンの箇条書き、常に3つの項目、「することができます」、語尾と文長の均一 |
+| 第3級 | 単独では直さない | 太字、箇条書きそのもの、「〜ですね」、一文が長い |
+
+第1級は検出器の統計からではなく、私の添削記録（業務メール3組と公開記事の書き直し1組）から抽出しました。第2級は先行スキルの分類を参考にし、日本語で空振りする項目を外しています。
+
+第2級を「見本にあれば残す」にしたのは、解説記事ではラベルとコロンの箇条書きを書き手自身が使うからです。文体見本は語彙、語尾、文長、読み手への態度を決め、規範が勝つのは論証の構造や機構の無い原因のように、意味か論理が壊れる箇所だけにしています。
+
+## 足りない事実をスキルが補わないのはなぜか？
+
+補うと捏造になるからです。評価語だけの項目を見つけたら、「何が不要になり、以前はどうで、なぜそうなるのか」を書き手に問い、答えが来てから書き直します。答えが無ければ、その文は削るか事実だけを残します。
+
+書き下ろしでは、この規則だけでは足りませんでした。モデルは自分が知っていると思う事実を問いにしません。A/B の読み比べで、指示に無い「日本のクレジットカードは主に Online PIN」という記述が自信を持って書かれ、書き手の確認で誤りと分かりました（日本は Offline PIN が主流です）。
+
+対策として、下書きの後に、指示にも材料にも文体見本にも無い数値と年月、国や会社ごとの制度と慣行、製品名を伴う機能の有無、出典の無い統計を抜き出し、本文末尾に「要確認」として列挙します。本文からは消さず、残すか消すかの判断は書き手のものです。
+
+## 検査スクリプトは何をどう数えるのか？
+
+正規表現で数えられるものだけを数えます。ラベルとコロンの項目、同じ語尾の連続、第1級の語彙、条件付き依頼の連鎖、現象の言い換えでしかない原因、一般語だけの対策、選択を求めているのに日数が無い依頼です。判断が要るもの（誰も主張していない相手と争う対比など）はスキル本体に残しています。
+
+導入は1行です。
+
+```bash
+npx skills add anyoneanderson/agent-skills --skill ja-humanizer -g -y
+```
+
+同梱の評価用サンプル（冒頭の決済サービスの下書き）に対して、記事モードで実行した結果がこれです。
+
+```text
+$ node references/scripts/ja-humanizer-check.mjs --mode article tap-before.md
+TIER1  thin-claim   tap-before.md:5   item rests on evaluative words with no specifics
+       この項目で、何が不要になり、以前はどうで、なぜそうなるのかを教えてください。
+TIER1  thin-claim   tap-before.md:9   evaluative closer without a fact
+TIER1  thin-claim   tap-before.md:11  item rests on evaluative words with no specifics
+TIER3  label-colon  tap-before.md:2   label-plus-colon item
+JA_HUMANIZER_CHECK_SUMMARY  FAIL  tier1=3  tier2=0  tier3=4
+```
+
+書き手が直した後の版では `tier1=0` になります。4項目中3項目に問いが出て、1項目目は「一台」を具体と見なして通りました。薄い文の判定は「具体（数字、括弧、列挙）が無い」ことで行うので、具体を含まないが薄くない文も指摘に出るのが弱点です。指摘は候補で、判断は書き手に残ります。
+
+`--json` を付けると他のスキルや CI が消費できる形で出力され、第1級があると exit 1 になります。`--warn` を付ければ 0 に変わり、fenced code、インラインコード、表、frontmatter は検査の対象外です。
+
+## 他のスキルからどう呼ぶのか？
+
+文章を生成するスキルの前後に挟みます。私たちの記事生成スキルには、本文を書く前に規範とパターン表と文体見本を読み、書いた後に検査スクリプトを通して第1級が0件になるまで直す工程を入れました。記事の骨格（要点の箱、疑問形の見出し、FAQ）は記事側の規則が勝ち、文の中身は ja-humanizer が勝つ、という優先順位を決めてあります。
+
+この記事の元になった ZenChAIne の記事は、その工程で書いて検査を通しています。
+
+## 参考ソース
+
+- [ja-humanizer SKILL.md](https://github.com/anyoneanderson/agent-skills/tree/main/skills/ja-humanizer)
+- [agent-skills Pull Request #168](https://github.com/anyoneanderson/agent-skills/pull/168)
+- [agent-skills Pull Request #170](https://github.com/anyoneanderson/agent-skills/pull/170)
+- [blader/humanizer](https://github.com/blader/humanizer)
+- [gonta223/humanizer-ja](https://github.com/gonta223/humanizer-ja)
+- [k16shikano/japanese-tech-writing](https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d)
