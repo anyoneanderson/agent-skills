@@ -218,6 +218,105 @@ Recipient: a client.
 
 Expected detections: a request chained on the other party's reply.
 
+## Indexing a PR Body (an AI first draft, corrected under the writer's direction)
+
+Source: a PR body from a work repository. The first draft was about 8,300 characters with 86 bold spans; the final version about 3,200 characters with none. It was corrected to fit the repository's PR template (under 4,000 characters, at most 10 bold spans, no audit records or implementation log). Excerpts from both are shown. Issue numbers and the repository name are masked.
+
+### before (excerpt)
+
+```text
+## 要約
+
+- **何を**: GitHub 上の活動からメンバー1人分の働き方レポートを LLM に書かせ、章単位で保存する機能を追加した。専用の生成プログラムは作らず、レポート作成の手順と規範を builtin の多ファイル skill に置き、既存の agent loop を Run として起動して読ませる。
+- **なぜ**: 親 Issue のフェーズ2。日別アクティビティ表（フェーズ1）に続いて、実データから働き方の実像を文章で描く部分を作る。
+- **影響範囲**: orchestrator と DB が中心。画面は別 Issue の担当。ローカルの dogfooding で見つけた欠陥のため共通ライブラリにも修正が入っている（下記「スコープを広げた3点」）。
+
+## 何が壊れないようにしたか（不変条件）
+
+- **書き込み系ツールが配線されない。** 宣言・テスト・実行時検査の3段で守る。ツール名集合が固定5件と完全一致することをテストで検査し、Run 解決の最後に実行時にも同じ一致を検査して、不一致なら止める。
+- **検証に落ちた生成物は保存されない。** 保存の可否は提出バッファと保存前検証だけが決める。
+
+## スコープを広げた3点（いずれも dogfooding が実測で見つけた）
+
+当初の宣言スコープは orchestrator と DB だった。次の3点はローカルで実メンバー1名・実モデルを通して初めて現れたもので、**決定的テスト1919件と受け入れ評価60ケースでは1件も出なかった**。
+
+## レビューと検証
+
+**仕様**: 機械検査（spec-inspect）7ラウンド、Codex による敵対的仕様レビュー3ラウンド（`fix_before: implementation` は 4 → 4 → 0）。
+
+**コード**: push 前の Codex コードレビュー3ラウンド。指摘は段階的に精度が上がり、**いずれも受け入れ評価と決定的テストを通り抜けていた**。
+
+**品質ゲート**: `pnpm gate` exit 0（format / lint / typecheck / build / test）。orchestrator 1919件、agent-runtime 234件、llm-client 80件、contracts 326件、実 DB 統合40件すべて通過。orchestrator のカバレッジは statements 85.9% / branches 77.96% / functions 88.57% / lines 87.52%。
+
+## 先送りした指摘
+
+**`required_check`（後続作業の前に解消したい）4件**、**`trial`（試用の前に解消したい）3件**、**`follow_up` 14件**、**Minor 17件**。詳細は各フェーズのレビューファイルにある（運転記録のためコミットしていない）。
+```
+
+### after (excerpt)
+
+```text
+Refs #NNN
+
+- GitHub 上の活動から、指定したメンバー1名分のエンジニアレポートを6章構成で生成し、検証後に保存します。
+- モデル呼び出しとツール実行を繰り返す既存の agent loop へ読み取り専用ツールと builtin skill を渡し、生成要求は非同期 Run として実行します。
+- 本 PR は orchestrator、agent-runtime、DB が対象です。レポート表示画面は別 Issue で実装します。
+
+## 修正理由
+
+レポート専用の実行基盤は作らず、既存の agent loop を再利用しました。
+これにより、ツール実行、監査、実行時間制限、エラー処理を既存の Run と共有できます。
+
+当初は同期 API として設計していましたが、実モデルによる初回検証で生成に約337秒かかり、Cloud Run の既定上限300秒を超えました。
+そのため、API は202を返し、worker が非同期で生成する方式へ変更しました。
+
+## 動作確認
+
+- [x] ローカルで実メンバー1名を対象に実モデルで生成し、固定6章が保存されることを確認しました。
+- [x] 保存した6章の引用が、すべて対象メンバー、対象期間、PR 一覧の範囲内であることを確認しました。
+
+## セルフレビュー（spec-review 指摘と対応）
+
+- 指摘: skill を読まずに章を提出しても保存できる → 対応: skill 本体と参照4件の読み込みを、章提出時と保存前の両方で検査しました。
+- 指摘: 別 skill の同名 path を読むことで検査を通過できる → 対応: 読み込み記録を skill 名と path の組で保持するようにしました。
+
+## 未確認事項
+
+- デプロイ済み Service には GitHub PAT が配線されていないため、現時点の staging では生成ルートが登録されず404になります。本 PR は、未登録理由を起動ログへ残すところまでを対象とします。
+
+## レビュワーに確認してほしいこと
+
+- 固定5ツール以外をモデルが利用できる経路がないか
+- skill の読み込みと保存前検証を迂回して章を保存できないか
+```
+
+### Classification
+
+- Cut: review round counts, test counts, coverage values, detailed timings, the dogfooding defect table, the list of deferred findings, all 86 bold spans, the opening label-plus-colon items, the declarative punchlines.
+- Kept: the three opening lines (what, how, scope), reading order, focus points, unverified items, a self-review limited to findings that changed the implementation, follow-up Issues.
+- Automatic: implementation-log detection (Tier 1), label-plus-colon (Tier 2 in argument mode), heavy bold.
+- Writer's judgment: which findings changed the implementation, what to leave under unverified items.
+
+Expected detections: "implementation-log residue" and label-plus-colon in the before text; no Tier 1 finding in the after text.
+
+## Unverified Facts in a First Draft (from the A/B comparison)
+
+The same prompt was given twice: once with the old norm alone, once with ja-humanizer. The ja-humanizer version had no wording or structure problems (the checker reported zero at every tier) and stated, unprompted and with confidence, facts that were not in the request. The writer confirmed the following two sentences to be wrong or unverified.
+
+```text
+日本とアメリカのクレジットカードは主にこの方式（Online PIN）で、日本のデビットカードも同じである。
+```
+
+Correct: the US mainly uses Online PIN, Japan mainly uses Offline PIN. The expected behavior is to keep the sentence in the body and list it under the closing 「要確認」 heading.
+
+```text
+一定額（日本では1万円前後、加盟店契約で異なる）を超えると Online PIN か、スマートフォン側の生体認証で確認する。
+```
+
+The number is not in the request, and the writer confirmed it is wrong: because Japan mainly uses Offline PIN, a contactless payment of 15,000 yen or more either fails or falls back to signature (deprecated). There is a movement toward Online PIN. Same treatment.
+
+Expected output: a closing 「要確認」 heading with one line for each of the two statements above.
+
 ## Over-Editing Check
 
 The following passages are the writer's own and comply with the norms. Feed them and confirm no rewrite appears. Any change means a rule is too strong.

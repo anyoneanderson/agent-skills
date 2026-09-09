@@ -88,6 +88,17 @@ Example:
 - before: 「要件定義書のこまめな更新、社内での要件共有を徹底することで再発を防止できると考えております。」
 - after: 「要件変更に対する要件定義書の迅速な更新、及び仕様変更が発生した場合の社内エンジニアへの周知を徹底します。」
 
+### Implementation-log residue
+
+Detect: a PR or Issue body lists review round counts, test counts, coverage values, detailed timings, or the full list of deferred findings. These records do not change the reader's decision and already live in the source of record (review files, CI, Issue comments).
+
+Fix: keep only the conclusions that change the review decision and replace the records with a link to the source. Follow the repository template when it caps length or bold count.
+
+Example:
+
+- before: 「機械検査7ラウンド、Codex による敵対的仕様レビュー3ラウンド。orchestrator 1919件、agent-runtime 234件すべて通過。カバレッジは statements 85.9% / branches 77.96%。」
+- after: 「セルフレビュー（spec-review 指摘と対応）。指摘: skill を読まずに章を提出しても保存できる → 対応: skill 本体と参照4件の読み込みを、章提出時と保存前の両方で検査しました。」 (only the findings that changed the implementation stay; counts and rounds are dropped)
+
 ## Tier 2 (strong Japanese-specific fingerprints)
 
 One sighting may be fixed. Keep the form if the writer's voice sample uses it. In explanatory articles the writer may use label-plus-colon bullets themselves; treat it as Tier 3 there.
@@ -144,6 +155,19 @@ Questions are limited to gaps the rewrite cannot close without an answer. Fix wo
 | When it ends | "Is there an estimated number of days or a deadline? The recipient needs it to choose." |
 
 If a question goes unanswered, delete the sentence or strip the evaluative words and keep only the facts. Never fill the gap by guessing.
+
+## Unverified Facts in a First Draft
+
+When writing from scratch, a model does not ask about facts it believes it knows. In the A/B comparison it wrote, unprompted and with confidence, that Japanese credit cards mainly use Online PIN, which is wrong (Offline PIN is the mainstream in Japan). The guard is a list: after drafting, pull out the statements below and put them under a closing 「要確認」 heading. Do not delete them from the body.
+
+| Kind | Example |
+|---|---|
+| Numbers and dates | "the ceiling is around 10,000 yen", "launched in 2024" |
+| Practices or rules attributed to a country, region, company or industry | "Japanese cards mainly use Online PIN", "no signature is needed in the US" |
+| Capabilities attributed to a named product | "Tap to Pay on iPhone does not support QR" |
+| Statistics with no source | "80% of merchants have adopted it" |
+
+Statements present in the request, the material handed over, or the voice sample are exempt. Write the list in the caller's language; in findings format, emit them as questions.
 
 ## Source
 

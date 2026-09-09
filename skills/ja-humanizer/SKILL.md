@@ -132,7 +132,17 @@ line before doing anything else, so the user can correct it.
    which component, who does what where), do not guess; put a bracketed
    question in the draft. See Questions.
 4. Run the mechanical check (Step 5) on your own draft. Fix Tier 1 hits.
-5. Deliver under the requested Output Contract.
+5. **List the facts you supplied yourself.** Reread the draft and pull out
+   every statement that is in neither the request, the material handed over,
+   nor the voice sample, and that is one of: a number or a date; a practice or
+   rule attributed to a country, region, company or industry; a capability
+   attributed to a named product; a statistic with no source. Put them under a
+   closing heading 「要確認」 (in the caller's language when the caller is not
+   Japanese), one line each, and leave the body unchanged. The writer decides
+   what to keep. A model does not ask about facts it believes it knows, and an
+   A/B run produced a confident, wrong claim about which PIN method Japanese
+   cards use; this list is the guard against that.
+6. Deliver under the requested Output Contract.
 
 ### Step 4: Rewrite (rewrite job)
 
@@ -195,7 +205,9 @@ The full catalog with examples is `references/patterns.md`. The tiers:
   fact), metaphorical verbs and stiff predicates, staging words and threatening
   closers, cushion phrases, requests chained on the answer to a question just
   asked (a real precondition such as consent or approval stays), a cause that
-  only restates the symptom, countermeasures made of generic words.
+  only restates the symptom, countermeasures made of generic words,
+  implementation-log residue in a PR or Issue body (review rounds, test
+  counts, coverage values).
 - **Tier 2, strong Japanese fingerprints**: label-plus-colon bullets, forced
   triads, 「することができます」, summary sections and expectation closers,
   template openers, stock evaluative phrases, empty adverbs, over-explicit
@@ -223,6 +235,9 @@ does contain. Never fill the gap.
 - **No invented facts.** A number, date, name, quote, citation or component
   must come from the source, the voice sample's writer, or an answer to a
   question. Fiction is the only exemption, and this skill is not for fiction.
+  In a write job, facts the model supplied from its own knowledge are not
+  removed but are listed under 「要確認」 (Step 3, item 5), because the model
+  cannot tell its correct knowledge from its confident errors.
 - **Prose only.** Do not touch code blocks, inline code, commands, paths,
   frontmatter, link targets or table cells.
 - **Do not over-edit.** When the improvement would be small, change the wording
