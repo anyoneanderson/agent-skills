@@ -134,6 +134,14 @@ out="$(run argument "$FIX/pr-after.md")"
 expect_no_id pr-after "$out" implementation-log
 expect_summary pr-after "$out" PASS "tier1=0"
 
+# Narrative-mode hand edit (Issue #171): the writer's own rewrite of the Zenn intro passes at every tier,
+# and 「空振りする」 is a metaphorical verb the writer never uses in Japanese.
+out="$(run narrative "$FIX/zenn-intro-after.md")"
+expect_summary zenn-intro-after "$out" PASS "tier1=0"
+printf '%s\n' '英単語の目印は日本語では空振りします。' > "$TMP_ROOT/karaburi.md"
+node "$CHECKER" --mode narrative "$TMP_ROOT/karaburi.md" > "$TMP_ROOT/karaburi.out" 2>&1 || true
+expect_id karaburi "$TMP_ROOT/karaburi.out" abstract-verb
+
 # Review findings (PR #168): a lone 「ご検討いただけますと幸いです」 is not a request to choose, and a
 # condition that is a real prerequisite (consent) must not be turned into an unconditional request.
 printf '%s\n' '提案の内容をご検討いただけますと幸いです。' > "$TMP_ROOT/lone.md"

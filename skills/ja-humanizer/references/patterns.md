@@ -24,7 +24,7 @@ Example:
 
 ### Metaphorical verbs and stiff predicates
 
-Detect: verbs that avoid saying what the process actually is. Metaphorical verbs: 「閉じる」「配る」「動く」「切り替わる」「揃う」「効く」「刺さる」「乗る」「噛ませる」「倒す」. Stiff predicates: 「実現する」「可能にする」「提供する」「機能する」「担う」「果たす」「寄与する」「担保する」「整備する」「明確化する」. Nominalized verbs (「〜の向上」「〜の実現」「〜の可視化」) count too.
+Detect: verbs that avoid saying what the process actually is. Metaphorical verbs: 「閉じる」「配る」「動く」「切り替わる」「揃う」「効く」「刺さる」「乗る」「噛ませる」「倒す」「空振りする」. 「空振り」 (a swing and a miss) is a Claude habit that Japanese prose does not use; say what actually happened (「意味をなさない」「採用しない」). Stiff predicates: 「実現する」「可能にする」「提供する」「機能する」「担う」「果たす」「寄与する」「担保する」「整備する」「明確化する」. Nominalized verbs (「〜の向上」「〜の実現」「〜の可視化」) count too.
 
 Fix: replace with a verb that says who does what to what. Use operations a program or a person actually performs: stop, permit, send, store, compare, reject.
 
@@ -118,6 +118,8 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Contrast as weighting | 「A ではなく B」「A だけでなく B」 where nobody claimed A | Keep only when it corrects a belief the reader actually holds; otherwise write B directly |
 | Translation-flavored function words | 「〜において」「〜の観点から」「〜という側面から」 | Delete or rewrite as a concrete condition |
 | Headings as sentences | A heading written as a sentence, 「同じ週に、Google と Anthropic も同じ方向へ動いた」 | Make it a noun phrase (「Google と Anthropic も同様の方針へ」) |
+| Evaluating other people's work from above | 「日本語の指紋をよく捉えている」「悪くない出来だ」, judging a source you borrowed from as if grading it | Replace with respect and the fact that you drew on it (「作っておられる方がいたので参考にさせていただいた」) |
+| One-line answers and punchlines (narrative mode) | Opening a section with a one-sentence answer such as 「語のリストが英語だからです。」; closing a paragraph on an antithesis such as 「足したのは事実だけです」 | Return to an explanation that chains the reasons. In narrative mode an assertion may become a tendency (「〜がちです」「〜と考えています」) |
 
 ## Tier 3 (never fix alone)
 

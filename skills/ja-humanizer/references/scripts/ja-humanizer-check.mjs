@@ -40,6 +40,7 @@ const ABSTRACT_VERBS = [
   { label: "可能にする", pattern: /を可能に(?:する|し|した|して|します)/u },
   { label: "寄与する", pattern: /に寄与(?:する|し|した|して|します)/u },
   { label: "担う", pattern: /(?:を|役割を)担(?:う|い|った|って|います)/u },
+  { label: "空振りする", pattern: /空振り(?:する|し|した|して|します|に終わ)/u },
 ];
 
 const STAGING = [
