@@ -82,6 +82,8 @@ const CHOICE_OPTIONS = /(?:^|\n)\s*(?:[・\-*]|対応案|案[1-9１-９]|[1-9１
 // merely waits for the answer to a question already asked is a chained request.
 const PRECONDITION = /同意|承諾|承認|許可|権限|有効|お持ち|問題なければ|問題がなければ|差し支えなければ|ご確認(?:が取れ|いただけ|でき)|完了(?:し|され)|届き|受領/u;
 const ESTIMATE = /[0-9０-９〇一二三四五六七八九十]+(?:営業日|日|週間|時間|か月|ヶ月|カ月)|期限|納期|見込み|まで(?:に)?(?:完了|対応|納品)/u;
+// Implementation-log residue in a PR or Issue body: review round counts, test counts, coverage values.
+const IMPLEMENTATION_LOG = /(?:レビュー|検査|spec-review|spec-inspect|Codex)[^。]{0,20}[0-9０-９]+\s*ラウンド|[0-9０-９]+\s*ラウンド[^。]{0,12}(?:レビュー|検査)|(?:テスト|ケース|件)[^。]{0,8}[0-9０-９,，]{2,}\s*件|[0-9０-９,，]{3,}\s*件[^。]{0,10}(?:通過|パス|PASS|すべて)|(?:カバレッジ|coverage|statements|branches|functions|lines)\s*[0-9０-９.]+\s*[%％]/iu;
 const TADASHI = /^(?:ただし|但し)[、,]?/u;
 const REASON = /ので|ため|から|につき|ゆえ/u;
 const HEADING_AS_SENTENCE = /(?:した|きた|なった|動いた|変わった|揃った|ます|です|である|だ|ない)[。！!]?$/u;
@@ -184,6 +186,7 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
         if (term.pattern.test(sentence)) push(1, "cushion", line, `cushion phrase: ${term.label}`);
       }
       if (TADASHI.test(sentence) && !REASON.test(sentence)) push(2, "tadashi-no-reason", line, "「ただし」 without a reason");
+      if (mode !== "narrative" && IMPLEMENTATION_LOG.test(sentence)) push(1, "implementation-log", line, "implementation log residue (review rounds, test counts, coverage); keep it in the source of record, not the body");
       if (EVALUATIVE_CLOSER.test(sentence)) push(1, "thin-claim", line, "evaluative closer without a fact", { question: question("thin-claim") });
     }
   }

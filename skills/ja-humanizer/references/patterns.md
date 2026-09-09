@@ -88,6 +88,17 @@ Example:
 - before: 「要件定義書のこまめな更新、社内での要件共有を徹底することで再発を防止できると考えております。」
 - after: 「要件変更に対する要件定義書の迅速な更新、及び仕様変更が発生した場合の社内エンジニアへの周知を徹底します。」
 
+### Implementation-log residue
+
+Detect: a PR or Issue body lists review round counts, test counts, coverage values, detailed timings, or the full list of deferred findings. These records do not change the reader's decision and already live in the source of record (review files, CI, Issue comments).
+
+Fix: keep only the conclusions that change the review decision and replace the records with a link to the source. Follow the repository template when it caps length or bold count.
+
+Example:
+
+- before: 「機械検査7ラウンド、Codex による敵対的仕様レビュー3ラウンド。orchestrator 1919件、agent-runtime 234件すべて通過。カバレッジは statements 85.9% / branches 77.96%。」
+- after: 「セルフレビュー（spec-review 指摘と対応）。指摘: skill を読まずに章を提出しても保存できる → 対応: skill 本体と参照4件の読み込みを、章提出時と保存前の両方で検査しました。」 (only the findings that changed the implementation stay; counts and rounds are dropped)
+
 ## Tier 2 (strong Japanese-specific fingerprints)
 
 One sighting may be fixed. Keep the form if the writer's voice sample uses it. In explanatory articles the writer may use label-plus-colon bullets themselves; treat it as Tier 3 there.

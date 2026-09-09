@@ -205,7 +205,9 @@ The full catalog with examples is `references/patterns.md`. The tiers:
   fact), metaphorical verbs and stiff predicates, staging words and threatening
   closers, cushion phrases, requests chained on the answer to a question just
   asked (a real precondition such as consent or approval stays), a cause that
-  only restates the symptom, countermeasures made of generic words.
+  only restates the symptom, countermeasures made of generic words,
+  implementation-log residue in a PR or Issue body (review rounds, test
+  counts, coverage values).
 - **Tier 2, strong Japanese fingerprints**: label-plus-colon bullets, forced
   triads, 「することができます」, summary sections and expectation closers,
   template openers, stock evaluative phrases, empty adverbs, over-explicit
