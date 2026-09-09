@@ -59,7 +59,7 @@ Example:
 
 Detect: a request whose condition depends on the recipient's answer, as in 「〜でしたら、〜をお願いできますでしょうか」, so the next request starts only after a reply. It costs one extra round trip.
 
-Fix: ask everything you can ask now. Make the conditional request an independent paragraph and ask unconditionally; state the condition separately as information for the recipient.
+Fix: ask everything you can ask now. When the condition only waits for the answer to the question just asked, and the request is valid whatever the answer, make the request an independent paragraph and ask unconditionally; state the condition separately as information for the recipient. Keep a real precondition (consent, approval, permission, validity) that must hold before the request may be made at all. 「同意済みでしたら、個人情報の送信をお願いします」 is not changed.
 
 Example:
 
@@ -118,7 +118,7 @@ Fix only when a Tier 1 or Tier 2 pattern shares the paragraph. People use these 
 | Bullet lists as such | Appropriate for procedures, options and checklists |
 | Numbered headings | Sometimes used for easy reference |
 | 「〜ですね」「〜かもしれない」 | Usually natural as conjecture or tone |
-| Long sentences | Do not fix while subject and causation hold. Keep them if the writer's sample has long sentences |
+| Long sentences | Do not fix while subject and causation hold. For sentence length the sample overrides the rules |
 | A single full-width dash | Fix when two or more appear, or when combined with other tells |
 | A single 「これにより」 | Fix when it repeats |
 | Uniform politeness | In mail it is set by the relationship. Follow the sample when there is one |
@@ -126,14 +126,14 @@ Fix only when a Tier 1 or Tier 2 pattern shares the paragraph. People use these 
 ## When Not to Act
 
 - Inside a quotation, a title, a proper noun, or a passage discussing the phrase itself, leave the pattern word alone.
-- Keep any form found in the writer's voice sample. The sample overrides the rules for vocabulary, sentence endings and attitude toward the reader. The norms override the sample for sentence length and argument structure.
+- Keep any form found in the writer's voice sample. The sample overrides the rules for vocabulary, sentence endings, sentence length and attitude toward the reader. The norms override the sample only where meaning or logic is at stake: argument structure, a cause without its mechanism, a claim the examples do not support, an undefined term.
 - When the improvement would be small, adjust only the wording. Do not break a sentence that is already natural to satisfy a rule.
 - Do not touch code, paths, commands, frontmatter, link targets, or the inside of table cells.
 - Do not add a fact, number, proper noun or citation that is not in the source. Ask instead.
 
 ## Question Types
 
-When the skill finds a Tier 1 "thin sentence", "cause that restates the symptom" or "countermeasure of generic words", it returns the matching question from the five below. Questions are written in the caller's language.
+Questions are limited to gaps the rewrite cannot close without an answer. Fix wording and staging first; then, for what remains of "thin sentence", "cause that restates the symptom", "countermeasure of generic words" and "a request to choose between listed options with no duration", return the matching question from the five below. Whether a deadline or a number is needed depends on the request, not on the template. Questions are written in the caller's language.
 
 | Missing | Question |
 |---|---|

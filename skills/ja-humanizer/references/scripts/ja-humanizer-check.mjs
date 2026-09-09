@@ -74,7 +74,12 @@ const TRIAD = /(?:[3３三]つ|[3３三]点|[3３三]種類)(?:の|あります|
 const GENERIC_MEASURE = /徹底|こまめ|意識(?:する|して|を高め)|強化|注意(?:する|して)|共有を/u;
 const MEASURE_TRIGGER = /(?:場合|とき|際|時)(?:に|は|の)|に対する|に対して|発生した|変更(?:が|の)(?:あった|入った|生じ)|ごとに|前に|後に/u;
 const CIRCULAR_CAUSE = /要件を(?:満足|満た)(?:しない|さない|していない)(?:実装|開発|内容)[^。]*(?:原因|要因)/u;
-const CHOICE_REQUEST = /どちらの(?:方針|案|対応)|いずれの(?:方針|案)|選択肢が考えられます|ご検討いただけますと幸いです/u;
+// A request to choose is only counted when the text actually lays out alternatives.
+const CHOICE_REQUEST = /どちらの(?:方針|案|対応)|いずれの(?:方針|案|対応)|選択肢が考えられます|案[1-9１-９]/u;
+const CHOICE_OPTIONS = /(?:^|\n)\s*(?:[・\-*]|対応案|案[1-9１-９]|[1-9１-９][.．)）])/gu;
+// A condition that is a real prerequisite (consent, approval, validity) must stay; only a condition that
+// merely waits for the answer to a question already asked is a chained request.
+const PRECONDITION = /同意|承諾|承認|許可|権限|有効|お持ち|問題なければ|問題がなければ|差し支えなければ|ご確認(?:が取れ|いただけ|でき)|完了(?:し|され)|届き|受領/u;
 const ESTIMATE = /[0-9０-９〇一二三四五六七八九十]+(?:営業日|日|週間|時間|か月|ヶ月|カ月)|期限|納期|見込み|まで(?:に)?(?:完了|対応|納品)/u;
 const TADASHI = /^(?:ただし|但し)[、,]?/u;
 const REASON = /ので|ため|から|につき|ゆえ/u;
@@ -232,7 +237,8 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
     }
   }
   const whole = prose.map((p) => p.text).join("\n");
-  if (CHOICE_REQUEST.test(whole) && !ESTIMATE.test(whole)) {
+  const optionCount = (whole.match(CHOICE_OPTIONS) ?? []).length;
+  if (CHOICE_REQUEST.test(whole) && optionCount >= 2 && !ESTIMATE.test(whole)) {
     const at = prose.find((p) => CHOICE_REQUEST.test(p.text))?.line ?? 1;
     push(1, "missing-estimate", at, "asks the recipient to choose but gives no duration or deadline", { question: question("missing-estimate") });
   }
@@ -252,7 +258,9 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
       if (!CHAINED_REQUEST.test(s)) continue;
       const prev = p[i - 1]?.s ?? "";
       const refersToQuestion = /上記|前述|先述|先ほど|ご回答|お答え/u.test(s) || /(?:でしょうか|ですか|ますか|？|\?)[。]?$/u.test(prev);
-      if (refersToQuestion) push(1, "chained-request", line, "request chained on the other party's reply; ask now, unconditionally");
+      const conditionClause = s.split(/ようでしたら|ようであれば|でしたら|であれば|の場合は|のであれば/u)[0];
+      const isPrecondition = PRECONDITION.test(conditionClause);
+      if (refersToQuestion && !isPrecondition) push(1, "chained-request", line, "request chained on the other party's reply; ask now, unconditionally");
     }
   }
 

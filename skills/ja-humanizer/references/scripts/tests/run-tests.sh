@@ -124,9 +124,18 @@ printf '%s\n' '定期的にコードを写像します。' 'orchestrator は進�
 node "$CHECKER" "$TMP_ROOT/concrete.md" > "$TMP_ROOT/concrete.out" 2>&1 || true
 grep -Ec '^TIER1	abstract-verb	' "$TMP_ROOT/concrete.out" | grep -q '^1$' && pass "concrete action in the same sentence suppresses abstract-verb" || fail "concrete-action allowance"
 
+# Review findings (PR #168): a lone 「ご検討いただけますと幸いです」 is not a request to choose, and a
+# condition that is a real prerequisite (consent) must not be turned into an unconditional request.
+printf '%s\n' '提案の内容をご検討いただけますと幸いです。' > "$TMP_ROOT/lone.md"
+node "$CHECKER" --mode mail "$TMP_ROOT/lone.md" > "$TMP_ROOT/lone.out" 2>&1 || true
+expect_no_id lone-request "$TMP_ROOT/lone.out" missing-estimate
+printf '%s\n' '個人情報の取り扱いにご同意いただけますでしょうか。' '同意済みでしたら、個人情報の送信をお願いします。' > "$TMP_ROOT/consent.md"
+node "$CHECKER" --mode mail "$TMP_ROOT/consent.md" > "$TMP_ROOT/consent.out" 2>&1 || true
+expect_no_id consent-precondition "$TMP_ROOT/consent.out" chained-request
+
 # Mutant: a checker that never sees a chained request must be caught by mail3-before.
 mutant="$TMP_ROOT/mutant.mjs"
-sed 's/if (refersToQuestion) push(1, "chained-request"/if (false) push(1, "chained-request"/' "$CHECKER" > "$mutant"
+sed 's/if (refersToQuestion \&\& !isPrecondition) push(1, "chained-request"/if (false) push(1, "chained-request"/' "$CHECKER" > "$mutant"
 grep -q 'if (false) push(1, "chained-request"' "$mutant" || fail "mutant setup did not change the checker"
 node "$mutant" --mode mail "$FIX/mail3-before.md" > "$TMP_ROOT/mutant.out" 2>&1 || true
 grep -Eq '^TIER1	chained-request	' "$TMP_ROOT/mutant.out" && fail "mutant still reports chained-request" || pass "mutant: weakened detector is distinguishable"
