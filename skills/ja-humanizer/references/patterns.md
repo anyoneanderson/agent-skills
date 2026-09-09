@@ -145,6 +145,19 @@ Questions are limited to gaps the rewrite cannot close without an answer. Fix wo
 
 If a question goes unanswered, delete the sentence or strip the evaluative words and keep only the facts. Never fill the gap by guessing.
 
+## Unverified Facts in a First Draft
+
+When writing from scratch, a model does not ask about facts it believes it knows. In the A/B comparison it wrote, unprompted and with confidence, that Japanese credit cards mainly use Online PIN, which is wrong (Offline PIN is the mainstream in Japan). The guard is a list: after drafting, pull out the statements below and put them under a closing 「要確認」 heading. Do not delete them from the body.
+
+| Kind | Example |
+|---|---|
+| Numbers and dates | "the ceiling is around 10,000 yen", "launched in 2024" |
+| Practices or rules attributed to a country, region, company or industry | "Japanese cards mainly use Online PIN", "no signature is needed in the US" |
+| Capabilities attributed to a named product | "Tap to Pay on iPhone does not support QR" |
+| Statistics with no source | "80% of merchants have adopted it" |
+
+Statements present in the request, the material handed over, or the voice sample are exempt. Write the list in the caller's language; in findings format, emit them as questions.
+
 ## Source
 
 The Tier 2 fingerprints draw on the classifications in blader/humanizer v3 (MIT), gonta223/humanizer-ja (MIT) and sahksas/human-writing-ja, minus the items that misfire in Japanese (em dashes, hyphens, quotation marks). Tier 1 was extracted from the writer's own editing records.

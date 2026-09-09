@@ -218,6 +218,24 @@ Recipient: a client.
 
 Expected detections: a request chained on the other party's reply.
 
+## Unverified Facts in a First Draft (from the A/B comparison)
+
+The same prompt was given twice: once with the old norm alone, once with ja-humanizer. The ja-humanizer version had no wording or structure problems (the checker reported zero at every tier) and stated, unprompted and with confidence, facts that were not in the request. The writer confirmed the following two sentences to be wrong or unverified.
+
+```text
+日本とアメリカのクレジットカードは主にこの方式（Online PIN）で、日本のデビットカードも同じである。
+```
+
+Correct: the US mainly uses Online PIN, Japan mainly uses Offline PIN. The expected behavior is to keep the sentence in the body and list it under the closing 「要確認」 heading.
+
+```text
+一定額（日本では1万円前後、加盟店契約で異なる）を超えると Online PIN か、スマートフォン側の生体認証で確認する。
+```
+
+The number is not in the request, and the writer confirmed it is wrong: because Japan mainly uses Offline PIN, a contactless payment of 15,000 yen or more either fails or falls back to signature (deprecated). There is a movement toward Online PIN. Same treatment.
+
+Expected output: a closing 「要確認」 heading with one line for each of the two statements above.
+
 ## Over-Editing Check
 
 The following passages are the writer's own and comply with the norms. Feed them and confirm no rewrite appears. Any change means a rule is too strong.

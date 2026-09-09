@@ -17,6 +17,7 @@
 //   cat text.md | node ja-humanizer-check.mjs [--json] [--warn]
 // Exit: 0 = no Tier 1 finding (or --warn) | 1 = Tier 1 finding present | 2 = usage error
 
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -337,5 +338,7 @@ async function main() {
   process.exitCode = status === "FAIL" ? 1 : 0;
 }
 
-const isMain = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+// Compare real paths: ~/.claude/skills/<name> is usually a symlink into ~/.agents/skills, and
+// import.meta.url already resolves to the real file.
+const isMain = process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url;
 if (isMain) await main();

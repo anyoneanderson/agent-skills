@@ -133,6 +133,12 @@ printf '%s\n' '個人情報の取り扱いにご同意いただけますでし�
 node "$CHECKER" --mode mail "$TMP_ROOT/consent.md" > "$TMP_ROOT/consent.out" 2>&1 || true
 expect_no_id consent-precondition "$TMP_ROOT/consent.out" chained-request
 
+# Symlink (Issue #169): ~/.claude/skills/<name> is a symlink into ~/.agents/skills, so the checker must
+# recognise itself as the main module when started through a link.
+ln -s "$CHECKER" "$TMP_ROOT/linked-check.mjs"
+node "$TMP_ROOT/linked-check.mjs" --mode mail "$FIX/mail3-before.md" > "$TMP_ROOT/symlink.out" 2>&1 || true
+expect_id symlink-invocation "$TMP_ROOT/symlink.out" chained-request 5
+
 # Mutant: a checker that never sees a chained request must be caught by mail3-before.
 mutant="$TMP_ROOT/mutant.mjs"
 sed 's/if (refersToQuestion \&\& !isPrecondition) push(1, "chained-request"/if (false) push(1, "chained-request"/' "$CHECKER" > "$mutant"
