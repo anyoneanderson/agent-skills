@@ -23,7 +23,7 @@ make_skill() {
 }
 
 repo_expected="$(find "$REPO_ROOT/skills" -mindepth 2 -maxdepth 2 -type f -name SKILL.md | wc -l | tr -d ' ')"
-[ "$repo_expected" -eq 22 ] || fail "expected the current repository inventory to contain 22 skills, got $repo_expected"
+[ "$repo_expected" -eq 24 ] || fail "expected the current repository inventory to contain 24 skills, got $repo_expected"
 repo_output="$(bash "$CHECKER" "$REPO_ROOT")" || fail "current repository should satisfy the line budget"
 printf '%s\n' "$repo_output" | grep -q "SKILL_LINE_BUDGET_SUMMARY.*PASS.*checked=$repo_expected.*failures=0" ||
   fail "checker inventory does not match the independent repository inventory"
