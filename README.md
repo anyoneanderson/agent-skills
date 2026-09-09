@@ -28,7 +28,7 @@ Reusable AI agent skills for specification-driven and autonomous (harness) devel
 | [agent-delegate](skills/agent-delegate/) | Delegate a task to, or get an adversarial review from, the other AI agent headlessly (no cmux); returns a parseable report.json |
 | [magi](skills/magi/) | Put a question to three independent LLM CLIs from different vendors and return a tallied verdict or a cross-checked research report, with a matrix of who said what |
 | [skill-suggest](skills/skill-suggest/) | Auto-detect project tech stack and suggest optimal skills from skills.sh registry |
-| [ja-humanizer](skills/ja-humanizer/) | Write, rewrite and check Japanese prose without AI tells; asks for missing facts instead of inventing them, and matches the writer's voice samples |
+| [ja-humanizer](skills/ja-humanizer/) | Write and revise Japanese prose using the writer's selected excerpts; combines pattern checks with contextual reading and asks for missing facts |
 | [harness-init](skills/harness-init/) | Install a Harness Engineering control loop (Planner/Generator/Evaluator agents, hooks, guard scripts) into a project |
 | [harness-plan](skills/harness-plan/) | Plan an epic: draft a product-spec, derive a sprint roadmap, and emit one tracker Issue per sprint |
 | [harness-loop](skills/harness-loop/) | Run the autonomous Generator⇄Evaluator sprint control loop to rubric convergence and open PRs |
