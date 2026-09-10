@@ -113,7 +113,7 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Stock evaluative phrases | 「浮き彫りにしており」「重要な示唆を与えている」「注目に値する」「画期的な」「多面的な」「包括的な」 | Write concretely what was seen and why it drew attention |
 | Empty adverbs | 「静かに」「確実に」「大きく」「本質的に」「シンプルに」「適切に」「柔軟に」「明確に」 | Delete. If something must remain, replace with a number or a condition |
 | Over-explicit subjects | Every sentence opens with 「このツールは」「この記事では」「私は」 | Write the subject once when it repeats |
-| Uniform endings and sentence length | 「です」「ます」「できます」 three or more in a row; every sentence 40 to 60 characters | Vary endings and mix lengths. With a voice sample, match its distribution |
+| Uniform endings and sentence length | 「です」「ます」「できます」 three or more in a row; every sentence 40 to 60 characters | Review in context; preserve a natural sequence. Do not force fragments or inversions to vary endings. Match the writer's sample when provided |
 | Mechanical connectives | 「まず」「次に」「最後に」「そのうえで」「あわせて」「なお」 placed in every paragraph | Keep only words that show a logical relation; delete those that only show order |
 | Contrast as weighting | 「A ではなく B」「A だけでなく B」 where nobody claimed A | Keep only when it corrects a belief the reader actually holds; otherwise write B directly |
 | Translation-flavored function words | 「〜において」「〜の観点から」「〜という側面から」 | Delete or rewrite as a concrete condition |
