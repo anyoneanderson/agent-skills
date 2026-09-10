@@ -317,6 +317,24 @@ The number is not in the request, and the writer confirmed it is wrong: because 
 
 Expected output: a closing 「要確認」 heading with one line for each of the two statements above.
 
+## Confirmed Narrative Excerpts
+
+The writer confirmed the following three excerpts as voice examples. That confirmation applies only to the quoted spans. The second excerpt ends mid-sentence; do not use its trailing clause as a sentence-ending template.
+
+```text
+気になりだすと、どんどん気になるもので、私も、AI の下書きをずっと手で直し続けたり色んなスキルを入れてAI臭さをなくす取り組みをやり続けています。
+
+まあコンテンツまで全部AI任せでは自分の記事では無くなってしまうので、そこはどこまでやらせるのか賛否両論ありますが、
+
+AIが知り得ない事実や補強すべきコンテンツを与えるのは書き手のオリジナリティが出る部分だと思うので、そこは大事にしました。
+```
+
+These excerpts show this writer's ongoing editing experience, an aside about what to delegate, and a personal reason for a design choice. Preserve those meanings and the original wording when they are supplied as approved voice evidence. Do not require first-person openings, asides, hedging or noun-phrase headings in every new article. They do not establish rules about Japanese in general or habits unique to one model.
+
+For an over-editing trial, ask the agent to review these excerpts unchanged. Do not also put them into that trial's voice reference: copying a supplied answer is not evidence of transfer. The fixture `scripts/tests/fixtures/narrative-confirmed.md` checks only that the detector reports no Tier 1 finding. Naturalness still requires reading the output.
+
+The rejected article passages belong to the separate contextual task in [Editorial Evaluation](editorial-evaluation.md#article-revision-case). They are not approved after-text or voice samples.
+
 ## Over-Editing Check
 
 The following passages are the writer's own and comply with the norms. Feed them and confirm no rewrite appears. Any change means a rule is too strong.

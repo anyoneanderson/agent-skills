@@ -41,3 +41,19 @@ unwanted phrasing, over-editing and time to an acceptable draft separately from
 script counts. Do not claim that one model has no writing habits or always writes
 better from one sample. If no comparison was run, call a model switch a proposed
 trial, not a measured improvement.
+
+## Article Revision Case
+
+The following passages are revision exercises, not approved voice examples.
+
+Task: review the input below in narrative mode, preserve supported meaning, and do not invent facts. Run it without the confirmed excerpts above as voice references. For independent evaluation, provide only the task and input, then consult the criteria after recording the output.
+
+```text
+AI 臭を消す作業の実体は、言い回しの置き換えもですが、事実の追加という文章のコンテンツの補強をやる作業になります。
+
+文体見本は語彙、語尾、文長、読み手への態度を決め、規範が勝つのは論証の構造や機構の無い原因のように、意味か論理が合わなくなる箇所だけにしています。
+```
+
+Evaluation criteria: narrow the first claim to what an editing example can support; describe missing information directly. In the second, explain which wording follows the sample and which contradictions or missing explanations need correction. Do not preserve these sentences merely because they were once labeled after-text. An exact target sentence or zero detector findings is not the acceptance criterion.
+
+If a writer rejects a metaphor such as 「空振り」, record that preference for that writer and context. Do not infer that the word is absent from Japanese or always indicates a particular model. Contextual review can address an unclear metaphor without adding a blanket detector.

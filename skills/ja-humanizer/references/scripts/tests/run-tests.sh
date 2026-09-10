@@ -101,6 +101,10 @@ expect_no_id mail3-after "$out" chained-request
 out="$(run mail "$FIX/voice-ok.md")"
 expect_summary voice-ok "$out" PASS "tier1=0	tier2=0"
 
+# Confirmed excerpts only; this tests detector compatibility, not authorship or rewrite quality.
+out="$(run narrative "$FIX/narrative-confirmed.md")"
+expect_summary narrative-confirmed "$out" PASS "tier1=0"
+
 # CLI: English questions, JSON output, stdin, mode validation, disable comment, fenced code.
 node "$CHECKER" --mode article --lang en "$FIX/tap-before.md" > "$TMP_ROOT/en.out" 2>&1 || true
 grep -Eq 'what becomes unnecessary' "$TMP_ROOT/en.out" && pass "cli: --lang en returns English questions" || fail "cli: --lang en"
