@@ -319,7 +319,7 @@ Expected output: a closing 「要確認」 heading with one line for each of the
 
 ## Confirmed Narrative Excerpts
 
-Source: [Zenn article draft](https://github.com/anyoneanderson/ZenchainWeb/blob/0d3ee592acaaffb417cc151b27b18d243ba5d3d6/content/zenn/ja-humanizer-intro.md), lines 10, 19 and 68. On 2026-09-09 the writer confirmed these three proposed excerpts. This confirms the quoted spans, not the entire partly edited article. The second excerpt ends mid-sentence; preserve it as source material without treating its trailing clause as a sentence-ending template.
+The writer confirmed the following three excerpts as voice examples. That confirmation applies only to the quoted spans. The second excerpt ends mid-sentence; do not use its trailing clause as a sentence-ending template.
 
 ```text
 気になりだすと、どんどん気になるもので、私も、AI の下書きをずっと手で直し続けたり色んなスキルを入れてAI臭さをなくす取り組みをやり続けています。

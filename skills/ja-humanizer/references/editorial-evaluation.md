@@ -44,7 +44,7 @@ trial, not a measured improvement.
 
 ## Article Revision Case
 
-Source: the [same Zenn draft](https://github.com/anyoneanderson/ZenchainWeb/blob/0d3ee592acaaffb417cc151b27b18d243ba5d3d6/content/zenn/ja-humanizer-intro.md), lines 35 and 61. These passages were subsequently rejected during editorial review; the article's label as a manual rewrite does not make them approved voice examples.
+The following passages are revision exercises, not approved voice examples.
 
 Task: review the input below in narrative mode, preserve supported meaning, and do not invent facts. Run it without the confirmed excerpts above as voice references. For independent evaluation, provide only the task and input, then consult the criteria after recording the output.
 
