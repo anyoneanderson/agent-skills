@@ -25,7 +25,7 @@ The following hold in both modes. Do not relax them in narrative mode.
 
 ### Mode-dependent parts
 - The "Restraint in Staging" section, and the limits on second person, emotion and colloquialism under "Viewpoint and Narration", apply to **argument mode only**.
-- In narrative mode, prefer "What Narrative Mode Adds" and relax the staging limits above.
+- In narrative mode, prefer "Narrative Mode Options" and relax the staging limits above.
 
 ## Formatting
 
@@ -45,14 +45,14 @@ Paragraph writing is the base. A paragraph is one step of the argument, and the 
 
 - One topic per paragraph. Split a long paragraph that mixes several stages (investigation, report, verification, evaluation) into one paragraph per step.
 - The first sentence of a paragraph must say what the paragraph is about.
-- Open a paragraph by making its logical relation to the previous one explicit with a connective (「であれば」「実際」「しかし」「この例自体からも」).
-- When introducing a new concept or term, do not open with a dictionary-style assertion 「X is Y」. Place the object in an introductory sentence first, then state what it does or how it differs, and give the definition in a third sentence if needed.
-- Move the argument in one direction. Do not state the conclusion, handle objections, then restate the conclusion. Finish handling objections and doubts, then place the conclusion once.
-- Do not interrupt a scene right after its climax with an apology for the example (pre-empting "this looks contrived"). Handle it at the start of the next section.
-- Explicitly reject the misreading a reader is likely to make, then give the real reason (「その理由は『〜だから』ではない。〜だからだ」).
+- Add a connective only when the relation between paragraphs would otherwise be unclear. Do not give every paragraph a stock transition.
+- Introduce a term where the reader needs it. A direct definition is fine; do not force an introduction, explanation and definition into three sentences.
+- Put information in the order the reader needs. A conclusion may come first; do not repeat it after every example or objection.
+- Explain a limitation of an example where it affects interpretation. Do not add an imagined objection or apology merely to stage a scene.
+- Correct a misreading only when the material gives a concrete reason to expect it. Otherwise state the explanation directly; do not invent an opponent for a contrast.
 - When denying with 「A ではなく B」, add one sentence of grounds for the denial. A counterfactual (「もし A なら、〜だっただろう」) often works.
 - A concession (「確かに〜」) stays at confirming facts. Asserting, in the author's voice, a causal claim you will later correct is self-contradiction. To grant a surface diagnosis once, attribute it to the reader or to received opinion (「〜と要約できてしまうかもしれない」).
-- Do not give away the information meant for the climax (a number, a specific fact) in the paragraph before it.
+- In explanatory prose, give the reader useful facts when needed. Do not withhold a number or conclusion to manufacture a climax.
 - When denying or limiting something, quote the exact proposition being denied in 「」 (it does not mean 「everything can be delegated once it is written down」). Do not settle for a vague denial such as 「not everything is solved」.
 - Put forward references (「covered in a later chapter」) where the argument has come to rest (end of paragraph or section), not in the middle of it.
 
@@ -135,10 +135,12 @@ Before submitting, make sure the order of operations and the destination of the 
 
 ## Restraint in Staging (argument mode only)
 
-In argument mode the rule for staging is moderation, not prohibition. Use rhetoric only where it produces an effect. Narrative mode relaxes this section in favor of "What Narrative Mode Adds".
+In argument mode use rhetoric only when it helps explain the material. Narrative
+mode allows personal tone, but neither mode requires a staged discovery, an
+invented contrast or a grand closing sentence.
 
 - Use build-ups (「ここには〜が潜んでいる」) and rhetorical questions only at points where tension serves the argument. Where explanation suffices, state it.
-- Do not repeatedly set a short punchline as its own paragraph to create tension. A short nominal-ending sentence inside a paragraph is allowed only at a scene's climax.
+- Do not split an explanation into short punchlines to create tension. A short sentence or nominal ending may stay when it fits the writer's voice and carries information.
 - Do not overuse bold in the body. Use it only at logical pivots such as a negation that prevents misreading or a section's conclusion, one or two places per section. Elsewhere, let sentence order and structure do the emphasis.
 - Prefer the form of a worker's judgment (「〜するわけにはいかない」) over the command form (「〜してはならない」).
 - Do not over-dramatize turning points. One sentence stating the fact usually suffices.
@@ -147,15 +149,17 @@ In argument mode the rule for staging is moderation, not prohibition. Use rhetor
 - Do not overuse the antithetical punchline 「A ではなく B だった」. Light supplements and evaluations may go in parentheses.
 - Do not use twisted idioms or metaphors whose referent is not uniquely determined. Say it with a plain verb.
 
-## What Narrative Mode Adds
+## Narrative Mode Options
 
-In narrative mode (technical blogs, note articles, talk scripts), human presence is what carries the reader. Keep the shared core (stiff predicates, rūgo, redundancy, surface details, logical leaps, thin content), and add the following.
+In narrative mode (technical blogs, note articles, talk scripts), preserve the
+writer's personal tone where the material supports it. The following are options,
+not requirements to add episodes, emotions or a dramatic arc. Keep the shared core.
 
-- Include first-person experience. Write where you actually got stuck, the procedure you tried and failed, the moment it resolved, as events.
-- Tell it through concrete episodes (when, what, what happened) instead of abstract argument.
+- Use first-person experiences supplied by the writer or source when they help explain the topic. Do not invent being told something, a failure, or a moment of discovery.
+- Keep useful concrete episodes when provided. If none are available, explain the facts directly without fabricating an episode.
 - Allow moderate colloquialism. Do not run on stiff written language alone; build the rhythm of speaking to the reader.
-- Let emotion out naturally. Write honest reactions such as 「ハマって丸一日溶かした」「ここで一気に楽になった」.
-- Ask the reader a question at key points. Do not turn it into a formula by asking in every paragraph.
+- Preserve the writer's stated reactions. Do not add time spent, feelings or relief that the writer did not provide.
+- A question to the reader may stay when it serves a purpose. Do not add questions just to make an introduction or closing more engaging.
 - Second-person address is fine at key points such as the introduction and the close.
 
 Even in narrative mode, keep the following. Do not hide thin content behind anecdotes. Do not omit concrete technical information, procedures or numbers. Emotion and colloquialism are seasoning; the subject is the technology.
@@ -193,7 +197,7 @@ The test is whether it sounds translated when read aloud. If it does, fix it. Wh
 
 - Leave no stray half-width spaces (remove half-width spaces lodged between words in full-width text).
 - Do not overuse demonstratives (これ・それ・この・その). A referent that just appeared can usually be omitted. When the referent is not unique, name the object instead of relying on a demonstrative.
-- Do not make sentence endings monotonous. Do not run the same ending (「〜ます」「〜ですね」) three sentences or more in a row.
+- Read rhythm in context. Three identical endings are a review cue, not a rewrite requirement. Preserve natural explanatory sequences; do not force fragments, inversions or nominal endings to vary them.
 
 ## Removing Redundancy
 
@@ -201,7 +205,7 @@ Leave as little wasted text as possible.
 
 - Do not restate the same claim in other words. Write each claim once.
 - If adjacent sections say the same thing from different angles, their roles overlap. Absorb one into the other.
-- Do not summarize a scene right after describing it. Place only the one sentence that gives it meaning.
+- After an example, add an inference only if it supplies a supported point the reader needs. Omit a closing sentence that merely restates the example in abstract words.
 - Merge parallel facts with the same logical role into one sentence instead of stacking separate sentences. Signal the logical status of the group with the sentence's opening word.
 - Do not write intermediate steps the reader can supply.
 - If several sentences of argument compress into one, keep only the compressed sentence. 「要するに」 may signal the summary.
@@ -209,24 +213,23 @@ Leave as little wasted text as possible.
 - Do not use a dialogue with an imagined reader (posing a question and answering in one word) as rhetoric. State the claim.
 - Do not introduce a thought the reader might have through a meta frame (「ここまでの話には自然な続きがある」). Write the thought itself.
 - Do not write the author's disclaimers or apologies (「本書もそれを否定しない」). Place only the statement of fact.
-- Make the text share context with the reader in the fewest words. If it lands without walking through the derivation step by step, give the structure a name and assert it.
+- Keep enough context to follow the explanation. Do not invent a label for a process that ordinary verbs can describe.
 - Do not bring in a concept or document name before the body has introduced it.
 - Do not settle for hesitant weak predicates. Assert strongly and concretely what the text's own grounds settle. Keep weak predicates that express uncertainty, possibility, hypothesis or the reader's doubt.
-- Connectives that shape the rhythm (「しかし一方で」) do not count as redundancy.
+- Keep a connective when it clarifies the relation; rhythm alone does not justify a redundant transition.
 
 ## Writing Headings
 
 Make headings concrete enough to identify the content. A heading is the question the section answers, or a phrase naming what it handles.
 
 - Do not use headings that only state a procedure, or headings with no information.
-- Do not make a heading a "line" that gives away the section's conclusion. Avoid the reader learning the punchline at the heading.
+- A heading may state a concrete conclusion or name the subject. Do not turn it into a slogan, or hide the conclusion to create suspense.
 - A noun phrase naming the section's object is fine.
 - Choose question form or noun phrase according to the body's tone.
 
 ## Honesty to the Reader
 
-- When an example may look contrived, do not hide it. Acknowledge the reader's doubt first and add a brief ground for why it is realistic.
-- Draw that ground from general facts or received opinion the reader can check against their own experience, not from the author's assertion.
+- Label hypothetical examples as hypothetical and first-person events as factual only when supported by the material. Do not defend an invented anecdote with a plausible generalization.
 - Do not write smoothly about things you have not verified as if you had.
 
 ## Mixing English and Katakana (avoiding rūgo)
