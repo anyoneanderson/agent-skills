@@ -1,6 +1,6 @@
 # AI Tells in Japanese (Tiered Pattern Catalog)
 
-The authoritative list of patterns ja-humanizer uses when rewriting and checking. The tier decides what to do on a single sighting.
+The list of patterns ja-humanizer uses when rewriting and checking. When the skill body or the checker disagrees with it, this table wins. The tier decides what to do on a single sighting.
 
 - Tier 1: fix on one sighting. These are the things the writer fixes every time in their own text.
 - Tier 2: strong fingerprints specific to AI-written Japanese. One sighting may be fixed, but keep the form if the writer's voice sample uses it.
@@ -79,7 +79,7 @@ Example:
 
 ### Countermeasures made of generic words only
 
-Detect: a recurrence-prevention or improvement plan consisting only of 「徹底」「こまめに」「共有」「意識」「強化」, without naming which step of the cause it closes.
+Detect: a recurrence-prevention or improvement plan consisting only of 「徹底」「こまめに」「共有」「意識」「強化」, without naming what it adds to which step of the cause.
 
 Fix: name the step that corresponds one-to-one to the cause. If the step is unknown, ask.
 
@@ -113,7 +113,7 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Stock evaluative phrases | 「浮き彫りにしており」「重要な示唆を与えている」「注目に値する」「画期的な」「多面的な」「包括的な」 | Write concretely what was seen and why it drew attention |
 | Empty adverbs | 「静かに」「確実に」「大きく」「本質的に」「シンプルに」「適切に」「柔軟に」「明確に」 | Delete. If something must remain, replace with a number or a condition |
 | Over-explicit subjects | Every sentence opens with 「このツールは」「この記事では」「私は」 | Write the subject once when it repeats |
-| Uniform endings and sentence length | 「です」「ます」「できます」 three or more in a row; every sentence 40 to 60 characters | Review in context; preserve a natural sequence. Do not force fragments or inversions to vary endings. Match the writer's sample when provided |
+| Uniform endings and sentence length | 「です」「ます」「できます」 three or more in a row | Review in context; preserve a natural sequence. Do not force fragments or inversions to vary endings. Match the writer's sample when provided |
 | Mechanical connectives | 「まず」「次に」「最後に」「そのうえで」「あわせて」「なお」 placed in every paragraph | Keep only words that show a logical relation; delete those that only show order |
 | Contrast as weighting | 「A ではなく B」「A だけでなく B」 where nobody claimed A | Keep only when it corrects a belief the reader actually holds; otherwise write B directly |
 | Translation-flavored function words | 「〜において」「〜の観点から」「〜という側面から」 | Delete or rewrite as a concrete condition |
@@ -139,6 +139,7 @@ Fix only when a Tier 1 or Tier 2 pattern shares the paragraph. People use these 
 - Inside a quotation, a title, a proper noun, or a passage discussing the phrase itself, leave the pattern word alone.
 - Keep any form found in the writer's voice sample. The sample overrides the rules for vocabulary, sentence endings, sentence length and attitude toward the reader. The norms override the sample only where meaning or logic is at stake: argument structure, a cause without its mechanism, a claim the examples do not support, an undefined term.
 - When the improvement would be small, adjust only the wording. Do not break a sentence that is already natural to satisfy a rule.
+- In narrative mode, do not delete or unify the writer's 「〜と思う」, 「とりあえず」, 「〜してみた」, exclamation marks, or a mix of the です・ます and だ・である styles. The rule against adding impressions or exclamation marks that are not in the material stays.
 - Do not touch code, paths, commands, frontmatter, link targets, or the inside of table cells.
 - Do not add a fact, number, proper noun or citation that is not in the source. Ask instead.
 
