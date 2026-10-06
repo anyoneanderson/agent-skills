@@ -56,6 +56,22 @@ Paragraph writing is the base. A paragraph is one step of the argument, and the 
 - When denying or limiting something, quote the exact proposition being denied in 「」 (it does not mean 「everything can be delegated once it is written down」). Do not settle for a vague denial such as 「not everything is solved」.
 - Put forward references (「covered in a later chapter」) where the argument has come to rest (end of paragraph or section), not in the middle of it.
 
+## Joining Sentences
+
+A row of short sentences leaves the reader to guess how they relate. Join sentences that are related, and write the relation into the sentence.
+
+- When the second sentence is the reason, condition, concession or consequence of the first, join them with 「ので」「が」「ば」「〜であり」 into one sentence.
+- When three sentences lay out one topic flat, rebuild them as a main clause with subordinate clauses. 「キューは依頼を順番に並べる。ワーカーは先頭から1件ずつ処理する。同時に動く数は増えない。」 becomes 「キューが依頼を順番に並べ、ワーカーが先頭から1件ずつ処理するので、同時に動く数はワーカーの数を超えない。」
+- Join only sentences that are related. Do not chain unrelated facts with 「し」「て」. Cut where the subject and the causation can no longer be followed.
+- Take the target for sentence length from the sample. Write down the sample's mean sentence length, its share of sentences of 80 characters or more, and its share of sentences that join clauses with a conjunctive particle, then write toward those figures. With no sample, set no target and apply only the two rules above.
+- This is a different operation from the compression under Removing Redundancy. Compression removes information; joining keeps it and adds the relation.
+
+## Section Endings and Comparisons
+
+- Do not end every section on a caution (「〜する必要がある」) or a plan (「〜したい」). When a section ends on a sentence, make it the verdict the writer reached from that section's material (「要するに〜が現状である」). When the material holds no verdict, do not make one up; ask the writer "What is the conclusion you want the reader to take from this section?" A section that needs no closing sentence ends on its last fact.
+- Do not cancel again, with a sentence-final denial (「〜という意味ではない」「〜わけではない」), what the previous sentence already explained. Keep a denial only where it corrects a belief the reader actually holds.
+- After comparing two things, say what the difference changes for the person choosing (usable language, speed, cost, effort, constraints). When the material does not say, do not add it; ask "What does this difference change in the reader's choice?"
+
 ## Rigor of Argument
 
 Leave no opening for objection in the logic. After drafting, anticipate the reader's objections and check the following.

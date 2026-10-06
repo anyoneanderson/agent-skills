@@ -313,6 +313,105 @@ node "$CHECKER" --json "$TMP_ROOT/commas.md" > "$TMP_ROOT/commas.json" 2>&1 || t
 node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(j.summary.commasPerSentence!==1) process.exit(1)' "$TMP_ROOT/commas.json" \
   && pass "cli: --json carries commasPerSentence" || fail "cli: --json commasPerSentence"
 
+# --- Issue #175: rhythm against the writer's sample, denial closers, section closers, comparisons ---
+# rhythm-before.md, rhythm-after.md and rhythm-voice.md are constructed for these tests. They are not
+# anyone's writing; article-confirmed.md is the writer's own paragraph and serves as a second sample.
+
+run_voice() { # run_voice <mode> <voice> <file> -> output file path
+  local out="$TMP_ROOT/$(basename "$3").voice.out"
+  node "$CHECKER" --mode "$1" --voice "$2" "$3" > "$out" 2>&1 || true
+  printf '%s' "$out"
+}
+
+out="$(run_voice article "$FIX/rhythm-voice.md" "$FIX/rhythm-before.md")"
+expect_tier rhythm-before "$out" 2 rhythm-mismatch
+expect_tier rhythm-before "$out" 2 negation-closer
+expect_tier rhythm-before "$out" 2 section-closer-repeat
+expect_tier rhythm-before "$out" 1 comparison-without-consequence
+expect_id rhythm-before "$out" comparison-without-consequence 1
+grep -Eq '^TIER2	section-closer-repeat	.*必要がある.*lines: 16,23,30	.*結論は何ですか' "$out" && pass "rhythm-before: section closers listed with the question" || fail "rhythm-before: section closer lines or question"
+grep -Eq '^TIER1	comparison-without-consequence	.*読み手の選択は何が変わりますか' "$out" && pass "rhythm-before: comparison question attached" || fail "rhythm-before: comparison question"
+grep -Eq 'mean_sentence_length=[0-9.]+/[0-9.]+	long_sentences=[0-9]+%/[0-9]+%	connective_sentences=[0-9]+%/[0-9]+%$' "$out" && pass "rhythm-before: summary carries draft/sample pairs" || fail "rhythm-before: summary rhythm fields ($(tail -1 "$out"))"
+out="$(run_voice article "$FIX/article-confirmed.md" "$FIX/rhythm-before.md")"
+expect_id rhythm-before-writer-sample "$out" rhythm-mismatch
+out="$(run article "$FIX/rhythm-before.md")"
+expect_no_id rhythm-before-no-voice "$out" rhythm-mismatch
+grep -q 'mean_sentence_length' "$out" && fail "no --voice: summary must not carry rhythm fields" || pass "no --voice: summary has no rhythm fields"
+
+# The rewrite joins the sentences, says what the difference changes, and ends each section differently.
+out="$(run_voice article "$FIX/rhythm-voice.md" "$FIX/rhythm-after.md")"
+for id in rhythm-mismatch negation-closer section-closer-repeat comparison-without-consequence; do
+  expect_no_id rhythm-after "$out" "$id"
+done
+expect_summary rhythm-after "$out" PASS "tier1=0"
+# The writer's own paragraph against a sample: none of the four.
+out="$(run_voice article "$FIX/rhythm-voice.md" "$FIX/article-confirmed.md")"
+expect_summary article-confirmed-voice "$out" PASS "tier1=0	tier2=0"
+
+# The permitted pair from references/examples.md: the AI paragraphs under their heading, and the
+# writer's rewrite as the sample.
+out="$(run_voice article "$FIX/article-confirmed.md" "$FIX/compare-before.md")"
+expect_id compare-before "$out" comparison-without-consequence 1
+expect_id compare-before "$out" rhythm-mismatch
+expect_no_id compare-before "$out" negation-closer
+expect_no_id compare-before "$out" section-closer-repeat
+
+# Sample reading: field lines and the excerpt edited from an AI draft are not measured.
+node "$CHECKER" --json --voice "$FIX/rhythm-voice.md" "$FIX/rhythm-after.md" > "$TMP_ROOT/voice.json" 2>&1 || true
+node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).summary.rhythm.voice; if(v.sentences!==6||v.meanLength<60) process.exit(1)' "$TMP_ROOT/voice.json" \
+  && pass "voice: only the handwritten excerpt is measured" || fail "voice: AI-draft excerpt or field lines were measured"
+sed 's/^書き方: AI の下書きを直した$/書き方: 手書き/' "$FIX/rhythm-voice.md" > "$TMP_ROOT/voice-all-hand.md"
+node "$CHECKER" --json --voice "$TMP_ROOT/voice-all-hand.md" "$FIX/rhythm-after.md" > "$TMP_ROOT/voice-all.json" 2>&1 || true
+node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).summary.rhythm.voice; if(v.sentences!==11||v.meanLength>=50) process.exit(1)' "$TMP_ROOT/voice-all.json" \
+  && pass "voice: an excerpt marked handwritten is measured" || fail "voice: handwritten excerpt not measured"
+if node "$CHECKER" --voice "$TMP_ROOT/no-such-voice.md" "$FIX/rhythm-after.md" > /dev/null 2> "$TMP_ROOT/voice.err"; then
+  fail "cli: unreadable --voice should exit 2"
+else
+  [ "$?" -eq 2 ] && pass "cli: unreadable --voice exits 2" || fail "cli: unreadable --voice exit code"
+fi
+# A short draft is not compared (fewer than 8 sentences).
+out="$(check_text rhythm-short article '値を読む。値を書く。値を消す。値を返す。')"
+node "$CHECKER" --voice "$FIX/rhythm-voice.md" "$TMP_ROOT/rhythm-short.md" > "$TMP_ROOT/rhythm-short.out" 2>&1 || true
+expect_no_id rhythm-short "$TMP_ROOT/rhythm-short.out" rhythm-mismatch
+
+# negation-closer: two or more sentences ending on a denial; a denial inside a sentence is not one.
+out="$(check_text negation-hit argument '同期APIが古い方式という意味ではない。' '番号を返す。' 'キューを置けば安定するわけではありません。')"
+expect_tier negation-hit "$out" 2 negation-closer
+out="$(check_text negation-one argument '同期APIが古い方式という意味ではない。' '番号を返す。')"
+expect_no_id negation-one "$out" negation-closer
+out="$(check_text negation-inside argument '古い方式というわけではないが、利用は減っている。' '必須ではないので、省いてもよい。')"
+expect_no_id negation-inside "$out" negation-closer
+out="$(check_text negation-sparse argument '同期APIが古い方式という意味ではない。' 'キューを置けば安定するわけではない。' "$(repeat 110 '設定ファイルの値を読み取って画面に出します。')")"
+expect_no_id negation-sparse "$out" negation-closer
+
+# section-closer-repeat: three sections ending on the same predicate, not two.
+out="$(check_text closer-hit argument '## A' '値を読む。確認したい。' '## B' '値を書く。記録しておきたい。' '## C' '値を消す。見直したい。')"
+expect_tier closer-hit "$out" 2 section-closer-repeat
+out="$(check_text closer-two argument '## A' '値を読む。確認したい。' '## B' '値を書く。記録しておきたい。' '## C' '値を消すことにした。')"
+expect_no_id closer-two "$out" section-closer-repeat
+out="$(check_text closer-mixed argument '## A' '値を読む。確認したい。' '## B' '値を読む必要がある。' '## C' '値を消すことになる。' '## D' '値に注意する。')"
+expect_no_id closer-mixed "$out" section-closer-repeat
+out="$(check_text closer-middle argument '## A' '確認したい。値を読んだ。' '## B' '記録したい。値を書いた。' '## C' '見直したい。値を消した。')"
+expect_no_id closer-middle "$out" section-closer-repeat
+
+# comparison-without-consequence: a heading that names a comparison, and no word for what changes.
+out="$(check_text comparison-hit argument '## RESTとgRPCの違い' 'RESTはHTTPの上でJSONを送る。' 'gRPCはProtocol Buffersを送る。')"
+expect_tier comparison-hit "$out" 1 comparison-without-consequence
+out="$(check_text comparison-consequence argument '## RESTとgRPCの違い' 'RESTはHTTPの上でJSONを送る。' 'gRPCはProtocol Buffersを送るので、呼び出す側の言語ごとにコードを生成する手間がかかる。')"
+expect_no_id comparison-consequence "$out" comparison-without-consequence
+out="$(check_text comparison-not-heading argument '## 連載で比較したいこと' '次回は同じ修了証で試す。' '## 勘違いの例' '一方、通信処理は別々に実装した。')"
+expect_no_id comparison-not-heading "$out" comparison-without-consequence
+out="$(check_text comparison-forms argument '## 自作か購入か' 'どちらも同じ機能を持つ。' '## RESTとgRPC、どちらを使うか' 'どちらも同じ機能を持つ。' '## キューとストリームの選び方' 'どちらも同じ機能を持つ。')"
+expect_id comparison-forms "$out" comparison-without-consequence 1
+expect_id comparison-forms "$out" comparison-without-consequence 3
+expect_id comparison-forms "$out" comparison-without-consequence 5
+out="$(check_text comparison-operation argument '## 自作か購入か' '自作すると保守を自分たちで続けることになる。')"
+expect_no_id comparison-operation "$out" comparison-without-consequence
+out="$(check_text negation-kagiranai argument '速くなるとは限らない。' '番号を返す。' '安定するとは限りません。')"
+expect_tier negation-kagiranai "$out" 2 negation-closer
+node "$CHECKER" --lang en "$TMP_ROOT/comparison-hit.md" > "$TMP_ROOT/comparison-en.out" 2>&1 || true
+grep -Eq "change in the reader's choice" "$TMP_ROOT/comparison-en.out" && pass "comparison: English question" || fail "comparison: English question"
+
 # Mutant: a checker that never sees a chained request must be caught by mail3-before.
 mutant="$TMP_ROOT/mutant.mjs"
 sed 's/if (refersToQuestion \&\& !isPrecondition) push(1, "chained-request"/if (false) push(1, "chained-request"/' "$CHECKER" > "$mutant"
