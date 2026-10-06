@@ -267,6 +267,11 @@ out="$(check_text verb-noun argument '品質の検証を担保する仕組みで
 expect_tier verb-noun "$out" 1 abstract-verb
 out="$(check_text verb-verb argument '品質を検証して保存する仕組みです。' '結果を検証し、品質を担保します。')"
 expect_summary verb-verb "$out" PASS "tier1=0"
+# The potential, passive and causative forms are verb uses too, and markup around the word does not hide it.
+out="$(check_text verb-forms argument '一覧では開発を担う人を確認でき、連絡先も分かる。' '結果は表に保存され、品質を担保する。' '開発を担う人を[確認](https://example.com/list)できる。' '開発を担う人を**確認**できる。')"
+expect_summary verb-forms "$out" PASS "tier1=0"
+out="$(check_text verb-noun-list argument '発行や検証を担う基盤です。')"
+expect_tier verb-noun-list "$out" 1 abstract-verb
 out="$(check_text verb-kashika argument '実績の可視化を実現します。')"
 expect_tier verb-kashika "$out" 1 abstract-verb
 

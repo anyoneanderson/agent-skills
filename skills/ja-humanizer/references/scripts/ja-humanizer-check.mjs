@@ -245,7 +245,7 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
     if (CIRCULAR_CAUSE.test(text)) push(1, "circular-cause", line, "cause is the definition of the defect", { question: question("circular-cause") });
 
     for (const sentence of splitSentences(text)) {
-      const hasConcrete = CONCRETE_ACTION.test(sentence);
+      const hasConcrete = CONCRETE_ACTION.test(visibleText(sentence).replace(/\*\*/gu, ""));
       for (const term of ABSTRACT_VERBS) {
         if (term.pattern.test(sentence) && !hasConcrete) push(1, "abstract-verb", line, `abstract verb: ${term.label}`);
       }
