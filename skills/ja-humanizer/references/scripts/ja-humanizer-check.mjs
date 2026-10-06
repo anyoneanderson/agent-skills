@@ -4,25 +4,30 @@
 // It counts what a regular expression can count: label-plus-colon bullets,
 // runs of identical sentence endings, sentence-length uniformity, Tier 1
 // vocabulary, chained requests, causes that restate the symptom, generic
-// countermeasures, and a missing estimate next to a request to choose.
+// countermeasures, and a missing estimate next to a request to choose. It also
+// counts what spread in Japanese technical articles by 2026: calqued phrasing,
+// the words listed in vocabulary.json, dashes, bold and bullet density, and
+// summary or emoji headings.
 // Everything that needs judgement (whether a contrast corrects a real belief,
 // whether a sentence is thin for this reader) stays with the skill host.
 //
 // The "concrete action" allowance mirrors ~/.agents/hooks/language-lint.mjs:
 // a sentence that already names an operation (store, compare, send, reject,
-// stop ...) is not reported for an abstract verb.
+// stop ...) is not reported for an abstract verb. The operation must be used as
+// a verb (「検証する」「検証し」); the bare noun (「検証を担保する」) does not count.
 //
 // Usage:
 //   node ja-humanizer-check.mjs [--json] [--warn] [--mode article|mail|argument|narrative] FILE...
 //   cat text.md | node ja-humanizer-check.mjs [--json] [--warn]
 // Exit: 0 = no Tier 1 finding (or --warn) | 1 = Tier 1 finding present | 2 = usage error
 
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-const CONCRETE_ACTION = /保存|記録|格納|送信|通知|返却|返す|渡す|比較|計算|更新|削除|取得|読み込|書き込|呼び出|拒否|停止|検査|検証|変換|生成|作成|実行|公開|表示|追加|含め|判定|許可|設定|入力|出力|登録|接続|起動|終了|集計|測定|可視化|依頼|報告|確認/u;
+const CONCRETE_NOUN = "保存|記録|格納|送信|通知|返却|比較|計算|更新|削除|取得|拒否|停止|検査|検証|変換|生成|作成|実行|公開|表示|追加|判定|許可|設定|入力|出力|登録|接続|起動|終了|集計|測定|依頼|報告|確認";
+const CONCRETE_ACTION = new RegExp(`(?:${CONCRETE_NOUN})(?:する|し|され|させ|でき|す[るれ])|返[さしすせ]|渡[さしすせ]|読み込[まみむめん]|書き込[まみむめん]|呼び出[さしすせ]|含め[るてたまな]`, "u");
 const DISABLE_NEXT_LINE = /<!--\s*ja-humanizer-disable-next-line(?:\s+[^>]*)?-->/iu;
 
 // Tier 1 vocabulary. Each entry is reported unless the same sentence names a concrete action.
@@ -49,6 +54,26 @@ const STAGING = [
   { label: "同じ週に", pattern: /^同じ(?:週|日|月)に、?/u },
   { label: "賢さではなく", pattern: /(?:賢さ|速さ|数)ではなく[「『]?[^。]{1,12}[」』]?です/u },
 ];
+
+// Phrasing carried over from English (silently break, silently ignored, the moment ...). Tier 2.
+// 「静かに」 before the five verbs in STAGING stays a Tier 1 staging word and is not repeated here.
+const CALQUE = [
+  { label: "静かに＋動詞", pattern: /静かに(?!切り替わ|変わ|進|動|始ま|し|する|な[るっり])[ぁ-ん一-龠]/u },
+  { label: "黙って＋受身", pattern: /黙って[^。、]{0,12}?(?:され|られ|[かさたなまわ]れ)(?:る|ます|た|て|ない|ません)/u },
+  { label: "〜した瞬間", pattern: /[ただ]瞬間/u },
+];
+const VOCAB_MIN_DISTINCT = 3;
+const DASH_RUN = /(?<![0-9０-９])[—―]+(?![0-9０-９])/gu;
+const BOLD_SPAN = /\*\*[^*]+\*\*/gu;
+const BOLD_MIN_COUNT = 3;
+const BOLD_PER_1000 = 3;
+const BULLET_RATIO = 0.16;
+const BULLET_MIN_CHARS = 500;
+const TRIAD_PER_1000 = 1.0;
+const SUMMARY_HEADING = /まとめ|おわりに/u;
+const HEADING_EMOJI = /\p{Extended_Pictographic}/u;
+const BULLET_MARK = /^(?:[-*+]|[0-9]+[.)])\s+/u;
+const INCIDENT_SECTION = /経緯|事象|現象|発生|原因|要因|再発防止|対策|改善策|防止策/u;
 
 const THREAT_CLOSER = /(?:この(?:数字|数値|情報|実績)がないと|がなければ)[^。]*(?:できません|判断できない|手遅れ)|手遅れになります/u;
 
@@ -111,6 +136,33 @@ const QUESTIONS = {
   },
 };
 
+// vocabulary.json sits next to this file. Without it the vocabulary check is skipped, not failed.
+function loadVocabulary() {
+  try {
+    const data = JSON.parse(readFileSync(new URL("./vocabulary.json", import.meta.url), "utf8"));
+    return data.words
+      .filter((w) => w.detector === "vocab-density")
+      .map((w) => ({ ...w, regex: new RegExp(w.pattern, "u") }));
+  } catch (error) {
+    process.stderr.write(`JA_HUMANIZER_CHECK_WARN\tvocabulary.json could not be read; vocab-density is skipped (${error.code ?? error.message})\n`);
+    return [];
+  }
+}
+const VOCABULARY = loadVocabulary();
+
+// Text as the reader sees it: images and URLs dropped, links reduced to their label, tags removed.
+function visibleText(text) {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]*\)/gu, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/gu, "$1")
+    .replace(/https?:\/\/[^\s)）」]+/gu, "")
+    .replace(/<[^>]+>/gu, "");
+}
+
+function countChars(text) {
+  return visibleText(text).replace(BULLET_MARK, "").replace(/\*\*/gu, "").replace(/\s/gu, "").length;
+}
+
 function stripInlineCode(line) {
   return line.replace(/`[^`]*`/gu, "");
 }
@@ -129,13 +181,19 @@ function isSectionHeading(line) {
   return /^#{1,6}\s/u.test(line) || /^[・■●【]/u.test(line) || /^\S{1,20}[:：]$/u.test(line);
 }
 
-export function lintText(text, { source = "text", mode = "argument", lang = "ja" } = {}) {
+export function lintText(text, options = {}) {
+  return analyzeText(text, options).findings;
+}
+
+// Returns the findings and the counts behind the summary line (sentences and commas in body text).
+export function analyzeText(text, { source = "text", mode = "argument", lang = "ja" } = {}) {
   const findings = [];
   const lines = String(text).split(/\r?\n/u);
   let fenced = false;
   let inFrontmatter = false;
   let disableNext = false;
-  const prose = []; // { line, text }
+  let inList = false;
+  const prose = []; // { line, text, kind } kind: heading | bullet | quote | other | body
   const push = (tier, id, line, message, extra = {}) => {
     findings.push({ tier, id, source, line, message, ...extra });
   };
@@ -144,6 +202,11 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
   lines.forEach((raw, index) => {
     const lineNo = index + 1;
     const trimmed = raw.trim();
+    // Body text, bullets and the rest are told apart the way the source article of vocabulary.json does:
+    // a bullet is a line starting with -, *, + or "1." plus the indented lines that follow it.
+    const indented = /^(?: {2,}|\t)\S/u.test(raw);
+    const isBullet = BULLET_MARK.test(trimmed) || (inList && indented);
+    if (trimmed) inList = isBullet;
     if (index === 0 && trimmed === "---") { inFrontmatter = true; return; }
     if (inFrontmatter) { if (trimmed === "---") inFrontmatter = false; return; }
     if (/^(```|~~~)/u.test(trimmed)) { fenced = !fenced; return; }
@@ -153,7 +216,12 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
     const cleaned = stripInlineCode(raw).replace(/<!--.*?-->/gu, "").trim();
     if (!cleaned) return;
     if (/^\|.*\|$/u.test(cleaned)) return;
-    prose.push({ line: lineNo, text: cleaned });
+    let kind = "body";
+    if (/^#{1,6}\s/u.test(cleaned)) kind = "heading";
+    else if (/^(?:-{3,}|\*{3,}|_{3,})$/u.test(cleaned) || /^\[\^[^\]]+\]:/u.test(cleaned)) kind = "other";
+    else if (/^>/u.test(cleaned)) kind = "quote";
+    else if (isBullet) kind = "bullet";
+    prose.push({ line: lineNo, text: cleaned, kind });
   });
 
   // Line-level patterns.
@@ -166,6 +234,8 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
     if (/^#{1,6}\s/u.test(text)) {
       const heading = text.replace(/^#{1,6}\s+/u, "").replace(/[0-9０-９.．]+\s*/u, "");
       if (HEADING_AS_SENTENCE.test(heading)) push(2, "heading-sentence", line, "heading written as a sentence");
+      if (SUMMARY_HEADING.test(heading)) push(2, "summary-heading", line, "summary or closing heading (まとめ, おわりに)");
+      if (HEADING_EMOJI.test(heading)) push(2, "heading-emoji", line, "emoji in a heading");
     }
     if (TEMPLATE_OPENER.test(text)) push(2, "template-opener", line, "template opener");
     if (TEMPLATE_CLOSER.test(text)) push(2, "template-closer", line, "template closer");
@@ -181,6 +251,9 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
       }
       for (const term of STAGING) {
         if (term.pattern.test(sentence)) push(1, "staging", line, `staging word: ${term.label}`);
+      }
+      for (const term of CALQUE) {
+        if (term.pattern.test(sentence)) push(2, "calque", line, `calqued phrasing: ${term.label}`);
       }
       for (const term of CUSHION) {
         if (term.pattern.test(sentence)) push(1, "cushion", line, `cushion phrase: ${term.label}`);
@@ -278,18 +351,79 @@ export function lintText(text, { source = "text", mode = "argument", lang = "ja"
       if (run === 3) push(2, "uniform-endings", p[i].line, `same ending 「${b}」 three sentences in a row`);
     }
   }
-  const lengths = paragraphs.flat().map(({ s }) => s.length).filter((n) => n >= 8);
+  const lengths = paragraphs.flat().map(({ s }) => visibleText(s).length).filter((n) => n >= 8);
   if (lengths.length >= 8) {
     const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
     const sd = Math.sqrt(lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / lengths.length);
     const cv = mean === 0 ? 0 : sd / mean;
-    if (cv < 0.35) push(2, "uniform-length", 1, `sentence length coefficient of variation ${cv.toFixed(2)} (< 0.35)`);
+    if (cv < 0.35) push(3, "uniform-length", 1, `sentence length coefficient of variation ${cv.toFixed(2)} (< 0.35)`);
   }
   const triads = (whole.match(TRIAD) ?? []).length;
-  if (triads >= 2) push(2, "triad", 1, `"three" used ${triads} times as a structuring device`);
+  const wholeChars = prose.reduce((n, p) => n + countChars(p.text), 0);
+  const triadRate = wholeChars === 0 ? 0 : (triads / wholeChars) * 1000;
+  if (triads >= 2 && triadRate >= TRIAD_PER_1000) push(2, "triad", 1, `"three" used ${triads} times as a structuring device (${triadRate.toFixed(1)} per 1,000 characters)`);
+
+  // Vocabulary that spread by 2026: one word proves nothing, so report only when several distinct words appear.
+  const incidentReport = sections.some((s) => INCIDENT_SECTION.test(s.heading));
+  const vocabHits = [];
+  for (const word of VOCABULARY) {
+    if (word.skipIn === "incident-report" && incidentReport) continue;
+    const at = [];
+    for (const { line, text } of prose) {
+      let target = text;
+      for (const compound of word.exclude ?? []) target = target.split(compound).join("");
+      if (word.regex.test(target)) at.push(line);
+    }
+    if (at.length > 0) vocabHits.push({ word: word.word, category: word.category, lines: at });
+  }
+  if (vocabHits.length >= VOCAB_MIN_DISTINCT) {
+    vocabHits.sort((a, b) => a.lines[0] - b.lines[0]);
+    const list = vocabHits.map((h) => `${h.word}(${h.lines.join(",")})`).join(" ");
+    push(2, "vocab-density", vocabHits[0].lines[0], `${vocabHits.length} distinct words that spread by 2026, word(lines): ${list}`, { words: vocabHits });
+  }
+
+  // Dashes: a run of — or ― counts once; a dash between digits is a range.
+  const dashLines = [];
+  for (const { line, text } of prose) {
+    for (let i = (text.match(DASH_RUN) ?? []).length; i > 0; i -= 1) dashLines.push(line);
+  }
+  if (dashLines.length > 0) push(dashLines.length >= 2 ? 2 : 3, "dash", dashLines[0], `dash used ${dashLines.length} time(s)`);
+
+  // Bold and bullet density, measured on body text (not headings, quotes, tables or code).
+  const body = prose.filter((p) => p.kind === "body");
+  const bodyChars = body.reduce((n, p) => n + countChars(p.text), 0);
+  const bulletChars = prose.filter((p) => p.kind === "bullet").reduce((n, p) => n + countChars(p.text), 0);
+  if (mode === "article" || mode === "narrative") {
+    const boldLines = body.filter((p) => (p.text.match(BOLD_SPAN) ?? []).length > 0);
+    const bold = body.reduce((n, p) => n + (p.text.match(BOLD_SPAN) ?? []).length, 0);
+    const boldRate = bodyChars === 0 ? 0 : (bold / bodyChars) * 1000;
+    if (bold >= BOLD_MIN_COUNT && boldRate >= BOLD_PER_1000) {
+      push(2, "bold-density", boldLines[0].line, `${bold} bold spans in ${bodyChars} characters of body text (${boldRate.toFixed(1)} per 1,000)`);
+    }
+    const total = bodyChars + bulletChars;
+    if (total >= BULLET_MIN_CHARS && bulletChars / total >= BULLET_RATIO) {
+      const at = prose.find((p) => p.kind === "bullet").line;
+      push(2, "bullet-ratio", at, `bullets are ${Math.round((bulletChars / total) * 100)}% of the text (${bulletChars} of ${total} characters)`);
+    }
+  }
+
+  // Commas per sentence in body text. A line ending in 、 continues on the next line.
+  let sentences = 0;
+  let commas = 0;
+  let carry = "";
+  for (const { text } of body) {
+    const joined = carry + visibleText(text);
+    if (/[、，]$/u.test(joined)) { carry = joined; continue; }
+    carry = "";
+    for (const s of splitSentences(joined)) {
+      sentences += 1;
+      commas += (s.match(/[、，]/gu) ?? []).length;
+    }
+  }
+  if (carry) { sentences += 1; commas += (carry.match(/[、，]/gu) ?? []).length; }
 
   findings.sort((a, b) => a.tier - b.tier || a.line - b.line);
-  return findings;
+  return { findings, stats: { sentences, commas } };
 }
 
 export function summarize(findings) {
@@ -323,20 +457,27 @@ async function main() {
   const skip = new Set([modeIndex >= 0 ? modeIndex + 1 : -1, langIndex >= 0 ? langIndex + 1 : -1]);
   const files = args.filter((a, i) => !a.startsWith("--") && !skip.has(i));
   const findings = [];
+  const stats = { sentences: 0, commas: 0 };
+  const collect = (result) => {
+    findings.push(...result.findings);
+    stats.sentences += result.stats.sentences;
+    stats.commas += result.stats.commas;
+  };
   if (files.length === 0) {
-    findings.push(...lintText(await readStdin(), { source: "stdin", mode, lang }));
+    collect(analyzeText(await readStdin(), { source: "stdin", mode, lang }));
   } else {
     for (const file of files) {
-      findings.push(...lintText(await readFile(file, "utf8"), { source: file, mode, lang }));
+      collect(analyzeText(await readFile(file, "utf8"), { source: file, mode, lang }));
     }
   }
-  const s = summarize(findings);
+  const commasPerSentence = stats.sentences === 0 ? 0 : Number((stats.commas / stats.sentences).toFixed(2));
+  const s = { ...summarize(findings), commasPerSentence };
   const status = s.tier1 > 0 && !warn ? "FAIL" : "PASS";
   if (json) {
     process.stdout.write(`${JSON.stringify({ status, summary: s, findings }, null, 2)}\n`);
   } else {
     for (const f of findings) process.stdout.write(`${formatFinding(f)}\n`);
-    process.stdout.write(`JA_HUMANIZER_CHECK_SUMMARY\t${status}\ttier1=${s.tier1}\ttier2=${s.tier2}\ttier3=${s.tier3}\n`);
+    process.stdout.write(`JA_HUMANIZER_CHECK_SUMMARY\t${status}\ttier1=${s.tier1}\ttier2=${s.tier2}\ttier3=${s.tier3}\tcommas_per_sentence=${commasPerSentence.toFixed(2)}\n`);
   }
   process.exitCode = status === "FAIL" ? 1 : 0;
 }

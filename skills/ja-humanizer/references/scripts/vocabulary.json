@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "description": "Words that were rare in Japanese technical articles before generative AI and spread by 2026. ja-humanizer-check.mjs reads this file. A word is added only with a source that gives its frequency before and after, or with the writer's own editing record.",
+  "sources": {
+    "sakasegawa-2026": {
+      "title": "生成AI以前と以後でエンジニアの文章はどう変わったのか: Qiitaの7万記事を数えてみた話",
+      "author": "逆瀬川",
+      "url": "https://nyosegawa.com/posts/qiita-writing-before-after-ai/",
+      "measure": "Share of articles (percent) whose body text or bullets contain the word. before = August 2019 to 2022, after = August 2026.",
+      "limits": "August posts on Qiita only. The analysis does not separate text written by AI from a change in how people write."
+    }
+  },
+  "fields": {
+    "word": "Dictionary form, used in the report.",
+    "pattern": "Regular expression (u flag) matched against prose. Verbs list their conjugated stems.",
+    "exclude": "Compound words removed from the text before matching.",
+    "skipIn": "Document kind in which the word is not counted. incident-report = a text with an events, cause or countermeasure section.",
+    "detector": "vocab-density = counted toward the distinct-word total. calque = reported by the calque detector with its own context rule; listed here for the source only.",
+    "population": "excluding-ai-tags or including-ai-tags, as in the source table."
+  },
+  "words": [
+    { "word": "実測", "category": "verification", "pattern": "実測", "detector": "vocab-density", "observed": "2026", "before": 0.1, "after": 7.2, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "疑う", "category": "verification", "pattern": "疑[わいうえおっ]", "detector": "vocab-density", "observed": "2026", "before": 0.5, "after": 6.3, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "照合", "category": "verification", "pattern": "照合", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 4.5, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "見落とす", "category": "verification", "pattern": "見落と[さしすせそ]", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 4.1, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "突き合わせる", "category": "verification", "pattern": "突き合わ[せす]", "detector": "vocab-density", "observed": "2026", "before": 0.06, "after": 3.7, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "断定", "category": "verification", "pattern": "断定", "detector": "vocab-density", "observed": "2026", "before": 0.08, "after": 2.4, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "取り違える", "category": "verification", "pattern": "取り違え", "detector": "vocab-density", "observed": "2026", "before": 0.02, "after": 1.4, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+
+    { "word": "入口", "category": "place-metaphor", "pattern": "入り?口", "detector": "vocab-density", "observed": "2026", "before": 0.4, "after": 6.8, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "土台", "category": "place-metaphor", "pattern": "土台", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 5.5, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "道具", "category": "place-metaphor", "pattern": "道具", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 4.1, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "核心", "category": "place-metaphor", "pattern": "核心", "detector": "vocab-density", "observed": "2026", "before": 0.07, "after": 2.4, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "主役", "category": "place-metaphor", "pattern": "主役", "detector": "vocab-density", "observed": "2026", "before": 0.1, "after": 1.9, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "構図", "category": "place-metaphor", "pattern": "構図", "detector": "vocab-density", "observed": "2026", "before": 0.09, "after": 1.6, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "線引き", "category": "place-metaphor", "pattern": "線引き", "detector": "vocab-density", "observed": "2026", "before": 0.04, "after": 1.3, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+
+    { "word": "事故", "category": "failure", "pattern": "事故", "skipIn": "incident-report", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 6.8, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "混ざる", "category": "failure", "pattern": "混ざ[らりるれろっ]", "detector": "vocab-density", "observed": "2026", "before": 0.4, "after": 4.9, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "落とし穴", "category": "failure", "pattern": "落とし穴", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 4.0, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "破綻", "category": "failure", "pattern": "破綻", "detector": "vocab-density", "observed": "2026", "before": 0.2, "after": 2.7, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "実害", "category": "failure", "pattern": "実害", "detector": "vocab-density", "observed": "2026", "before": 0.08, "after": 1.4, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "素通り", "category": "failure", "pattern": "素通り", "detector": "vocab-density", "observed": "2026", "before": 0.04, "after": 1.1, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+
+    { "word": "切り分ける", "category": "metaphor-verb", "pattern": "切り分け", "detector": "vocab-density", "observed": "2026", "before": 0.5, "after": 5.2, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "潰す", "category": "metaphor-verb", "pattern": "潰[さしすせそ]", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 4.2, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "踏み込む", "category": "metaphor-verb", "pattern": "踏み込[まみむめもん]", "detector": "vocab-density", "observed": "2026", "before": 0.3, "after": 2.7, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "塞ぐ", "category": "metaphor-verb", "pattern": "塞[がぎぐげごい]", "detector": "vocab-density", "observed": "2026", "before": 0.04, "after": 1.5, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "溶かす", "category": "metaphor-verb", "pattern": "溶か[さしすせそ]", "detector": "vocab-density", "observed": "2026", "before": 0.1, "after": 1.3, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "逃がす", "category": "metaphor-verb", "pattern": "逃が[さしすせそ]", "detector": "vocab-density", "observed": "2026", "before": 0.01, "after": 1.2, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "倒す", "category": "metaphor-verb", "pattern": "倒[さしすせそ]", "detector": "vocab-density", "observed": "2026", "before": 0.2, "after": 1.1, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+
+    { "word": "既定", "category": "evaluation", "pattern": "既定", "exclude": ["既定値"], "detector": "vocab-density", "observed": "2026", "before": 0.5, "after": 7.1, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "別物", "category": "evaluation", "pattern": "別物", "detector": "vocab-density", "observed": "2026", "before": 0.4, "after": 5.5, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "定番", "category": "evaluation", "pattern": "定番", "detector": "vocab-density", "observed": "2026", "before": 0.5, "after": 3.6, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "要点", "category": "evaluation", "pattern": "要点", "detector": "vocab-density", "observed": "2026", "before": 0.5, "after": 3.2, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "素朴", "category": "evaluation", "pattern": "素朴", "detector": "vocab-density", "observed": "2026", "before": 0.2, "after": 2.7, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "定石", "category": "evaluation", "pattern": "定石", "detector": "vocab-density", "observed": "2026", "before": 0.1, "after": 1.8, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "桁違い", "category": "evaluation", "pattern": "桁違い", "detector": "vocab-density", "observed": "2026", "before": 0.05, "after": 1.1, "population": "excluding-ai-tags", "source": "sakasegawa-2026" },
+
+    { "word": "効く", "category": "frequent-2026", "pattern": "効[かきくい]", "detector": "vocab-density", "observed": "2026", "before": 2.0, "after": 22.3, "population": "including-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "壊れる", "category": "frequent-2026", "pattern": "壊れ", "detector": "vocab-density", "observed": "2026", "before": 0.8, "after": 13.1, "population": "including-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "境界", "category": "frequent-2026", "pattern": "境界", "exclude": ["境界値", "境界条件"], "detector": "vocab-density", "observed": "2026", "before": 1.0, "after": 12.8, "population": "including-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "正本", "category": "frequent-2026", "pattern": "正本", "detector": "vocab-density", "observed": "2026", "before": 0.0, "after": 1.7, "population": "including-ai-tags", "source": "sakasegawa-2026" },
+
+    { "word": "瞬間", "category": "calque", "pattern": "[ただ]瞬間", "detector": "calque", "observed": "2026", "before": 0.9, "after": 13.7, "population": "including-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "静か", "category": "calque", "pattern": "静かに", "detector": "calque", "observed": "2026", "before": 0.1, "after": 4.9, "population": "including-ai-tags", "source": "sakasegawa-2026" },
+    { "word": "黙って", "category": "calque", "pattern": "黙って", "detector": "calque", "observed": "2026", "before": 0.1, "after": 3.4, "population": "including-ai-tags", "source": "sakasegawa-2026" }
+  ]
+}
