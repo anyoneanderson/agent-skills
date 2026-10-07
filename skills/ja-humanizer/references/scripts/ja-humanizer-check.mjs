@@ -7,7 +7,10 @@
 // countermeasures, and a missing estimate next to a request to choose. It also
 // counts what spread in Japanese technical articles by 2026: calqued phrasing,
 // the words listed in vocabulary.json, dashes, bold and bullet density, and
-// summary or emoji headings.
+// summary or emoji headings. With --voice it measures the rhythm of the draft
+// against the writer's sample, and it reports three forms that pattern words
+// miss: sentences closing on a denial, sections closing on the same predicate,
+// and a comparison that never says what changes for the reader.
 // Everything that needs judgement (whether a contrast corrects a real belief,
 // whether a sentence is thin for this reader) stays with the skill host.
 //
@@ -17,7 +20,7 @@
 // a verb (「検証する」「検証し」); the bare noun (「検証を担保する」) does not count.
 //
 // Usage:
-//   node ja-humanizer-check.mjs [--json] [--warn] [--mode article|mail|argument|narrative] FILE...
+//   node ja-humanizer-check.mjs [--json] [--warn] [--mode article|mail|argument|narrative] [--voice SAMPLE] FILE...
 //   cat text.md | node ja-humanizer-check.mjs [--json] [--warn]
 // Exit: 0 = no Tier 1 finding (or --warn) | 1 = Tier 1 finding present | 2 = usage error
 
@@ -77,6 +80,38 @@ const HEADING_EMOJI = /\p{Extended_Pictographic}/u;
 const BULLET_MARK = /^(?:[-*+]|[0-9]+[.)])\s+/u;
 const INCIDENT_SECTION = /経緯|事象|現象|発生|原因|要因|再発防止|対策|改善策|防止策/u;
 
+// Rhythm against the writer's sample (--voice). A sentence ends at 「。」; shorter than 8 characters is dropped.
+// A connective sentence joins clauses with a conjunctive particle right before a comma.
+const CONNECTIVE = /(?:が|ので|ため|ば|なら|し|り|て|で|ず|つつ|ながら|とき|場合|ものの|一方)、/u;
+const LONG_SENTENCE = 80;
+const RHYTHM_MIN_DRAFT = 8;
+const RHYTHM_MIN_VOICE = 5;
+const RHYTHM_LENGTH_RATIO = 0.75;
+const RHYTHM_CONNECTIVE_GAP = 0.2;
+const VOICE_FIELD = /^(?:出典|特徴|用途|書いた時期|書き方|文種)[:：]/u;
+const VOICE_AI_DRAFT = /^書き方[:：].*AI/u;
+// A sentence that closes by denying a reading (「〜という意味ではない」「〜わけではない」「〜という分類ではない」).
+// A count of candidates: a legitimate denial (「必須ではない」 in an FAQ) matches too.
+const NEGATION_CLOSER = /(?:では(?:ない|ありません)|とは限(?:らない|りません))。?$/u;
+const NEGATION_MIN_COUNT = 2;
+const NEGATION_PER_1000 = 1.0;
+// The predicate a section ends on. Three sections ending on the same one is a template.
+const SECTION_CLOSERS = [
+  { label: "注意", pattern: /注意(?:する|します|したい|しておきたい|してください|が必要(?:だ|です|である)?)。?$/u },
+  { label: "必要がある", pattern: /必要が(?:ある|あります)。?$/u },
+  { label: "〜したい", pattern: /たい(?:と思う|と思います)?。?$/u },
+  { label: "ことになる", pattern: /ことにな(?:る|ります)。?$/u },
+];
+const SECTION_CLOSER_MIN = 3;
+// A comparison announced by its heading: 「A と B の違い／比較／使い分け／選び方」「A か B か」「A と B、どちら」.
+const COMPARISON_HEADING = /\S\s*(?:と|や|、|vs\.?)\s*\S.*(?:の(?:違い|比較|使い分け|選び方)|どちら)/u;
+// 「A か B か」 counts only between noun phrases: 「どこから取得するか」 is a question, not a choice of two.
+const NOUN_END = "[一-龠ァ-ヶーA-Za-z0-9）)]";
+const EITHER_OR_HEADING = new RegExp(`${NOUN_END}\\s*か(?!ら)[\\s、]*\\S*${NOUN_END}\\s*か[?？]?$`, "u");
+const INTERROGATIVE = /どこ|何|なに|いつ|どう|なぜ|どれ|どの|どんな|誰|だれ/u;
+const isComparisonHeading = (heading) => COMPARISON_HEADING.test(heading) || (EITHER_OR_HEADING.test(heading) && !INTERROGATIVE.test(heading));
+const CONSEQUENCE = /言語|速度|速[いくさ]|遅[いくさ]|性能|コスト|費用|工数|手間|制約|制限|オーバーヘッド|保守|運用|依存|安全|セキュリティ|向[くいかけ]|互換/u;
+
 const THREAT_CLOSER = /(?:この(?:数字|数値|情報|実績)がないと|がなければ)[^。]*(?:できません|判断できない|手遅れ)|手遅れになります/u;
 
 const CUSHION = [
@@ -131,6 +166,14 @@ const QUESTIONS = {
   "generic-measure": {
     ja: "対策が一般語だけです。原因のどの工程に、どんな条件で、何を追加するのかを教えてください。",
     en: "The countermeasure is generic words only. Which step of the cause does it close, under what trigger, by adding what?",
+  },
+  "section-closer-repeat": {
+    ja: "節の終わりが同じ型で続いています。この節で読み手に言いたい結論は何ですか。",
+    en: "Sections keep closing on the same form. What is the conclusion you want the reader to take from this section?",
+  },
+  "comparison-without-consequence": {
+    ja: "この違いで、読み手の選択は何が変わりますか。",
+    en: "What does this difference change in the reader's choice?",
   },
   "missing-estimate": {
     ja: "相手に選択を求めていますが、日数か期限がありません。見込みを教えてください。",
@@ -187,20 +230,15 @@ export function lintText(text, options = {}) {
   return analyzeText(text, options).findings;
 }
 
-// Returns the findings and the counts behind the summary line (sentences and commas in body text).
-export function analyzeText(text, { source = "text", mode = "argument", lang = "ja" } = {}) {
-  const findings = [];
+// Splits a text into prose lines, skipping frontmatter, fenced code, tables and disabled lines.
+// kind: heading | bullet | quote | other | body.
+function collectProse(text) {
   const lines = String(text).split(/\r?\n/u);
   let fenced = false;
   let inFrontmatter = false;
   let disableNext = false;
   let inList = false;
-  const prose = []; // { line, text, kind } kind: heading | bullet | quote | other | body
-  const push = (tier, id, line, message, extra = {}) => {
-    findings.push({ tier, id, source, line, message, ...extra });
-  };
-  const question = (id) => (QUESTIONS[id] ? QUESTIONS[id][lang === "en" ? "en" : "ja"] : undefined);
-
+  const prose = [];
   lines.forEach((raw, index) => {
     const lineNo = index + 1;
     const trimmed = raw.trim();
@@ -225,6 +263,82 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
     else if (isBullet) kind = "bullet";
     prose.push({ line: lineNo, text: cleaned, kind });
   });
+  return prose;
+}
+
+// What the reader sees of a line: link labels kept, URLs, tags and bold markers gone.
+function shownText(text) {
+  return visibleText(text).replace(/\*\*/gu, "");
+}
+
+// Body lines as running text: a line that ends in 、 continues on the next line, so a sentence wrapped
+// after a comma is measured as one sentence. Both the comma count and the rhythm figures use this.
+function joinWrapped(entries) {
+  const out = [];
+  let carry = "";
+  for (const { text } of entries) {
+    const joined = carry + shownText(text);
+    if (/[、，]$/u.test(joined)) { carry = joined; continue; }
+    carry = "";
+    out.push(joined);
+  }
+  if (carry) out.push(carry);
+  return out;
+}
+
+function rhythmSentences(entries) {
+  const out = [];
+  for (const text of joinWrapped(entries)) {
+    for (const s of text.split(/(?<=。)/u)) {
+      const t = s.trim();
+      if (t.length >= 8) out.push(t);
+    }
+  }
+  return out;
+}
+
+function rhythmOf(sentences) {
+  const n = sentences.length;
+  if (n === 0) return { sentences: 0, meanLength: 0, longRatio: 0, connectiveRatio: 0 };
+  return {
+    sentences: n,
+    meanLength: Number((sentences.reduce((a, s) => a + s.length, 0) / n).toFixed(1)),
+    longRatio: Number((sentences.filter((s) => s.length >= LONG_SENTENCE).length / n).toFixed(2)),
+    connectiveRatio: Number((sentences.filter((s) => CONNECTIVE.test(s)).length / n).toFixed(2)),
+  };
+}
+
+// Reads a voice sample. An excerpt runs from one 「## 」 heading to the next; deeper headings stay inside
+// it. The lines before the first 「## 」 are a preamble and are not measured, and neither are the field
+// lines (出典, 書いた時期, 書き方, 文種 ...). 「書き方: AI ...」 removes the whole excerpt it sits in; in the
+// preamble it removes every excerpt. A sample with no 「## 」 heading is one excerpt.
+export function readVoice(text) {
+  const prose = collectProse(text);
+  const isExcerptHeading = (p) => p.kind === "heading" && /^##\s/u.test(p.text);
+  const hasExcerpts = prose.some(isExcerptHeading);
+  const preamble = [];
+  const excerpts = [];
+  let current = hasExcerpts ? preamble : [];
+  if (!hasExcerpts) excerpts.push(current);
+  for (const p of prose) {
+    if (isExcerptHeading(p)) { current = []; excerpts.push(current); continue; }
+    current.push(p);
+  }
+  const aiDraft = (entries) => entries.some((p) => VOICE_AI_DRAFT.test(p.text));
+  const entries = aiDraft(preamble)
+    ? []
+    : excerpts.filter((e) => !aiDraft(e)).flat().filter((p) => p.kind === "body" && !VOICE_FIELD.test(p.text));
+  return rhythmOf(rhythmSentences(entries));
+}
+
+// Returns the findings and the counts behind the summary line (sentences and commas in body text).
+export function analyzeText(text, { source = "text", mode = "argument", lang = "ja", voice = null } = {}) {
+  const findings = [];
+  const prose = collectProse(text);
+  const push = (tier, id, line, message, extra = {}) => {
+    findings.push({ tier, id, source, line, message, ...extra });
+  };
+  const question = (id) => (QUESTIONS[id] ? QUESTIONS[id][lang === "en" ? "en" : "ja"] : undefined);
 
   // Line-level patterns.
   for (const { line, text } of prose) {
@@ -415,20 +529,76 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
   // Commas per sentence in body text. A line ending in 、 continues on the next line.
   let sentences = 0;
   let commas = 0;
-  let carry = "";
-  for (const { text } of body) {
-    const joined = carry + visibleText(text);
-    if (/[、，]$/u.test(joined)) { carry = joined; continue; }
-    carry = "";
-    for (const s of splitSentences(joined)) {
+  for (const text of joinWrapped(body)) {
+    for (const sent of splitSentences(text)) {
       sentences += 1;
-      commas += (s.match(/[、，]/gu) ?? []).length;
+      commas += (sent.match(/[、，]/gu) ?? []).length;
     }
   }
-  if (carry) { sentences += 1; commas += (carry.match(/[、，]/gu) ?? []).length; }
+
+  // Sentences that close by denying a reading nobody has been shown to hold.
+  const negationLines = [];
+  for (const p of prose) {
+    if (p.kind !== "body" && p.kind !== "bullet") continue;
+    for (const s of splitSentences(shownText(p.text))) if (NEGATION_CLOSER.test(s)) negationLines.push(p.line);
+  }
+  const negationRate = wholeChars === 0 ? 0 : (negationLines.length / wholeChars) * 1000;
+  if (negationLines.length >= NEGATION_MIN_COUNT && negationRate >= NEGATION_PER_1000) {
+    push(2, "negation-closer", negationLines[0], `${negationLines.length} sentences close on a denial (${negationRate.toFixed(1)} per 1,000 characters), lines: ${negationLines.join(",")}; candidates, since a needed denial matches too`);
+  }
+
+  // Markdown sections: the last body sentence of each, and comparisons announced by the heading.
+  const mdSections = [];
+  let open = null;
+  for (const p of prose) {
+    if (p.kind === "heading") {
+      open = { heading: p.text.replace(/^#{1,6}\s+/u, ""), level: p.text.match(/^#+/u)[0].length, line: p.line, body: [], scope: [] };
+      mdSections.push(open);
+    } else if (open && p.kind === "body") {
+      open.body.push(p);
+    }
+    // scope: everything under the heading down to the next heading of the same or a higher level.
+    for (const sec of mdSections) {
+      if (sec.closed || sec === open) continue;
+      if (p.kind === "heading" && open.level <= sec.level) sec.closed = true;
+      else sec.scope.push(p);
+    }
+    if (open && p.kind !== "heading") open.scope.push(p);
+  }
+  for (const closer of SECTION_CLOSERS) closer.lines = [];
+  for (const sec of mdSections) {
+    const last = sec.body[sec.body.length - 1];
+    if (!last) continue;
+    const sentence = splitSentences(shownText(last.text)).pop() ?? "";
+    const hit = SECTION_CLOSERS.find((c) => c.pattern.test(sentence));
+    if (hit) hit.lines.push(last.line);
+  }
+  for (const closer of SECTION_CLOSERS) {
+    if (closer.lines.length >= SECTION_CLOSER_MIN) {
+      push(2, "section-closer-repeat", closer.lines[0], `${closer.lines.length} sections end on 「${closer.label}」, lines: ${closer.lines.join(",")}`, { question: question("section-closer-repeat") });
+    }
+  }
+  for (const sec of mdSections) {
+    const said = sec.scope.filter((p) => p.kind === "body" || p.kind === "bullet" || p.kind === "heading");
+    if (!isComparisonHeading(sec.heading) || !said.some((p) => p.kind !== "heading")) continue;
+    if (!CONSEQUENCE.test(said.map((p) => shownText(p.text)).join("\n"))) {
+      // Tier 2: the word list cannot cover every way of stating a consequence, so this asks; it does not fail the run.
+      push(2, "comparison-without-consequence", sec.line, "the section compares two things but never says what changes for the reader (language, speed, cost, effort, constraint, operation, safety, fit)", { question: question("comparison-without-consequence") });
+    }
+  }
+
+  // Rhythm against the writer's sample.
+  const rhythmList = rhythmSentences(body);
+  const rhythm = rhythmOf(rhythmList);
+  if (voice && rhythm.sentences >= RHYTHM_MIN_DRAFT && voice.sentences >= RHYTHM_MIN_VOICE) {
+    const reasons = [];
+    if (rhythm.meanLength < voice.meanLength * RHYTHM_LENGTH_RATIO) reasons.push(`mean sentence length ${rhythm.meanLength} against ${voice.meanLength} in the sample`);
+    if (voice.connectiveRatio - rhythm.connectiveRatio >= RHYTHM_CONNECTIVE_GAP) reasons.push(`sentences joined by a connective ${Math.round(rhythm.connectiveRatio * 100)}% against ${Math.round(voice.connectiveRatio * 100)}% in the sample`);
+    if (reasons.length > 0) push(2, "rhythm-mismatch", body[0].line, reasons.join("; "));
+  }
 
   findings.sort((a, b) => a.tier - b.tier || a.line - b.line);
-  return { findings, stats: { sentences, commas } };
+  return { findings, stats: { sentences, commas, rhythmSentences: rhythmList } };
 }
 
 export function summarize(findings) {
@@ -459,30 +629,49 @@ async function main() {
     process.stderr.write("JA_HUMANIZER_CHECK_USAGE\t--mode must be article|mail|argument|narrative\n");
     process.exit(2);
   }
-  const skip = new Set([modeIndex >= 0 ? modeIndex + 1 : -1, langIndex >= 0 ? langIndex + 1 : -1]);
+  const voiceIndex = args.indexOf("--voice");
+  let voice = null;
+  if (voiceIndex >= 0) {
+    try {
+      voice = readVoice(await readFile(args[voiceIndex + 1] ?? "", "utf8"));
+    } catch (error) {
+      process.stderr.write(`JA_HUMANIZER_CHECK_USAGE\t--voice needs a readable sample file (${error.code ?? error.message})\n`);
+      process.exit(2);
+    }
+  }
+  const skip = new Set([modeIndex >= 0 ? modeIndex + 1 : -1, langIndex >= 0 ? langIndex + 1 : -1, voiceIndex >= 0 ? voiceIndex + 1 : -1]);
   const files = args.filter((a, i) => !a.startsWith("--") && !skip.has(i));
   const findings = [];
-  const stats = { sentences: 0, commas: 0 };
+  const stats = { sentences: 0, commas: 0, rhythmSentences: [] };
   const collect = (result) => {
     findings.push(...result.findings);
     stats.sentences += result.stats.sentences;
     stats.commas += result.stats.commas;
+    stats.rhythmSentences.push(...result.stats.rhythmSentences);
   };
   if (files.length === 0) {
-    collect(analyzeText(await readStdin(), { source: "stdin", mode, lang }));
+    collect(analyzeText(await readStdin(), { source: "stdin", mode, lang, voice }));
   } else {
     for (const file of files) {
-      collect(analyzeText(await readFile(file, "utf8"), { source: file, mode, lang }));
+      collect(analyzeText(await readFile(file, "utf8"), { source: file, mode, lang, voice }));
     }
   }
   const commasPerSentence = stats.sentences === 0 ? 0 : Number((stats.commas / stats.sentences).toFixed(2));
   const s = { ...summarize(findings), commasPerSentence };
+  // With --voice, the summary carries draft/sample pairs for the three rhythm figures.
+  let rhythmFields = "";
+  if (voice) {
+    const draft = rhythmOf(stats.rhythmSentences);
+    s.rhythm = { draft, voice };
+    const pct = (x) => `${Math.round(x * 100)}%`;
+    rhythmFields = `\tmean_sentence_length=${draft.meanLength}/${voice.meanLength}\tlong_sentences=${pct(draft.longRatio)}/${pct(voice.longRatio)}\tconnective_sentences=${pct(draft.connectiveRatio)}/${pct(voice.connectiveRatio)}`;
+  }
   const status = s.tier1 > 0 && !warn ? "FAIL" : "PASS";
   if (json) {
     process.stdout.write(`${JSON.stringify({ status, summary: s, findings }, null, 2)}\n`);
   } else {
     for (const f of findings) process.stdout.write(`${formatFinding(f)}\n`);
-    process.stdout.write(`JA_HUMANIZER_CHECK_SUMMARY\t${status}\ttier1=${s.tier1}\ttier2=${s.tier2}\ttier3=${s.tier3}\tcommas_per_sentence=${commasPerSentence.toFixed(2)}\n`);
+    process.stdout.write(`JA_HUMANIZER_CHECK_SUMMARY\t${status}\ttier1=${s.tier1}\ttier2=${s.tier2}\ttier3=${s.tier3}\tcommas_per_sentence=${commasPerSentence.toFixed(2)}${rhythmFields}\n`);
   }
   process.exitCode = status === "FAIL" ? 1 : 0;
 }

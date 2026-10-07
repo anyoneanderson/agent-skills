@@ -299,6 +299,42 @@ Refs #NNN
 
 Expected detections: "implementation-log residue" and label-plus-colon in the before text; no Tier 1 finding in the after text.
 
+## A Comparison Without Its Consequence (article, API platform versus SDK)
+
+From the section 「API基盤とSDKの違い」 of the article 「DID/VCは何を使って実装する？主要OSSの開発元、導入事例、選び方」. The before is the version an AI wrote and ja-humanizer processed; the after is the paragraph the writer rewrote on seeing it, kept as written, slips included.
+
+### before
+
+```text
+API基盤を使う場合、業務システムから「この内容の証明を発行してほしい」とHTTPなどで依頼する。
+証明の組み立てやウォレットとの通信を、その基盤に任せる構成だ。
+既存の業務システムがJavaでもPythonでも、共通のAPIを呼び出して組み合わせやすい。
+
+SDKはSoftware Development Kitの略で、アプリに組み込むライブラリや開発用の道具を指す。
+自分のプログラムから、鍵の生成や証明の受領・提示などの処理を呼び出す。
+利用者が操作する画面やデータの保存方法を、自分のアプリに合わせて作りたい場合の候補になる。
+
+APIがあるからサーバー専用、SDKだからウォレット専用、という分類ではない。
+walt.idにもライブラリとスマホアプリがあり、Procivisにも組み込み用SDKがある。
+CredoやMultipazを使ってサーバー側を作ることもできるので、まずは「今回どの入口から使うか」で整理するとよい。
+```
+
+### after
+
+```text
+API基盤であれば、業務システムからHTTPなどでAPIを呼び出して証明の作成やウォレットとの通信を依頼するため、既存のシステムのプログラミング言語を選ばず利用することが可能だ。一方、SDK（Software Development Kit）はアプリに組み込んで使うライブラリや開発用の道具で、鍵の生成や証明の受領・提示などを自分のプログラムから呼び出し、画面や保存方法をアプリに合わせて実装する際に使うもので、組み込む側のプログラミング言語と基本的には同じものを選ぶことが必要であるが、API通信のオーバーヘッドがないため、実行速度や通信条件、トランザクションなどの考慮がよりAPIよりも少ない。
+
+また、各OSSはAPIとSDKのどちらか一方だけを提供しているわけではないのもややこしいところではあるが注意したい。例えばwalt.idにはライブラリやスマホアプリがあり、Procivisにも組み込み用のSDKがある。またCredoやMultipazでサーバー側を実装することもできるため、選定する際は、自分たちが作るシステムのどの処理に使うのかを考える必要がある。要するに、まだこのDID/VCという世界ではとりあえず、これを使えという決定的なOSSはまだ出ていないというのが2026年10月現在では現状である。
+```
+
+### Classification
+
+- Ask: what changes for the person choosing. The after adds that an API platform leaves the existing system's language free, that an SDK must match the language of the application it is embedded in, and that without the overhead of API calls there is less to consider about speed and network conditions. None of this is in the before, so the skill does not add it and asks "What does this difference change in the reader's choice?"
+- Automatic: join short sentences related by reason or consequence into one (the norm "Joining Sentences"). The before uses nine sentences; the after covers the same ground in six.
+- Writer's judgement: how the paragraph closes. The before ends on a denial (「〜という分類ではない」) and a tip (「〜で整理するとよい」); the after ends on the writer's own verdict (「要するに〜が現状である」). The skill does not make up a verdict; it asks "What is the conclusion you want the reader to take from this section?"
+
+Expected detection: `comparison-without-consequence` on the before with its heading (`scripts/tests/fixtures/compare-before.md`), plus `rhythm-mismatch` when the after is passed as `--voice`. This section alone has one denial closer and one section, so `negation-closer` and `section-closer-repeat` are not reported. The after (`article-confirmed.md`) reports none of the four.
+
 ## Unverified Facts in a First Draft (from the A/B comparison)
 
 The same prompt was given twice: once with the old norm alone, once with ja-humanizer. The ja-humanizer version had no wording or structure problems (the checker reported zero at every tier) and stated, unprompted and with confidence, facts that were not in the request. The writer confirmed the following two sentences to be wrong or unverified.

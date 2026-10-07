@@ -124,6 +124,10 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Bold density | In articles and narratives, three or more bold spans in body text that also make three or more per 1,000 characters | Keep bold for a first definition and for a fact that changes the reader's decision |
 | Bullet ratio | In articles and narratives (body text plus bullets of 500 characters or more), bullets make up 16% or more of the characters | Turn bullets that are not steps, options or checklists back into paragraphs, and write how the items relate |
 | Emoji in headings | A heading carries an emoji (「## ✅ 設定の確認」) | Remove the emoji |
+| A comparison without its consequence | A section headed 「A と B の違い」, 「A と B の比較」 or 「A か B か」 sets two descriptions side by side and never says what changes for the person choosing (usable language, speed, cost, effort, constraints, operation, safety, compatibility, which one fits). The checker picks the section by the form of its heading and reports when no consequence word appears in its body text, bullets or subsections. A section that states the consequence in words outside the list is reported too, so read it as a candidate. A heading with a question word (「どこから取得するか」) and a comparison inside a paragraph opened by 「一方」 or 「に対し」 are not checked | The skill does not add the consequence. Ask "What does this difference change in the reader's choice?" and write it once the answer arrives. Leave the section alone when the consequence is already there. See "A Comparison Without Its Consequence" in `examples.md` |
+| Denial closers | Two or more sentences end in 「〜ではない」, 「〜わけではない」 or 「〜とは限らない」, at one or more per 1,000 characters. A needed denial (「必須ではない」 in an FAQ) is counted too, so confirm each one | Delete the denial of a view nobody holds and keep the fact. If the previous sentence already explained it, delete the sentence. Keep a denial that corrects a belief the reader actually holds |
+| Repeated section closers | The last sentence of three or more sections takes the same form among 「〜必要がある」, 「〜したい」, 「〜ことになる」, 「〜に注意する」 | Do not just delete the caution; put the verdict the writer reached in that section. When the material holds none, ask "What is the conclusion you want the reader to take from this section?" The skill does not make up a verdict |
+| Rhythm away from the sample | With a sample passed to the checker by `--voice`, the draft's mean sentence length is below 0.75 times the sample's, or its share of sentences joining clauses with a conjunctive particle is 20 points or more below the sample's. The sample is measured on the body text of each excerpt under a 「## 」 heading; the preamble, field lines and excerpts whose 書き方 says AI are not measured | Follow "Joining Sentences" in the norms: join sentences related by reason, condition, concession or consequence. Do not join unrelated sentences |
 
 ## Tier 3 (never fix alone)
 
@@ -152,7 +156,7 @@ Fix only when a Tier 1 or Tier 2 pattern shares the paragraph. People use these 
 
 ## Question Types
 
-Questions are limited to gaps the rewrite cannot close without an answer. Fix wording and staging first; then, for what remains of "thin sentence", "cause that restates the symptom", "countermeasure of generic words" and "a request to choose between listed options with no duration", return the matching question from the five below. Whether a deadline or a number is needed depends on the request, not on the template. Questions are written in the caller's language.
+Questions are limited to gaps the rewrite cannot close without an answer. Fix wording and staging first; then, for what remains of "thin sentence", "cause that restates the symptom", "countermeasure of generic words", "a request to choose between listed options with no duration", "a comparison without its consequence" and "repeated section closers", return the matching question from the seven below. Whether a deadline or a number is needed depends on the request, not on the template. Questions are written in the caller's language.
 
 | Missing | Question |
 |---|---|
@@ -161,6 +165,8 @@ Questions are limited to gaps the rewrite cannot close without an answer. Fix wo
 | Why it happens | "In one sentence, what is the mechanism that makes this happen?" |
 | Who does it where | "Who performs this check, in which environment? Is there anything you are asking the other party to do?" |
 | When it ends | "Is there an estimated number of days or a deadline? The recipient needs it to choose." |
+| Consequence of a comparison | "What does this difference change in the reader's choice?" |
+| Conclusion of a section | "What is the conclusion you want the reader to take from this section?" |
 
 If a question goes unanswered, delete the sentence or strip the evaluative words and keep only the facts. Never fill the gap by guessing.
 
@@ -182,5 +188,7 @@ Statements present in the request, the material handed over, or the voice sample
 The Tier 2 fingerprints draw on the classifications in blader/humanizer v3 (MIT), gonta223/humanizer-ja (MIT) and sahksas/human-writing-ja, minus the items that misfire in Japanese (hyphens, quotation marks). Tier 1 was extracted from the writer's own editing records.
 
 Calqued phrasing, vocabulary density, dashes, bold density, bullet ratio, the 「まとめ」 heading and emoji in headings come from an analysis that compared about 70,000 Qiita articles posted each August, before generative AI (2019 to 2022) and in 2026 ([Sakasegawa, 2026](https://nyosegawa.com/posts/qiita-writing-before-after-ai/)). Dashes rose from 0.04 to 0.43 per 1,000 characters, bold from 1.26 to 3.83, the bullet ratio from 8.9% to 16.4%, articles with a 「まとめ」 heading from 12% to 52%, and articles with an emoji in a heading from 0.9% to 5.9%. Body text and bullets are told apart as in Appendix A of that article. The analysis covers August posts on Qiita only and does not separate text written by AI from a change in how people write, so the thresholds are initial values set after confirming that the writer's own text is not reported.
+
+Denial closers, repeated section closers, the comparison without its consequence and rhythm away from the sample come from comparing one explanatory article written by AI with the paragraph its writer rewrote. That is a single pair, so they are candidates; the thresholds are to be revisited when the next edit yields another pair.
 
 The vocabulary list lives in `references/scripts/vocabulary.json` with the word, its category, when it was observed, the share of articles before AI and in 2026, and the source. A word is added only with a source that shows its frequency before and after, or with the writer's own editing record.
