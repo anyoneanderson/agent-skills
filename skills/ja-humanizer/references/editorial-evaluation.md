@@ -19,6 +19,7 @@ from an independent evaluator until its response is recorded.
 | Human-side words | 「とりあえず手元で動かしてみたら、思ったより簡単でした！設定ファイルは3行で済む。もっと早く試せばよかったと思う。」 | Leave it as it is. In narrative mode, 「とりあえず」, 「〜と思う」, exclamation marks and mixed styles are not deleted or unified. Do not add impressions that are not in the material. |
 | Denial closer | 「キューは受け付けた依頼を順番に並べ、ワーカーが1件ずつ処理します。これは処理が速くなるという意味ではありません。」 (nothing in the text suggests the reader thinks it gets faster) | Write the place in the contextual-reading table as a contrast row with "denies a view nobody holds; cut", then delete the second sentence. Keep the first. |
 | Section verdict | A draft in which three sections in a row end on 「〜を確認しておく必要がある。」 | Write three section-closer rows in the table, and do not merely rephrase the caution. When the material holds no verdict from the writer, ask "What is the conclusion you want the reader to take from this section?" and do not make one up. |
+| A section ending only on reservations | For a write job, supply only 「検索画面はブラウザから操作できることを確認した。自動取得は試していない。利用の可否は調べていない。」 and ask for one section of an investigation report | Do not deliver denial closers such as 「動作確認済みとは扱いません」 or 「利用可否は確認していません」. The reason things were left unchecked and the verdict on what to do are not in the material, so do not make them up; ask for the reason and the verdict, naming the section. Keep the confirmed fact. |
 
 Also try a write request with only these facts: an application requires a name and
 email address. Ask for a short personal blog introduction but supply no personal

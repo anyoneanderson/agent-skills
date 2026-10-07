@@ -72,6 +72,12 @@ Join sentences that are related, and write the relation into the sentence.
 - Do not cancel again, with a sentence-final denial (「〜という意味ではない」「〜わけではない」), what the previous sentence already explained. Keep a denial only where it corrects a belief the reader actually holds.
 - After comparing two things, say what the difference changes for the person choosing (usable language, speed, cost, effort, constraints). When the material does not say, do not add it; ask "What does this difference change in the reader's choice?"
 
+## Unchecked Things and Reservations
+
+- Do not end what was not checked on a denial (「〜は確認していません」「〜とは扱いません」「〜は示せません」). Write what was not done, why not, and what is known instead. 「動作確認済みとは扱いません」 becomes 「（確認した範囲）までを確認しましたが、（しなかった作業）は具体的な開発作業が必要なので実施しませんでした」. When the material gives no reason, do not make one up; ask the writer.
+- Tell reservations apart. Write a denial of the possibility itself (「〜できません」) only when the text gives its grounds. A conjecture that is the writer's own judgement (「〜と考えます」「〜ようです」「〜必要がありそうです」「〜と判断します」) shows who is judging, so do not delete it as "a conjecture that weakens a claim without grounds".
+- In an investigation report or a design document, keep only the facts the reader (the person deciding) needs and the writer's judgements. A section that does not change the reader's decision is cut or reduced to one sentence, even when it answers a completion criterion of the request or the Issue.
+
 ## Rigor of Argument
 
 Leave no opening for objection in the logic. After drafting, anticipate the reader's objections and check the following.
