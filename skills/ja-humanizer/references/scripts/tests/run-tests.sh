@@ -52,6 +52,9 @@ expect_summary() { # expect_summary <case> <out> <PASS|FAIL> [tier1=n]
   grep -Eq "^JA_HUMANIZER_CHECK_SUMMARY	${status}	.*${extra}" "$out" && pass "$name: summary $status $extra" || fail "$name: expected summary $status $extra ($(tail -1 "$out"))"
 }
 
+# The writer's own texts (every "after", voice-ok, narrative-confirmed, article-confirmed) are pinned to
+# their full tier counts, so a detector that starts reporting on them fails the suite at any tier.
+
 # Rewrites 1 to 3: staging, metaphorical verbs, threatening closer, heading as sentence.
 out="$(run argument "$FIX/rewrite-before.md")"
 expect_id rewrite-before "$out" abstract-verb 3
@@ -60,7 +63,7 @@ expect_id rewrite-before "$out" threat-closer 5
 expect_id rewrite-before "$out" heading-sentence 1
 expect_summary rewrite-before "$out" FAIL
 out="$(run argument "$FIX/rewrite-after.md")"
-expect_summary rewrite-after "$out" PASS "tier1=0"
+expect_summary rewrite-after "$out" PASS "tier1=0	tier2=0	tier3=0"
 
 # Tap to Pay: thin items become questions; label-plus-colon is Tier 3 in article mode.
 out="$(run article "$FIX/tap-before.md")"
@@ -72,14 +75,14 @@ grep -Eq '^TIER3	label-colon	' "$out" && pass "tap-before: label-colon is Tier 3
 out="$(run mail "$FIX/tap-before.md")"
 grep -Eq '^TIER2	label-colon	' "$out" && pass "tap-before: label-colon is Tier 2 in mail mode" || fail "tap-before: label-colon tier in mail mode"
 out="$(run article "$FIX/tap-after.md")"
-expect_summary tap-after "$out" PASS "tier1=0"
+expect_summary tap-after "$out" PASS "tier1=0	tier2=0	tier3=4"
 
 # Mail review 1: missing estimate next to a request to choose; ただし without a reason.
 out="$(run mail "$FIX/mail1-before.md")"
 expect_id mail1-before "$out" missing-estimate
 expect_id mail1-before "$out" tadashi-no-reason
 out="$(run mail "$FIX/mail1-after.md")"
-expect_summary mail1-after "$out" PASS "tier1=0"
+expect_summary mail1-after "$out" PASS "tier1=0	tier2=0	tier3=0"
 expect_no_id mail1-after "$out" tadashi-no-reason
 
 # Mail review 2: cause restates the symptom, circular cause, generic countermeasure.
@@ -88,22 +91,22 @@ expect_id mail2-before "$out" cause-restates-symptom
 expect_id mail2-before "$out" circular-cause
 expect_id mail2-before "$out" generic-measure
 out="$(run mail "$FIX/mail2-after.md")"
-expect_summary mail2-after "$out" PASS "tier1=0"
+expect_summary mail2-after "$out" PASS "tier1=0	tier2=0	tier3=0"
 
 # Mail review 3: a request chained on the reply to the question just asked.
 out="$(run mail "$FIX/mail3-before.md")"
 expect_id mail3-before "$out" chained-request 5
 out="$(run mail "$FIX/mail3-after.md")"
-expect_summary mail3-after "$out" PASS "tier1=0"
+expect_summary mail3-after "$out" PASS "tier1=0	tier2=0	tier3=0"
 expect_no_id mail3-after "$out" chained-request
 
 # Over-editing guard: the writer's own passages produce nothing.
 out="$(run mail "$FIX/voice-ok.md")"
-expect_summary voice-ok "$out" PASS "tier1=0	tier2=0"
+expect_summary voice-ok "$out" PASS "tier1=0	tier2=0	tier3=0"
 
 # Confirmed excerpts only; this tests detector compatibility, not authorship or rewrite quality.
 out="$(run narrative "$FIX/narrative-confirmed.md")"
-expect_summary narrative-confirmed "$out" PASS "tier1=0"
+expect_summary narrative-confirmed "$out" PASS "tier1=0	tier2=0	tier3=0"
 
 # CLI: English questions, JSON output, stdin, mode validation, disable comment, fenced code.
 node "$CHECKER" --mode article --lang en "$FIX/tap-before.md" > "$TMP_ROOT/en.out" 2>&1 || true
@@ -136,7 +139,7 @@ expect_id pr-before "$out" label-colon
 expect_summary pr-before "$out" FAIL
 out="$(run argument "$FIX/pr-after.md")"
 expect_no_id pr-after "$out" implementation-log
-expect_summary pr-after "$out" PASS "tier1=0"
+expect_summary pr-after "$out" PASS "tier1=0	tier2=0	tier3=0"
 
 # Review findings (PR #168): a lone 「ご検討いただけますと幸いです」 is not a request to choose, and a
 # condition that is a real prerequisite (consent) must not be turned into an unconditional request.
@@ -192,6 +195,8 @@ out="$(check_text calque-hit argument 'キャッシュが静かに壊れます�
 expect_id calque-hit "$out" calque 1
 expect_id calque-hit "$out" calque 2
 expect_id calque-hit "$out" calque 3
+out="$(check_text calque-surface argument 'キャッシュが**静かに**壊れます。' 'キャッシュが静かに、壊れます。' '古い値は黙って、無視されます。' '古い値は[黙って](https://example.com/a)捨てられます。')"
+for n in 1 2 3 4; do expect_id calque-surface "$out" calque "$n"; done
 out="$(check_text calque-miss argument '会議中は静かにしてください。' '担当者は黙って作業を続けました。' '瞬間最大の接続数は300です。')"
 expect_no_id calque-miss "$out" calque
 out="$(check_text calque-staging argument '設定が静かに切り替わります。')"
@@ -207,6 +212,10 @@ out="$(check_text vocab-two argument 'この実装が土台になります。' '
 expect_no_id vocab-two "$out" vocab-density
 out="$(check_text vocab-compound argument '境界値と既定値を表にします。' '境界条件を土台にします。' '効果と効率を切り分けます。')"
 expect_no_id vocab-compound "$out" vocab-density
+out="$(check_text vocab-link-quote argument '詳細は[手順](https://example.com/実測/土台/定石)を参照してください。' '> 実測から土台の定石を考える。')"
+expect_no_id vocab-link-quote "$out" vocab-density
+out="$(check_text vocab-link-label argument '[実測の手順](https://example.com/a)と[土台の設定](https://example.com/b)と[定石の一覧](https://example.com/c)を読む。')"
+expect_id vocab-link-label "$out" vocab-density
 out="$(check_text vocab-incident mail '## 原因' '事故の原因は設定の取り違えでした。' '土台の設定を直しました。')"
 expect_no_id vocab-incident "$out" vocab-density
 out="$(check_text vocab-not-incident argument '事故を防ぐ設定です。' '設定を取り違えます。' '土台の設定を直しました。')"
@@ -256,9 +265,12 @@ out="$(check_text heading-hit argument '## まとめ' '設定を保存しまし�
 expect_id heading-hit "$out" summary-heading 1
 expect_id heading-hit "$out" heading-emoji 3
 expect_id heading-hit "$out" summary-heading 5
-out="$(check_text heading-miss argument '## 検証結果' '結果をまとめて表にしました。' '## 手順 1' '絵文字 🚀 は本文にだけあります。')"
+out="$(check_text heading-miss argument '## 検証結果' '結果をまとめて表にしました。' '## 手順 1' '絵文字 🚀 は本文にだけあります。' '## リクエストをまとめて送信する' '10件を一度に送信する。')"
 expect_no_id heading-miss "$out" summary-heading
 expect_no_id heading-miss "$out" heading-emoji
+out="$(check_text heading-decorated argument '## 5. まとめ' '設定を保存しました。' '## **おわりに**' '設定を保存しました。')"
+expect_id heading-decorated "$out" summary-heading 1
+expect_id heading-decorated "$out" summary-heading 3
 out="$(check_text heading-disabled argument '<!-- ja-humanizer-disable-next-line -->' '## まとめ' '設定を保存しました。')"
 expect_no_id heading-disabled "$out" summary-heading
 

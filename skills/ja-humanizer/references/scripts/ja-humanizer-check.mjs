@@ -58,8 +58,8 @@ const STAGING = [
 // Phrasing carried over from English (silently break, silently ignored, the moment ...). Tier 2.
 // 「静かに」 before the five verbs in STAGING stays a Tier 1 staging word and is not repeated here.
 const CALQUE = [
-  { label: "静かに＋動詞", pattern: /静かに(?!切り替わ|変わ|進|動|始ま|し|する|な[るっり])[ぁ-ん一-龠]/u },
-  { label: "黙って＋受身", pattern: /黙って[^。、]{0,12}?(?:され|られ|[かさたなまわ]れ)(?:る|ます|た|て|ない|ません)/u },
+  { label: "静かに＋動詞", pattern: /静かに、?(?!切り替わ|変わ|進|動|始ま|し|する|な[るっり])[ぁ-ん一-龠]/u },
+  { label: "黙って＋受身", pattern: /黙って、?[^。、]{0,12}?(?:され|られ|[かさたなまわ]れ)(?:る|ます|た|て|ない|ません)/u },
   { label: "〜した瞬間", pattern: /[ただ]瞬間/u },
 ];
 const VOCAB_MIN_DISTINCT = 3;
@@ -70,7 +70,9 @@ const BOLD_PER_1000 = 3;
 const BULLET_RATIO = 0.16;
 const BULLET_MIN_CHARS = 500;
 const TRIAD_PER_1000 = 1.0;
-const SUMMARY_HEADING = /まとめ|おわりに/u;
+// The whole heading, once its number and decoration are removed. 「リクエストをまとめて送信する」 is not one.
+const SUMMARY_HEADING = /^(?:まとめ|おわりに)$/u;
+const HEADING_DECORATION = /[\p{Extended_Pictographic}\uFE0F\s0-9０-９.．、:：()（）【】[\]「」*_-]/gu;
 const HEADING_EMOJI = /\p{Extended_Pictographic}/u;
 const BULLET_MARK = /^(?:[-*+]|[0-9]+[.)])\s+/u;
 const INCIDENT_SECTION = /経緯|事象|現象|発生|原因|要因|再発防止|対策|改善策|防止策/u;
@@ -234,7 +236,7 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
     if (/^#{1,6}\s/u.test(text)) {
       const heading = text.replace(/^#{1,6}\s+/u, "").replace(/[0-9０-９.．]+\s*/u, "");
       if (HEADING_AS_SENTENCE.test(heading)) push(2, "heading-sentence", line, "heading written as a sentence");
-      if (SUMMARY_HEADING.test(heading)) push(2, "summary-heading", line, "summary or closing heading (まとめ, おわりに)");
+      if (SUMMARY_HEADING.test(visibleText(heading).replace(HEADING_DECORATION, ""))) push(2, "summary-heading", line, "summary or closing heading (まとめ, おわりに)");
       if (HEADING_EMOJI.test(heading)) push(2, "heading-emoji", line, "emoji in a heading");
     }
     if (TEMPLATE_OPENER.test(text)) push(2, "template-opener", line, "template opener");
@@ -245,7 +247,9 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
     if (CIRCULAR_CAUSE.test(text)) push(1, "circular-cause", line, "cause is the definition of the defect", { question: question("circular-cause") });
 
     for (const sentence of splitSentences(text)) {
-      const hasConcrete = CONCRETE_ACTION.test(visibleText(sentence).replace(/\*\*/gu, ""));
+      // What the reader sees: link targets and bold markers must not hide or create a match.
+      const shown = visibleText(sentence).replace(/\*\*/gu, "");
+      const hasConcrete = CONCRETE_ACTION.test(shown);
       for (const term of ABSTRACT_VERBS) {
         if (term.pattern.test(sentence) && !hasConcrete) push(1, "abstract-verb", line, `abstract verb: ${term.label}`);
       }
@@ -253,7 +257,7 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
         if (term.pattern.test(sentence)) push(1, "staging", line, `staging word: ${term.label}`);
       }
       for (const term of CALQUE) {
-        if (term.pattern.test(sentence)) push(2, "calque", line, `calqued phrasing: ${term.label}`);
+        if (term.pattern.test(shown)) push(2, "calque", line, `calqued phrasing: ${term.label}`);
       }
       for (const term of CUSHION) {
         if (term.pattern.test(sentence)) push(1, "cushion", line, `cushion phrase: ${term.label}`);
@@ -369,8 +373,9 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
   for (const word of VOCABULARY) {
     if (word.skipIn === "incident-report" && incidentReport) continue;
     const at = [];
-    for (const { line, text } of prose) {
-      let target = text;
+    for (const { line, text, kind } of prose) {
+      if (kind === "quote") continue;
+      let target = visibleText(text);
       for (const compound of word.exclude ?? []) target = target.split(compound).join("");
       if (word.regex.test(target)) at.push(line);
     }
