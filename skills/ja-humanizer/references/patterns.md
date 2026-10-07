@@ -106,9 +106,9 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Pattern | Detect | Fix |
 |---|---|---|
 | Label-plus-colon bullets | Items open with a bold label and a colon, 「**速度:** 処理速度が向上」 | If the label carries no information, drop it and keep the body. If it does, turn the item into a sentence |
-| Forced triads | Three reasons, three points, three decisions, always three | Use the number the content needs. One or four is fine |
+| Forced triads | Three reasons, three points, three decisions, always three. The checker reports two or more uses in a text when that is also one or more per 1,000 characters | Use the number the content needs. One or four is fine |
 | することができます | 「変更することができます」 | 「変更できます」 |
-| Summary section and expectation closers | A 「まとめ」 section that restates the body; endings in 「〜が期待されます」「今後の展開が注目されます」「〜と言えるでしょう」 | Delete the summary section; end on the last concrete fact |
+| Summary section and expectation closers | A 「まとめ」 or 「おわりに」 heading that restates the body; endings in 「〜が期待されます」「今後の展開が注目されます」「〜と言えるでしょう」 | Delete the summary section; end on the last concrete fact. Keep the heading when the publishing venue requires it |
 | Template openers | 「近年、〜が注目されています」「本記事では〜を解説します」「〜をご存じでしょうか」 | Delete the opener and start with the point |
 | Stock evaluative phrases | 「浮き彫りにしており」「重要な示唆を与えている」「注目に値する」「画期的な」「多面的な」「包括的な」 | Write concretely what was seen and why it drew attention |
 | Empty adverbs | 「静かに」「確実に」「大きく」「本質的に」「シンプルに」「適切に」「柔軟に」「明確に」 | Delete. If something must remain, replace with a number or a condition |
@@ -118,6 +118,12 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Contrast as weighting | 「A ではなく B」「A だけでなく B」 where nobody claimed A | Keep only when it corrects a belief the reader actually holds; otherwise write B directly |
 | Translation-flavored function words | 「〜において」「〜の観点から」「〜という側面から」 | Delete or rewrite as a concrete condition |
 | Headings as sentences | A heading written as a sentence, 「同じ週に、Google と Anthropic も同じ方向へ動いた」 | Make it a noun phrase (「Google と Anthropic も同様の方針へ」) |
+| Calqued phrasing | English phrasing set down as is: 「静かに壊れる」 (silently break), 「黙って無視される」 (silently ignored), 「デプロイした瞬間」 (the moment) | Write what happens: 「エラーを出さずに古い値を返す」「警告なしで読み飛ばす」「デプロイの直後に」 |
+| Density of vocabulary that spread by 2026 | Three or more distinct words from `references/scripts/vocabulary.json` (実測, 土台, 落とし穴, 切り分ける, 定石, 効く, 正本 and others) in one text. One word alone is not reported. Compounds such as 「境界値」「既定値」 and 「事故」 in an incident report are not counted | Review the listed words. Replace a metaphor with the name of the thing or the operation, and an evaluation with the fact behind it. Keep a word where it is the formal term |
+| Two or more dashes | Clauses joined with 「—」「―」「——」. An en dash for a range and a dash between digits are not counted | Break with a comma or a full stop. Put an aside in parentheses or in its own sentence |
+| Bold density | In articles and narratives, three or more bold spans in body text that also make three or more per 1,000 characters | Keep bold for a first definition and for a fact that changes the reader's decision |
+| Bullet ratio | In articles and narratives (body text plus bullets of 500 characters or more), bullets make up 16% or more of the characters | Turn bullets that are not steps, options or checklists back into paragraphs, and write how the items relate |
+| Emoji in headings | A heading carries an emoji (「## ✅ 設定の確認」) | Remove the emoji |
 
 ## Tier 3 (never fix alone)
 
@@ -125,12 +131,13 @@ Fix only when a Tier 1 or Tier 2 pattern shares the paragraph. People use these 
 
 | Pattern | Note |
 |---|---|
-| Bold | Allowed for a first definition and for a fact that changes the reader's decision. Judge by the label-plus-colon form, not by count |
-| Bullet lists as such | Appropriate for procedures, options and checklists |
+| Bold | Allowed for a first definition and for a fact that changes the reader's decision. Judge by the label-plus-colon form, or by density in articles and narratives (Tier 2) |
+| Bullet lists as such | Appropriate for procedures, options and checklists. Tier 2 when the ratio is high in an article or narrative |
 | Numbered headings | Sometimes used for easy reference |
 | 「〜ですね」「〜かもしれない」 | Usually natural as conjecture or tone |
 | Long sentences | Do not fix while subject and causation hold. For sentence length the sample overrides the rules |
-| A single full-width dash | Fix when two or more appear, or when combined with other tells |
+| A single dash | Two or more are Tier 2. Fix one only when combined with other tells |
+| Uniform sentence length | Coefficient of variation of sentence length below 0.35 (eight or more sentences, URLs not counted). Human technical prose is often this even, so never fix it alone |
 | A single 「これにより」 | Fix when it repeats |
 | Uniform politeness | In mail it is set by the relationship. Follow the sample when there is one |
 
@@ -172,4 +179,8 @@ Statements present in the request, the material handed over, or the voice sample
 
 ## Source
 
-The Tier 2 fingerprints draw on the classifications in blader/humanizer v3 (MIT), gonta223/humanizer-ja (MIT) and sahksas/human-writing-ja, minus the items that misfire in Japanese (em dashes, hyphens, quotation marks). Tier 1 was extracted from the writer's own editing records.
+The Tier 2 fingerprints draw on the classifications in blader/humanizer v3 (MIT), gonta223/humanizer-ja (MIT) and sahksas/human-writing-ja, minus the items that misfire in Japanese (hyphens, quotation marks). Tier 1 was extracted from the writer's own editing records.
+
+Calqued phrasing, vocabulary density, dashes, bold density, bullet ratio, the 「まとめ」 heading and emoji in headings come from an analysis that compared about 70,000 Qiita articles posted each August, before generative AI (2019 to 2022) and in 2026 ([Sakasegawa, 2026](https://nyosegawa.com/posts/qiita-writing-before-after-ai/)). Dashes rose from 0.04 to 0.43 per 1,000 characters, bold from 1.26 to 3.83, the bullet ratio from 8.9% to 16.4%, articles with a 「まとめ」 heading from 12% to 52%, and articles with an emoji in a heading from 0.9% to 5.9%. Body text and bullets are told apart as in Appendix A of that article. The analysis covers August posts on Qiita only and does not separate text written by AI from a change in how people write, so the thresholds are initial values set after confirming that the writer's own text is not reported.
+
+The vocabulary list lives in `references/scripts/vocabulary.json` with the word, its category, when it was observed, the share of articles before AI and in 2026, and the source. A word is added only with a source that shows its frequency before and after, or with the writer's own editing record.

@@ -222,12 +222,30 @@ cat draft.md | node "$checker" --lang en               # stdin, English question
 
 The checker prints one line per finding
 (`TIER1<tab>id<tab>file:line<tab>message[<tab>question]`) and a summary line
-`JA_HUMANIZER_CHECK_SUMMARY<tab>PASS|FAIL<tab>tier1=n<tab>tier2=n<tab>tier3=n`.
+`JA_HUMANIZER_CHECK_SUMMARY<tab>PASS|FAIL<tab>tier1=n<tab>tier2=n<tab>tier3=n<tab>commas_per_sentence=n`.
 Exit 1 means a Tier 1 finding exists; `--warn` turns that into 0. `--mode`
 takes `article`, `mail`, `argument` or `narrative`; in `article` and
 `narrative` a label-plus-colon item is Tier 3. A line preceded by
 `<!-- ja-humanizer-disable-next-line -->` is skipped, and fenced code, inline
 code, tables and frontmatter are never read.
+
+Ids for what spread in Japanese technical articles by 2026 (sources and
+thresholds are in `references/patterns.md`):
+
+| Id | Tier | Reported when |
+|---|---|---|
+| `calque` | 2 | 「静かに」 plus a verb, 「黙って」 plus a passive, 「〜した瞬間」 |
+| `vocab-density` | 2 | Three or more distinct words from `references/scripts/vocabulary.json`; one finding lists the words and lines |
+| `dash` | 3, or 2 from the second | 「—」「―」 outside ranges and code |
+| `bold-density` | 2 | `article` and `narrative` only: three or more bold spans in body text, at three or more per 1,000 characters |
+| `bullet-ratio` | 2 | `article` and `narrative` only: bullets are 16% or more of a text of 500 characters or more |
+| `summary-heading`, `heading-emoji` | 2 | A 「まとめ」 or 「おわりに」 heading; an emoji in a heading. Use the disable comment when the caller requires the heading |
+
+`commas_per_sentence` is a figure for comparison with the writer's sample, not
+a finding. `abstract-verb` is waived only when the sentence uses a concrete
+operation as a verb (「検証する」「検証し」); the bare noun (「検証を担保する」)
+does not waive it. `triad` needs two uses that are also one or more per 1,000
+characters, and `uniform-length` is Tier 3.
 
 The checker counts; it does not judge. It cannot tell a contrast that corrects a
 real belief from one that argues with nobody, and it flags thin items by the
@@ -268,10 +286,13 @@ The full catalog with examples is `references/patterns.md`. The tiers:
 - **Tier 2, strong Japanese fingerprints**: label-plus-colon bullets, forced
   triads, 「することができます」, summary sections and expectation closers,
   template openers, stock evaluative phrases, empty adverbs, over-explicit
-  subjects, uniform endings and lengths, mechanical connectives, contrast as
-  weighting, headings written as sentences.
+  subjects, uniform endings, mechanical connectives, contrast as weighting,
+  headings written as sentences, calqued phrasing, three or more distinct
+  words that spread by 2026, two or more dashes, bold density and bullet
+  ratio in articles and narratives, emoji in headings.
 - **Tier 3, never alone**: bold, bullet lists as such, numbered headings,
-  「〜ですね」, long sentences, a single dash, a single 「これにより」.
+  「〜ですね」, long sentences, a single dash, uniform sentence length, a
+  single 「これにより」.
 
 Questions replace guessing. When a fact is missing, ask the matching one, in
 the caller's language:
