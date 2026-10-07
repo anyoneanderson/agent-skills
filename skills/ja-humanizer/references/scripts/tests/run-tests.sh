@@ -197,11 +197,25 @@ expect_id calque-hit "$out" calque 2
 expect_id calque-hit "$out" calque 3
 out="$(check_text calque-surface argument 'キャッシュが**静かに**壊れます。' 'キャッシュが静かに、壊れます。' '古い値は黙って、無視されます。' '古い値は[黙って](https://example.com/a)捨てられます。')"
 for n in 1 2 3 4; do expect_id calque-surface "$out" calque "$n"; done
+# 「黙って」 plus a verb a system does silently (Issue #182); a person keeping quiet is not one.
+out="$(check_text calque-damatte argument 'サイトの URL の形が変わると、ボタンは黙って壊れる。' 'ジョブは黙って落ちます。' '古い設定は黙って上書きします。' '値は**黙って**、捨てます。')"
+for n in 1 2 3 4; do expect_id calque-damatte "$out" calque "$n"; done
+grep -Ec '^TIER2	calque	' "$out" | grep -q '^4$' && pass "calque-damatte: one finding per line" || fail "calque-damatte: a line was reported twice"
+out="$(check_text calque-damatte-person argument '担当者は黙って聞いていた。' '彼は黙って見ている。' '黙って席を立った。')"
+expect_summary calque-damatte-person "$out" PASS "tier1=0	tier2=0	tier3=0"
+out="$(check_text calque-damatte-passive argument '古い値は黙って無視されます。')"
+grep -Ec '^TIER2	calque	' "$out" | grep -q '^1$' && pass "calque-damatte-passive: the passive is reported once" || fail "calque-damatte-passive: reported more than once"
 out="$(check_text calque-miss argument '会議中は静かにしてください。' '担当者は黙って作業を続けました。' '瞬間最大の接続数は300です。')"
 expect_no_id calque-miss "$out" calque
 out="$(check_text calque-staging argument '設定が静かに切り替わります。')"
 expect_tier calque-staging "$out" 1 staging
 expect_no_id calque-staging "$out" calque
+
+# Counts in a row are not test results (Issue #182); a count next to a test word still is.
+out="$(check_text log-counts argument '紹介会社は、全国の検索結果 38,668 件を 20 件ずつ約 1,934 ページ送る。' '問い合わせ 1,200 件のうち 300 件に返信した。' 'パスワードの再設定は 1,200 件パスワード変更は 300 件あった。')"
+expect_summary log-counts "$out" PASS "tier1=0	tier2=0	tier3=0"
+out="$(check_text log-tests argument 'テスト 1,919 件すべて通過。' 'orchestrator 1919件、agent-runtime 234件すべて通過。' '追加したケースは 48 件です。' '結合試験は 1,919 件 PASS した。')"
+for n in 1 2 3 4; do expect_id log-tests "$out" implementation-log "$n"; done
 
 # vocab-density: three distinct words, not two; compounds and incident reports are not counted.
 out="$(check_text vocab-hit argument 'この実装が土台になります。' '原因を切り分けます。' 'これが定石です。')"
@@ -459,6 +473,12 @@ expect_tier negation-kagiranai "$out" 2 negation-closer
 out="$(check_text comparison-question argument '## トークンはどこから取得するか' '認証画面でログインし、表示された文字列をコピーする。' '## キャッシュから読むか' 'キーを渡して値を受け取る。' '## 何を自作するか購入するか' 'どちらも同じ機能を持つ。')"
 expect_no_id comparison-question "$out" comparison-without-consequence
 expect_summary comparison-question "$out" PASS "tier1=0"
+# Nouns that end in a verb stem's kana are a choice of two (Issue #180); verbs in dictionary form are a question.
+out="$(check_text comparison-okurigana argument '## 組み込みか外付けか' 'どちらも装置に接続して使う。' '## 読み込みか書き込みか' 'どちらも同じファイルを開く。' '## 内製か外注か' 'どちらも同じ機能を持つ。')"
+expect_tier comparison-okurigana "$out" 2 comparison-without-consequence
+for n in 1 3 5; do expect_id comparison-okurigana "$out" comparison-without-consequence "$n"; done
+out="$(check_text comparison-verbs argument '## 作るか買うか' 'どちらも同じ機能を持つ。' '## 保存先はいつ決定するか' '設定画面で決める。' '## トークンはどこから取得するか' '認証画面でコピーする。' '## 使うか使わないか' 'どちらでも動く。')"
+expect_summary comparison-verbs "$out" PASS "tier1=0	tier2=0	tier3=0"
 # The consequence may sit in the section's bullets or in its subsections; a link target is not a statement.
 out="$(check_text comparison-bullets argument '## RESTとgRPCの違い' '通信方式は次のように選ぶ。' '- RESTは既存のHTTPクライアントを使うので、導入の工数が少ない。' '- gRPCは通信量を削減できるため、速度を優先するときに選ぶ。')"
 expect_no_id comparison-bullets "$out" comparison-without-consequence
