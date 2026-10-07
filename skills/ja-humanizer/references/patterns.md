@@ -90,7 +90,7 @@ Example:
 
 ### A comparison without its consequence
 
-Detect: a section headed 「A と B の違い」, 「A と B の比較」 or 「A か B か」 sets two descriptions side by side and never says what changes for the person choosing (usable language, speed, cost, effort, constraints, operation). It has no evaluative word, so it passes the thin-sentence check. The checker looks only at the form of the heading; a comparison inside a paragraph, opened by 「一方」 or 「に対し」, is confirmed by reading.
+Detect: a section headed 「A と B の違い」, 「A と B の比較」 or 「A か B か」 sets two descriptions side by side and never says what changes for the person choosing (usable language, speed, cost, effort, constraints, operation). It has no evaluative word, so it passes the thin-sentence check. The checker picks the section by the form of its heading and reports when no consequence word appears in its body text, bullets or subsections. A heading with a question word, such as 「どこから取得するか」, is not treated as a comparison. A comparison inside a paragraph, opened by 「一方」 or 「に対し」, is not checked and is confirmed by reading.
 
 Fix: the skill does not add the consequence. Ask "What does this difference change in the reader's choice?" and write it once the answer arrives.
 
@@ -138,7 +138,7 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Emoji in headings | A heading carries an emoji (「## ✅ 設定の確認」) | Remove the emoji |
 | Denial closers | Two or more sentences end in 「〜ではない」, 「〜わけではない」 or 「〜とは限らない」, at one or more per 1,000 characters. A needed denial (「必須ではない」 in an FAQ) is counted too, so confirm each one | Delete the denial of a view nobody holds and keep the fact. If the previous sentence already explained it, delete the sentence. Keep a denial that corrects a belief the reader actually holds |
 | Repeated section closers | The last sentence of three or more sections takes the same form among 「〜必要がある」, 「〜したい」, 「〜ことになる」, 「〜に注意する」 | Do not just delete the caution; put the verdict the writer reached in that section. When the material holds none, ask "What is the conclusion you want the reader to take from this section?" The skill does not make up a verdict |
-| Rhythm away from the sample | With a sample passed to the checker by `--voice`, the draft's mean sentence length is below 0.75 times the sample's, or its share of sentences joining clauses with a conjunctive particle is 20 points or more below the sample's | Follow "Joining Sentences" in the norms: join sentences related by reason, condition, concession or consequence. Do not join unrelated sentences |
+| Rhythm away from the sample | With a sample passed to the checker by `--voice`, the draft's mean sentence length is below 0.75 times the sample's, or its share of sentences joining clauses with a conjunctive particle is 20 points or more below the sample's. The sample is measured on the body text of each excerpt under a 「## 」 heading; the preamble, field lines and excerpts whose 書き方 says AI are not measured | Follow "Joining Sentences" in the norms: join sentences related by reason, condition, concession or consequence. Do not join unrelated sentences |
 
 ## Tier 3 (never fix alone)
 

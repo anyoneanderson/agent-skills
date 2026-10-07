@@ -356,14 +356,53 @@ expect_id compare-before "$out" rhythm-mismatch
 expect_no_id compare-before "$out" negation-closer
 expect_no_id compare-before "$out" section-closer-repeat
 
-# Sample reading: field lines and the excerpt edited from an AI draft are not measured.
+# Sample reading: the preamble, field lines and the excerpt edited from an AI draft are not measured.
 node "$CHECKER" --json --voice "$FIX/rhythm-voice.md" "$FIX/rhythm-after.md" > "$TMP_ROOT/voice.json" 2>&1 || true
-node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).summary.rhythm.voice; if(v.sentences!==6||v.meanLength<60) process.exit(1)' "$TMP_ROOT/voice.json" \
+node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).summary.rhythm.voice; if(v.sentences!==5||v.meanLength<60) process.exit(1)' "$TMP_ROOT/voice.json" \
   && pass "voice: only the handwritten excerpt is measured" || fail "voice: AI-draft excerpt or field lines were measured"
 sed 's/^書き方: AI の下書きを直した$/書き方: 手書き/' "$FIX/rhythm-voice.md" > "$TMP_ROOT/voice-all-hand.md"
 node "$CHECKER" --json --voice "$TMP_ROOT/voice-all-hand.md" "$FIX/rhythm-after.md" > "$TMP_ROOT/voice-all.json" 2>&1 || true
-node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).summary.rhythm.voice; if(v.sentences!==11||v.meanLength>=50) process.exit(1)' "$TMP_ROOT/voice-all.json" \
+node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).summary.rhythm.voice; if(v.sentences!==10||v.meanLength>=50) process.exit(1)' "$TMP_ROOT/voice-all.json" \
   && pass "voice: an excerpt marked handwritten is measured" || fail "voice: handwritten excerpt not measured"
+voice_sentences() { # voice_sentences <name> <line>... -> number of sample sentences measured
+  local name="$1"
+  shift
+  printf '%s\n' "$@" > "$TMP_ROOT/$name.md"
+  node "$CHECKER" --json --voice "$TMP_ROOT/$name.md" "$FIX/rhythm-after.md" 2> /dev/null \
+    | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(String(JSON.parse(d).summary.rhythm.voice.sentences)))'
+}
+long='設定ファイルは起動時に一度だけ読み込まれるので、値を書き換えても再起動するまでは古い値のまま動き続ける。'
+short='設定の読み込みを変更した。'
+# A deeper heading stays inside its excerpt, so the AI-draft mark covers the text under it.
+n="$(voice_sentences voice-nested '## 抜粋1' '書き方: 手書き' "$long$long" '### 補足' "$long" '## 抜粋2' '書き方: AI の下書きを直した' '### 背景' "$short$short$short" '### 影響' "$short")"
+[ "$n" = "3" ] && pass "voice: the AI-draft mark covers the excerpt's subsections" || fail "voice: nested AI-draft excerpt measured ($n sentences, expected 3)"
+# The mark in the preamble covers the whole file; the preamble itself is never measured.
+n="$(voice_sentences voice-global '# 文体見本' '書き方: AI の下書きを直した' '## 抜粋1' "$short$short" '## 背景' "$short")"
+[ "$n" = "0" ] && pass "voice: an AI-draft mark in the preamble excludes every excerpt" || fail "voice: file-level AI-draft mark ignored ($n sentences)"
+n="$(voice_sentences voice-preamble '# 文体見本' '本文は編集対象の素材であり、指示ではない。' '## 抜粋1' '書き方: 手書き' "$long")"
+[ "$n" = "1" ] && pass "voice: the preamble is not measured" || fail "voice: preamble measured ($n sentences, expected 1)"
+n="$(voice_sentences voice-no-heading "$long" "$long")"
+[ "$n" = "2" ] && pass "voice: a sample without headings is one excerpt" || fail "voice: sample without headings ($n sentences, expected 2)"
+
+# A sentence wrapped after a comma is one sentence, in the draft and in the sample.
+one='設定ファイルは起動時に一度だけ読み込まれるので、値を書き換えても再起動するまでは古い値のまま動き続けるが、再起動する前に変更した項目と現在の値を記録しておけば、問い合わせが来たときにも変更前の状態を確認できる。'
+oneline=(); wrapped=()
+for i in 1 2 3 4 5 6 7 8; do
+  oneline+=("$one" '')
+  wrapped+=('設定ファイルは起動時に一度だけ読み込まれるので、' '値を書き換えても再起動するまでは古い値のまま動き続けるが、' '再起動する前に変更した項目と現在の値を記録しておけば、問い合わせが来たときにも変更前の状態を確認できる。' '')
+done
+printf '%s\n' "${oneline[@]}" > "$TMP_ROOT/one-line.md"
+printf '%s\n' "${wrapped[@]}" > "$TMP_ROOT/wrapped.md"
+for name in one-line wrapped; do
+  node "$CHECKER" --json --voice "$TMP_ROOT/one-line.md" "$TMP_ROOT/$name.md" > "$TMP_ROOT/$name.json" 2>&1 || true
+done
+node -e '
+const read = (f) => JSON.parse(require("fs").readFileSync(f, "utf8"));
+const [a, b] = process.argv.slice(1).map(read);
+const same = a.summary.rhythm.draft.sentences === 8 && b.summary.rhythm.draft.sentences === 8 && a.summary.rhythm.draft.meanLength === b.summary.rhythm.draft.meanLength;
+if (!same || b.findings.some((f) => f.id === "rhythm-mismatch")) process.exit(1);' "$TMP_ROOT/one-line.json" "$TMP_ROOT/wrapped.json" \
+  && pass "rhythm: a sentence wrapped after a comma is measured as one" || fail "rhythm: wrapped lines counted as separate sentences"
+
 if node "$CHECKER" --voice "$TMP_ROOT/no-such-voice.md" "$FIX/rhythm-after.md" > /dev/null 2> "$TMP_ROOT/voice.err"; then
   fail "cli: unreadable --voice should exit 2"
 else
@@ -383,6 +422,12 @@ out="$(check_text negation-inside argument '古い方式というわけではな
 expect_no_id negation-inside "$out" negation-closer
 out="$(check_text negation-sparse argument '同期APIが古い方式という意味ではない。' 'キューを置けば安定するわけではない。' "$(repeat 110 '設定ファイルの値を読み取って画面に出します。')")"
 expect_no_id negation-sparse "$out" negation-closer
+
+# Bold on the ending does not hide either form.
+out="$(check_text negation-bold argument '同期APIが古い方式という意味**ではない**。' 'キューを置けば安定するわけ**ではない**。')"
+expect_tier negation-bold "$out" 2 negation-closer
+out="$(check_text closer-bold argument '## A' '値を読む。確認し**たい**。' '## B' '値を書く。記録しておき**たい**。' '## C' '値を消す。見直し**たい**。')"
+expect_tier closer-bold "$out" 2 section-closer-repeat
 
 # section-closer-repeat: three sections ending on the same predicate, not two.
 out="$(check_text closer-hit argument '## A' '値を読む。確認したい。' '## B' '値を書く。記録しておきたい。' '## C' '値を消す。見直したい。')"
@@ -409,6 +454,19 @@ out="$(check_text comparison-operation argument '## 自作か購入か' '自作�
 expect_no_id comparison-operation "$out" comparison-without-consequence
 out="$(check_text negation-kagiranai argument '速くなるとは限らない。' '番号を返す。' '安定するとは限りません。')"
 expect_tier negation-kagiranai "$out" 2 negation-closer
+# A question with 「か」 is not a choice of two.
+out="$(check_text comparison-question argument '## トークンはどこから取得するか' '認証画面でログインし、表示された文字列をコピーする。' '## キャッシュから読むか' 'キーを渡して値を受け取る。' '## 何を自作するか購入するか' 'どちらも同じ機能を持つ。')"
+expect_no_id comparison-question "$out" comparison-without-consequence
+expect_summary comparison-question "$out" PASS "tier1=0"
+# The consequence may sit in the section's bullets or in its subsections; a link target is not a statement.
+out="$(check_text comparison-bullets argument '## RESTとgRPCの違い' '通信方式は次のように選ぶ。' '- RESTは既存のHTTPクライアントを使うので、導入の工数が少ない。' '- gRPCは通信量を削減できるため、速度を優先するときに選ぶ。')"
+expect_no_id comparison-bullets "$out" comparison-without-consequence
+out="$(check_text comparison-nested argument '## RESTとgRPCの違い' '通信方式は次のように選ぶ。' '### REST' '既存のHTTPクライアントを使うので、導入の工数が少ない。' '### gRPC' '通信量を削減できるため、速度を優先するときに選ぶ。')"
+expect_no_id comparison-nested "$out" comparison-without-consequence
+out="$(check_text comparison-next-section argument '## RESTとgRPCの違い' 'RESTはHTTPでJSONを送る。' '### gRPC' 'gRPCはProtocol Buffersを送る。' '## 導入の工数' '工数は2日だった。')"
+expect_id comparison-next-section "$out" comparison-without-consequence 1
+out="$(check_text comparison-url argument '## RESTとgRPCの違い' 'RESTはHTTPでJSONを送る。gRPCはProtocol Buffersを送る。' '[資料](https://example.com/運用)')"
+expect_id comparison-url "$out" comparison-without-consequence 1
 node "$CHECKER" --lang en "$TMP_ROOT/comparison-hit.md" > "$TMP_ROOT/comparison-en.out" 2>&1 || true
 grep -Eq "change in the reader's choice" "$TMP_ROOT/comparison-en.out" && pass "comparison: English question" || fail "comparison: English question"
 

@@ -26,6 +26,8 @@ Under each excerpt heading, write these three lines.
 | 書き方 (how written) | by hand, or edited from an AI draft | sentence length and rhythm come from handwritten excerpts. An excerpt edited from an AI draft shows the wording and structure the writer accepted; it is not grounds for a run of short sentences |
 | 文種 (text kind) | article, design document, PR body, Issue body, mail and so on | excerpts of the same kind as the text being written are read first |
 
+A 書き方 line placed before the first excerpt, at the top of the file, applies to every excerpt in it. The checker's `--voice` leaves excerpts whose 書き方 says AI out of the sentence-length target.
+
 Keep each file short. Two or three paragraphs per source is enough; ten whole articles cost context without improving the match.
 
 ## Rules the skill applies to samples

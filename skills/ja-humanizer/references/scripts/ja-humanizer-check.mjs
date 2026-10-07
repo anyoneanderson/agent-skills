@@ -104,7 +104,12 @@ const SECTION_CLOSERS = [
 ];
 const SECTION_CLOSER_MIN = 3;
 // A comparison announced by its heading: 「A と B の違い／比較／使い分け／選び方」「A か B か」「A と B、どちら」.
-const COMPARISON_HEADING = /\S\s*(?:と|や|、|vs\.?)\s*\S.*(?:の(?:違い|比較|使い分け|選び方)|どちら)|\Sか\s*\S+か[?？]?$/u;
+const COMPARISON_HEADING = /\S\s*(?:と|や|、|vs\.?)\s*\S.*(?:の(?:違い|比較|使い分け|選び方)|どちら)/u;
+// 「A か B か」 counts only between noun phrases: 「どこから取得するか」 is a question, not a choice of two.
+const NOUN_END = "[一-龠ァ-ヶーA-Za-z0-9）)]";
+const EITHER_OR_HEADING = new RegExp(`${NOUN_END}\\s*か(?!ら)[\\s、]*\\S*${NOUN_END}\\s*か[?？]?$`, "u");
+const INTERROGATIVE = /どこ|何|なに|いつ|どう|なぜ|どれ|どの|どんな|誰|だれ/u;
+const isComparisonHeading = (heading) => COMPARISON_HEADING.test(heading) || (EITHER_OR_HEADING.test(heading) && !INTERROGATIVE.test(heading));
 const CONSEQUENCE = /言語|速度|速[いくさ]|遅[いくさ]|性能|コスト|費用|工数|手間|制約|制限|オーバーヘッド|保守|運用|依存/u;
 
 const THREAT_CLOSER = /(?:この(?:数字|数値|情報|実績)がないと|がなければ)[^。]*(?:できません|判断できない|手遅れ)|手遅れになります/u;
@@ -261,10 +266,30 @@ function collectProse(text) {
   return prose;
 }
 
+// What the reader sees of a line: link labels kept, URLs, tags and bold markers gone.
+function shownText(text) {
+  return visibleText(text).replace(/\*\*/gu, "");
+}
+
+// Body lines as running text: a line that ends in 、 continues on the next line, so a sentence wrapped
+// after a comma is measured as one sentence. Both the comma count and the rhythm figures use this.
+function joinWrapped(entries) {
+  const out = [];
+  let carry = "";
+  for (const { text } of entries) {
+    const joined = carry + shownText(text);
+    if (/[、，]$/u.test(joined)) { carry = joined; continue; }
+    carry = "";
+    out.push(joined);
+  }
+  if (carry) out.push(carry);
+  return out;
+}
+
 function rhythmSentences(entries) {
   const out = [];
-  for (const { text } of entries) {
-    for (const s of visibleText(text).replace(/\*\*/gu, "").split(/(?<=。)/u)) {
+  for (const text of joinWrapped(entries)) {
+    for (const s of text.split(/(?<=。)/u)) {
       const t = s.trim();
       if (t.length >= 8) out.push(t);
     }
@@ -283,22 +308,26 @@ function rhythmOf(sentences) {
   };
 }
 
-// Reads a voice sample: body text under each 「## 」 heading. The lines before the first heading, the field
-// lines (出典, 書いた時期, 書き方, 文種 ...) and excerpts marked as edited from an AI draft are not measured.
+// Reads a voice sample. An excerpt runs from one 「## 」 heading to the next; deeper headings stay inside
+// it. The lines before the first 「## 」 are a preamble and are not measured, and neither are the field
+// lines (出典, 書いた時期, 書き方, 文種 ...). 「書き方: AI ...」 removes the whole excerpt it sits in; in the
+// preamble it removes every excerpt. A sample with no 「## 」 heading is one excerpt.
 export function readVoice(text) {
   const prose = collectProse(text);
-  const hasHeadings = prose.some((p) => p.kind === "heading");
-  const sections = [];
-  let current = hasHeadings ? null : [];
+  const isExcerptHeading = (p) => p.kind === "heading" && /^##\s/u.test(p.text);
+  const hasExcerpts = prose.some(isExcerptHeading);
+  const preamble = [];
+  const excerpts = [];
+  let current = hasExcerpts ? preamble : [];
+  if (!hasExcerpts) excerpts.push(current);
   for (const p of prose) {
-    if (p.kind === "heading") { current = []; sections.push(current); continue; }
-    if (current) current.push(p);
+    if (isExcerptHeading(p)) { current = []; excerpts.push(current); continue; }
+    current.push(p);
   }
-  if (!hasHeadings) sections.push(current);
-  const entries = sections
-    .filter((sec) => !sec.some((p) => VOICE_AI_DRAFT.test(p.text)))
-    .flat()
-    .filter((p) => p.kind === "body" && !VOICE_FIELD.test(p.text));
+  const aiDraft = (entries) => entries.some((p) => VOICE_AI_DRAFT.test(p.text));
+  const entries = aiDraft(preamble)
+    ? []
+    : excerpts.filter((e) => !aiDraft(e)).flat().filter((p) => p.kind === "body" && !VOICE_FIELD.test(p.text));
   return rhythmOf(rhythmSentences(entries));
 }
 
@@ -500,23 +529,18 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
   // Commas per sentence in body text. A line ending in 、 continues on the next line.
   let sentences = 0;
   let commas = 0;
-  let carry = "";
-  for (const { text } of body) {
-    const joined = carry + visibleText(text);
-    if (/[、，]$/u.test(joined)) { carry = joined; continue; }
-    carry = "";
-    for (const s of splitSentences(joined)) {
+  for (const text of joinWrapped(body)) {
+    for (const sent of splitSentences(text)) {
       sentences += 1;
-      commas += (s.match(/[、，]/gu) ?? []).length;
+      commas += (sent.match(/[、，]/gu) ?? []).length;
     }
   }
-  if (carry) { sentences += 1; commas += (carry.match(/[、，]/gu) ?? []).length; }
 
   // Sentences that close by denying a reading nobody has been shown to hold.
   const negationLines = [];
   for (const p of prose) {
     if (p.kind !== "body" && p.kind !== "bullet") continue;
-    for (const s of splitSentences(visibleText(p.text))) if (NEGATION_CLOSER.test(s)) negationLines.push(p.line);
+    for (const s of splitSentences(shownText(p.text))) if (NEGATION_CLOSER.test(s)) negationLines.push(p.line);
   }
   const negationRate = wholeChars === 0 ? 0 : (negationLines.length / wholeChars) * 1000;
   if (negationLines.length >= NEGATION_MIN_COUNT && negationRate >= NEGATION_PER_1000) {
@@ -527,14 +551,25 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
   const mdSections = [];
   let open = null;
   for (const p of prose) {
-    if (p.kind === "heading") { open = { heading: p.text.replace(/^#{1,6}\s+/u, ""), line: p.line, body: [] }; mdSections.push(open); continue; }
-    if (open && p.kind === "body") open.body.push(p);
+    if (p.kind === "heading") {
+      open = { heading: p.text.replace(/^#{1,6}\s+/u, ""), level: p.text.match(/^#+/u)[0].length, line: p.line, body: [], scope: [] };
+      mdSections.push(open);
+    } else if (open && p.kind === "body") {
+      open.body.push(p);
+    }
+    // scope: everything under the heading down to the next heading of the same or a higher level.
+    for (const sec of mdSections) {
+      if (sec.closed || sec === open) continue;
+      if (p.kind === "heading" && open.level <= sec.level) sec.closed = true;
+      else sec.scope.push(p);
+    }
+    if (open && p.kind !== "heading") open.scope.push(p);
   }
   for (const closer of SECTION_CLOSERS) closer.lines = [];
   for (const sec of mdSections) {
     const last = sec.body[sec.body.length - 1];
     if (!last) continue;
-    const sentence = splitSentences(visibleText(last.text)).pop() ?? "";
+    const sentence = splitSentences(shownText(last.text)).pop() ?? "";
     const hit = SECTION_CLOSERS.find((c) => c.pattern.test(sentence));
     if (hit) hit.lines.push(last.line);
   }
@@ -544,8 +579,9 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
     }
   }
   for (const sec of mdSections) {
-    if (!COMPARISON_HEADING.test(sec.heading) || sec.body.length === 0) continue;
-    if (!CONSEQUENCE.test(sec.body.map((p) => p.text).join(""))) {
+    const said = sec.scope.filter((p) => p.kind === "body" || p.kind === "bullet" || p.kind === "heading");
+    if (!isComparisonHeading(sec.heading) || !said.some((p) => p.kind !== "heading")) continue;
+    if (!CONSEQUENCE.test(said.map((p) => shownText(p.text)).join("\n"))) {
       push(1, "comparison-without-consequence", sec.line, "the section compares two things but never says what changes for the reader (language, speed, cost, effort, constraint, operation)", { question: question("comparison-without-consequence") });
     }
   }
