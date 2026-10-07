@@ -88,18 +88,6 @@ Example:
 - before: 「要件定義書のこまめな更新、社内での要件共有を徹底することで再発を防止できると考えております。」
 - after: 「要件変更に対する要件定義書の迅速な更新、及び仕様変更が発生した場合の社内エンジニアへの周知を徹底します。」
 
-### A comparison without its consequence
-
-Detect: a section headed 「A と B の違い」, 「A と B の比較」 or 「A か B か」 sets two descriptions side by side and never says what changes for the person choosing (usable language, speed, cost, effort, constraints, operation, safety, compatibility, which one fits). It has no evaluative word, so it passes the thin-sentence check. The checker picks the section by the form of its heading and reports when no consequence word appears in its body text, bullets or subsections. A heading with a question word, such as 「どこから取得するか」, is not treated as a comparison. A comparison inside a paragraph, opened by 「一方」 or 「に対し」, is not checked and is confirmed by reading.
-
-Fix: the skill does not add the consequence. Ask "What does this difference change in the reader's choice?" and write it once the answer arrives.
-
-Example:
-
-- before: 「API基盤を使う場合、業務システムから（中略）HTTPなどで依頼する。（中略）SDKは（中略）アプリに組み込むライブラリや開発用の道具を指す。」
-- question: "What does this difference change in the reader's choice?"
-- after: 「API基盤であれば、（中略）既存のシステムのプログラミング言語を選ばず利用することが可能だ。一方、SDK（中略）は（中略）組み込む側のプログラミング言語と基本的には同じものを選ぶことが必要であるが、API通信のオーバーヘッドがないため、実行速度や通信条件、トランザクションなどの考慮がよりAPIよりも少ない。」
-
 ### Implementation-log residue
 
 Detect: a PR or Issue body lists review round counts, test counts, coverage values, detailed timings, or the full list of deferred findings. These records do not change the reader's decision and already live in the source of record (review files, CI, Issue comments).
@@ -136,6 +124,7 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Bold density | In articles and narratives, three or more bold spans in body text that also make three or more per 1,000 characters | Keep bold for a first definition and for a fact that changes the reader's decision |
 | Bullet ratio | In articles and narratives (body text plus bullets of 500 characters or more), bullets make up 16% or more of the characters | Turn bullets that are not steps, options or checklists back into paragraphs, and write how the items relate |
 | Emoji in headings | A heading carries an emoji (「## ✅ 設定の確認」) | Remove the emoji |
+| A comparison without its consequence | A section headed 「A と B の違い」, 「A と B の比較」 or 「A か B か」 sets two descriptions side by side and never says what changes for the person choosing (usable language, speed, cost, effort, constraints, operation, safety, compatibility, which one fits). The checker picks the section by the form of its heading and reports when no consequence word appears in its body text, bullets or subsections. A section that states the consequence in words outside the list is reported too, so read it as a candidate. A heading with a question word (「どこから取得するか」) and a comparison inside a paragraph opened by 「一方」 or 「に対し」 are not checked | The skill does not add the consequence. Ask "What does this difference change in the reader's choice?" and write it once the answer arrives. Leave the section alone when the consequence is already there. See "A Comparison Without Its Consequence" in `examples.md` |
 | Denial closers | Two or more sentences end in 「〜ではない」, 「〜わけではない」 or 「〜とは限らない」, at one or more per 1,000 characters. A needed denial (「必須ではない」 in an FAQ) is counted too, so confirm each one | Delete the denial of a view nobody holds and keep the fact. If the previous sentence already explained it, delete the sentence. Keep a denial that corrects a belief the reader actually holds |
 | Repeated section closers | The last sentence of three or more sections takes the same form among 「〜必要がある」, 「〜したい」, 「〜ことになる」, 「〜に注意する」 | Do not just delete the caution; put the verdict the writer reached in that section. When the material holds none, ask "What is the conclusion you want the reader to take from this section?" The skill does not make up a verdict |
 | Rhythm away from the sample | With a sample passed to the checker by `--voice`, the draft's mean sentence length is below 0.75 times the sample's, or its share of sentences joining clauses with a conjunctive particle is 20 points or more below the sample's. The sample is measured on the body text of each excerpt under a 「## 」 heading; the preamble, field lines and excerpts whose 書き方 says AI are not measured | Follow "Joining Sentences" in the norms: join sentences related by reason, condition, concession or consequence. Do not join unrelated sentences |

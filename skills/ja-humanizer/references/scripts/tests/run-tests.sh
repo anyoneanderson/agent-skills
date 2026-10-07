@@ -327,10 +327,10 @@ out="$(run_voice article "$FIX/rhythm-voice.md" "$FIX/rhythm-before.md")"
 expect_tier rhythm-before "$out" 2 rhythm-mismatch
 expect_tier rhythm-before "$out" 2 negation-closer
 expect_tier rhythm-before "$out" 2 section-closer-repeat
-expect_tier rhythm-before "$out" 1 comparison-without-consequence
+expect_tier rhythm-before "$out" 2 comparison-without-consequence
 expect_id rhythm-before "$out" comparison-without-consequence 1
 grep -Eq '^TIER2	section-closer-repeat	.*必要がある.*lines: 16,23,30	.*結論は何ですか' "$out" && pass "rhythm-before: section closers listed with the question" || fail "rhythm-before: section closer lines or question"
-grep -Eq '^TIER1	comparison-without-consequence	.*読み手の選択は何が変わりますか' "$out" && pass "rhythm-before: comparison question attached" || fail "rhythm-before: comparison question"
+grep -Eq '^TIER2	comparison-without-consequence	.*読み手の選択は何が変わりますか' "$out" && pass "rhythm-before: comparison question attached" || fail "rhythm-before: comparison question"
 grep -Eq 'mean_sentence_length=[0-9.]+/[0-9.]+	long_sentences=[0-9]+%/[0-9]+%	connective_sentences=[0-9]+%/[0-9]+%$' "$out" && pass "rhythm-before: summary carries draft/sample pairs" || fail "rhythm-before: summary rhythm fields ($(tail -1 "$out"))"
 out="$(run_voice article "$FIX/article-confirmed.md" "$FIX/rhythm-before.md")"
 expect_id rhythm-before-writer-sample "$out" rhythm-mismatch
@@ -441,7 +441,8 @@ expect_no_id closer-middle "$out" section-closer-repeat
 
 # comparison-without-consequence: a heading that names a comparison, and no word for what changes.
 out="$(check_text comparison-hit argument '## RESTとgRPCの違い' 'RESTはHTTPの上でJSONを送る。' 'gRPCはProtocol Buffersを送る。')"
-expect_tier comparison-hit "$out" 1 comparison-without-consequence
+expect_tier comparison-hit "$out" 2 comparison-without-consequence
+expect_summary comparison-hit "$out" PASS "tier1=0"
 out="$(check_text comparison-consequence argument '## RESTとgRPCの違い' 'RESTはHTTPの上でJSONを送る。' 'gRPCはProtocol Buffersを送るので、呼び出す側の言語ごとにコードを生成する手間がかかる。')"
 expect_no_id comparison-consequence "$out" comparison-without-consequence
 out="$(check_text comparison-not-heading argument '## 連載で比較したいこと' '次回は同じ修了証で試す。' '## 勘違いの例' '一方、通信処理は別々に実装した。')"
@@ -466,6 +467,10 @@ expect_no_id comparison-nested "$out" comparison-without-consequence
 # Safety, compatibility and fit are consequences too; 「選ぶ」 alone is not, since every comparison uses it.
 out="$(check_text comparison-safety argument '## パスワードとパスキーの違い' 'パスキーは接続先のドメインを検証するので、偽サイトでは使えず安全である。' '## RESTとgRPCの比較' 'gRPCは内部の通信に向いている。' '## v1とv2の違い' 'v2はv1と互換がある。' '## 自作か購入か' 'セキュリティの更新を自分たちで続けることになる。')"
 expect_no_id comparison-safety "$out" comparison-without-consequence
+# Known limit: a consequence stated in words outside the list is still reported, as a Tier 2 question.
+out="$(check_text comparison-outside-list argument '## パスワードとパスキーの違い' 'パスキーは接続先のドメインを検証するので、偽サイトに誘導されても秘密鍵を渡さずに済む。フィッシングを防ぐならパスキーを選ぶ。')"
+expect_tier comparison-outside-list "$out" 2 comparison-without-consequence
+expect_summary comparison-outside-list "$out" PASS "tier1=0"
 out="$(check_text comparison-choose-only argument '## RESTとgRPCの違い' 'RESTはHTTPでJSONを送る。用途に合わせて選ぶ。')"
 expect_id comparison-choose-only "$out" comparison-without-consequence 1
 out="$(check_text comparison-next-section argument '## RESTとgRPCの違い' 'RESTはHTTPでJSONを送る。' '### gRPC' 'gRPCはProtocol Buffersを送る。' '## 導入の工数' '工数は2日だった。')"

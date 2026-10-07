@@ -582,7 +582,8 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
     const said = sec.scope.filter((p) => p.kind === "body" || p.kind === "bullet" || p.kind === "heading");
     if (!isComparisonHeading(sec.heading) || !said.some((p) => p.kind !== "heading")) continue;
     if (!CONSEQUENCE.test(said.map((p) => shownText(p.text)).join("\n"))) {
-      push(1, "comparison-without-consequence", sec.line, "the section compares two things but never says what changes for the reader (language, speed, cost, effort, constraint, operation, safety, fit)", { question: question("comparison-without-consequence") });
+      // Tier 2: the word list cannot cover every way of stating a consequence, so this asks; it does not fail the run.
+      push(2, "comparison-without-consequence", sec.line, "the section compares two things but never says what changes for the reader (language, speed, cost, effort, constraint, operation, safety, fit)", { question: question("comparison-without-consequence") });
     }
   }
 

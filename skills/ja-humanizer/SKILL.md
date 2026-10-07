@@ -250,7 +250,7 @@ thresholds are in `references/patterns.md`):
 | `rhythm-mismatch` | 2 | With `--voice`: the draft's mean sentence length is below 0.75 times the sample's, or its share of connective sentences is 20 points or more lower |
 | `negation-closer` | 2 | Two or more sentences end in 「〜ではない」「〜わけではない」「〜とは限らない」, at one or more per 1,000 characters |
 | `section-closer-repeat` | 2, with a question | Three or more sections end on the same form (「必要がある」「〜したい」「ことになる」「注意」) |
-| `comparison-without-consequence` | 1, with a question | A section headed 「A と B の違い／比較／使い分け／選び方」 or 「A か B か」 (noun phrases, no question word) names no language, speed, cost, effort, constraint, operation, safety, compatibility or fit in its text, bullets or subsections |
+| `comparison-without-consequence` | 2, with a question | A section headed 「A と B の違い／比較／使い分け／選び方」 or 「A か B か」 (noun phrases, no question word) names no language, speed, cost, effort, constraint, operation, safety, compatibility or fit in its text, bullets or subsections |
 | `summary-heading`, `heading-emoji` | 2 | A 「まとめ」 or 「おわりに」 heading; an emoji in a heading. Use the disable comment when the caller requires the heading |
 
 `commas_per_sentence` is a figure for comparison with the writer's sample, not
@@ -311,8 +311,7 @@ The full catalog with examples is `references/patterns.md`. The tiers:
   asked (a real precondition such as consent or approval stays), a cause that
   only restates the symptom, countermeasures made of generic words,
   implementation-log residue in a PR or Issue body (review rounds, test
-  counts, coverage values), a comparison that never says what changes for
-  the reader.
+  counts, coverage values).
 - **Tier 2, strong Japanese fingerprints**: label-plus-colon bullets, forced
   triads, 「することができます」, summary sections and expectation closers,
   template openers, stock evaluative phrases, empty adverbs, over-explicit
@@ -320,7 +319,8 @@ The full catalog with examples is `references/patterns.md`. The tiers:
   headings written as sentences, calqued phrasing, three or more distinct
   words that spread by 2026, two or more dashes, bold density and bullet
   ratio in articles and narratives, emoji in headings, denial closers,
-  repeated section closers, rhythm away from the voice sample.
+  repeated section closers, rhythm away from the voice sample, a comparison
+  that never says what changes for the reader.
 - **Tier 3, never alone**: bold, bullet lists as such, numbered headings,
   「〜ですね」, long sentences, a single dash, uniform sentence length, a
   single 「これにより」.
