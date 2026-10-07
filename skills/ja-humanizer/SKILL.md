@@ -174,6 +174,12 @@ kind and the voice file chosen for it, for example
    question in the draft. See Questions.
 5. Run Step 5, including contextual reading. Fix confirmed Tier 1 problems.
    Preserve natural wording when a mechanical finding does not fit the context.
+   Also resolve Tier 2 `negation-closer` and `section-closer-repeat` before
+   delivery: rewrite a denial about something unchecked as what was not done
+   and why, and end a section on the writer's verdict (norms, "Unchecked
+   Things and Reservations"). When the material holds no reason or verdict,
+   do not invent one; add the question, with the section's name, under
+   「要確認」 in item 6.
 6. **List the facts you supplied yourself.** Reread the draft and pull out
    every statement that is in neither the request, the material handed over,
    nor the voice sample, and that is one of: a number or a date; a practice or
