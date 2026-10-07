@@ -240,7 +240,7 @@ The test: how an engineer on the job would actually say the word aloud.
 - Code, APIs, reserved words, type names, proper nouns, commands → keep the original (Latin letters). Do not katakana-ize (do not write `after_create` as 「アフタークリエイト」 or the `users` table as 「ユーザーズテーブル」).
 - Established loanwords → katakana is fine (テーブル / コミット / デプロイ / マージ / リンク / レビュー / リクエスト).
 - Ordinary words and English phrasings that translate → translate into Japanese. Do not paste the original (small/focused→小さく集中して, what not why→何をだけでなくなぜ, link to context→文脈へのリンク, humanize→人間らしく).
-- Do not replace an established loanword with a Sino-Japanese word. The test above applies in the other direction too: when people on the job say 「デフォルト」 and 「ポイント」, write those, not 「既定」 and 「要点」. An analysis comparing Qiita articles before generative AI and in 2026 ([Sakasegawa, 2026](https://nyosegawa.com/posts/qiita-writing-before-after-ai/)) found 「デフォルト」 falling from 1.88 to 1.01 per 10,000 characters, 「既定」 rising from 0.05 to 0.55, and the share of kanji rising from 19.0% to 24.4%. Use the Sino-Japanese word where it is the formal name, as in a setting name or a term from a standard.
+- Do not replace an established loanword with a Sino-Japanese word. The test above applies in the other direction too: when people on the job say 「デフォルト」 and 「ポイント」, write those, not 「既定」 and 「要点」. Use the Sino-Japanese word where it is the formal name, as in a setting name or a term from a standard.
 
 ## Source
 
