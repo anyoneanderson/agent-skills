@@ -242,7 +242,7 @@ thresholds are in `references/patterns.md`):
 
 | Id | Tier | Reported when |
 |---|---|---|
-| `calque` | 2 | 「静かに」 plus a verb, 「黙って」 plus a passive, 「〜した瞬間」 |
+| `calque` | 2 | 「静かに」 plus a verb, 「黙って」 plus a passive or a failure verb, 「〜した瞬間」 |
 | `vocab-density` | 2 | Three or more distinct words from `references/scripts/vocabulary.json`; one finding lists the words and lines |
 | `dash` | 3, or 2 from the second | 「—」「―」 outside ranges and code |
 | `bold-density` | 2 | `article` and `narrative` only: three or more bold spans in body text, at three or more per 1,000 characters |

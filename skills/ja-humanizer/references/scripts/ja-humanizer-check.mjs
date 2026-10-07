@@ -62,7 +62,8 @@ const STAGING = [
 // 「静かに」 before the five verbs in STAGING stays a Tier 1 staging word and is not repeated here.
 const CALQUE = [
   { label: "静かに＋動詞", pattern: /静かに、?(?!切り替わ|変わ|進|動|始ま|し|する|な[るっり])[ぁ-ん一-龠]/u },
-  { label: "黙って＋受身", pattern: /黙って、?[^。、]{0,12}?(?:され|られ|[かさたなまわ]れ)(?:る|ます|た|て|ない|ません)/u },
+  // A passive, or one of the verbs a system does without telling anyone. 「黙って聞く」 is a person and is not matched.
+  { label: "黙って＋動詞", pattern: /黙って、?(?:(?:壊れ|落ち|止ま|失敗|消え|捨て|無視|上書き)|[^。、]{0,12}?(?:され|られ|[かさたなまわ]れ)(?:る|ます|た|て|ない|ません))/u },
   { label: "〜した瞬間", pattern: /[ただ]瞬間/u },
 ];
 const VOCAB_MIN_DISTINCT = 3;
@@ -106,7 +107,9 @@ const SECTION_CLOSER_MIN = 3;
 // A comparison announced by its heading: 「A と B の違い／比較／使い分け／選び方」「A か B か」「A と B、どちら」.
 const COMPARISON_HEADING = /\S\s*(?:と|や|、|vs\.?)\s*\S.*(?:の(?:違い|比較|使い分け|選び方)|どちら)/u;
 // 「A か B か」 counts only between noun phrases: 「どこから取得するか」 is a question, not a choice of two.
-const NOUN_END = "[一-龠ァ-ヶーA-Za-z0-9）)]";
+// A noun may end in the kana of a verb stem (組み込み, 外付け); a verb in its dictionary form (作る, 買う) may not,
+// and neither may an adjective or a wish ending in い (高い, 書きたい).
+const NOUN_END = "[一-龠ァ-ヶーA-Za-z0-9）)きぎしじちひびみりえけげせてねべめれ]";
 const EITHER_OR_HEADING = new RegExp(`${NOUN_END}\\s*か(?!ら)[\\s、]*\\S*${NOUN_END}\\s*か[?？]?$`, "u");
 const INTERROGATIVE = /どこ|何|なに|いつ|どう|なぜ|どれ|どの|どんな|誰|だれ/u;
 const isComparisonHeading = (heading) => COMPARISON_HEADING.test(heading) || (EITHER_OR_HEADING.test(heading) && !INTERROGATIVE.test(heading));
@@ -145,7 +148,9 @@ const CHOICE_OPTIONS = /(?:^|\n)\s*(?:[・\-*]|対応案|案[1-9１-９]|[1-9１
 const PRECONDITION = /同意|承諾|承認|許可|権限|有効|お持ち|問題なければ|問題がなければ|差し支えなければ|ご確認(?:が取れ|いただけ|でき)|完了(?:し|され)|届き|受領/u;
 const ESTIMATE = /[0-9０-９〇一二三四五六七八九十]+(?:営業日|日|週間|時間|か月|ヶ月|カ月)|期限|納期|見込み|まで(?:に)?(?:完了|対応|納品)/u;
 // Implementation-log residue in a PR or Issue body: review round counts, test counts, coverage values.
-const IMPLEMENTATION_LOG = /(?:レビュー|検査|spec-review|spec-inspect|Codex)[^。]{0,20}[0-9０-９]+\s*ラウンド|[0-9０-９]+\s*ラウンド[^。]{0,12}(?:レビュー|検査)|(?:テスト|ケース|件)[^。]{0,8}[0-9０-９,，]{2,}\s*件|[0-9０-９,，]{3,}\s*件[^。]{0,10}(?:通過|パス|PASS|すべて)|(?:カバレッジ|coverage|statements|branches|functions|lines)\s*[0-9０-９.]+\s*[%％]/iu;
+// A count needs a test word next to it; counts in a row (「38,668 件を 20 件ずつ」) are not test results.
+// 「ケース」 inside another katakana word (ユースケース) and 「パス」 in パスワード or パスキー are not test words.
+const IMPLEMENTATION_LOG = /(?:レビュー|検査|spec-review|spec-inspect|Codex)[^。]{0,20}[0-9０-９]+\s*ラウンド|[0-9０-９]+\s*ラウンド[^。]{0,12}(?:レビュー|検査)|(?:テスト|(?<![ァ-ヶー])ケース)[^。]{0,8}[0-9０-９,，]{2,}\s*件|[0-9０-９,，]{3,}\s*件[^。]{0,10}(?:通過|パス(?![ワキ])|PASS|すべて)|(?:カバレッジ|coverage|statements|branches|functions|lines)\s*[0-9０-９.]+\s*[%％]/iu;
 const TADASHI = /^(?:ただし|但し)[、,]?/u;
 const REASON = /ので|ため|から|につき|ゆえ/u;
 const HEADING_AS_SENTENCE = /(?:した|きた|なった|動いた|変わった|揃った|ます|です|である|だ|ない)[。！!]?$/u;
