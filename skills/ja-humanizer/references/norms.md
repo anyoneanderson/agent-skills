@@ -58,7 +58,7 @@ Paragraph writing is the base. A paragraph is one step of the argument, and the 
 
 ## Joining Sentences
 
-A row of short sentences leaves the reader to guess how they relate. Join sentences that are related, and write the relation into the sentence.
+Join sentences that are related, and write the relation into the sentence.
 
 - When the second sentence is the reason, condition, concession or consequence of the first, join them with 「ので」「が」「ば」「〜であり」 into one sentence.
 - When three sentences lay out one topic flat, rebuild them as a main clause with subordinate clauses. 「キューは依頼を順番に並べる。ワーカーは先頭から1件ずつ処理する。同時に動く数は増えない。」 becomes 「キューが依頼を順番に並べ、ワーカーが先頭から1件ずつ処理するので、同時に動く数はワーカーの数を超えない。」
