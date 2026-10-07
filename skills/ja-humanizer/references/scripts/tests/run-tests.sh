@@ -482,6 +482,10 @@ expect_summary comparison-question "$out" PASS "tier1=0"
 out="$(check_text comparison-okurigana argument '## 組み込みか外付けか' 'どちらも装置に接続して使う。' '## 読み込みか書き込みか' 'どちらも同じファイルを開く。' '## 内製か外注か' 'どちらも同じ機能を持つ。')"
 expect_tier comparison-okurigana "$out" 2 comparison-without-consequence
 for n in 1 3 5; do expect_id comparison-okurigana "$out" comparison-without-consequence "$n"; done
+out="$(check_text comparison-adjectives argument '## 高いか安いか' 'どちらも同じ機能を持つ。' '## 良いか悪いか' 'どちらも同じ機能を持つ。' '## 書きたいか読みたいか' 'どちらでも使える。')"
+expect_summary comparison-adjectives "$out" PASS "tier1=0	tier2=0	tier3=0"
+out="$(check_text comparison-okurigana-more argument '## 持ち込みか貸し出しか' 'どちらも会場で使う。')"
+expect_id comparison-okurigana-more "$out" comparison-without-consequence 1
 out="$(check_text comparison-verbs argument '## 作るか買うか' 'どちらも同じ機能を持つ。' '## 保存先はいつ決定するか' '設定画面で決める。' '## トークンはどこから取得するか' '認証画面でコピーする。' '## 使うか使わないか' 'どちらでも動く。')"
 expect_summary comparison-verbs "$out" PASS "tier1=0	tier2=0	tier3=0"
 # The consequence may sit in the section's bullets or in its subsections; a link target is not a statement.

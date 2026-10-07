@@ -107,8 +107,9 @@ const SECTION_CLOSER_MIN = 3;
 // A comparison announced by its heading: 「A と B の違い／比較／使い分け／選び方」「A か B か」「A と B、どちら」.
 const COMPARISON_HEADING = /\S\s*(?:と|や|、|vs\.?)\s*\S.*(?:の(?:違い|比較|使い分け|選び方)|どちら)/u;
 // 「A か B か」 counts only between noun phrases: 「どこから取得するか」 is a question, not a choice of two.
-// A noun may end in the kana of a verb stem (組み込み, 外付け); a verb in its dictionary form (作る, 買う) may not.
-const NOUN_END = "[一-龠ァ-ヶーA-Za-z0-9）)きぎしじちひびみりいえけげせてねべめれ]";
+// A noun may end in the kana of a verb stem (組み込み, 外付け); a verb in its dictionary form (作る, 買う) may not,
+// and neither may an adjective or a wish ending in い (高い, 書きたい).
+const NOUN_END = "[一-龠ァ-ヶーA-Za-z0-9）)きぎしじちひびみりえけげせてねべめれ]";
 const EITHER_OR_HEADING = new RegExp(`${NOUN_END}\\s*か(?!ら)[\\s、]*\\S*${NOUN_END}\\s*か[?？]?$`, "u");
 const INTERROGATIVE = /どこ|何|なに|いつ|どう|なぜ|どれ|どの|どんな|誰|だれ/u;
 const isComparisonHeading = (heading) => COMPARISON_HEADING.test(heading) || (EITHER_OR_HEADING.test(heading) && !INTERROGATIVE.test(heading));
