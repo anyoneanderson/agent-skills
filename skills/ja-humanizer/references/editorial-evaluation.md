@@ -16,6 +16,7 @@ from an independent evaluator until its response is recorded.
 | Abstract closing sentence | 「担当者が下書きの金額を見積書と照合します。この工程は、その境界を文章の作業に引くためのものです。」 | Keep the checking action. Remove the closing sentence, which does not explain what boundary or action it adds. |
 | Natural repeated endings | 「私は申込書を確認します。次に、添付書類の名前を見ます。足りない書類があれば、申込者に連絡します。」 | Preserve the sequence. A uniform-endings finding alone does not justify a fragment, inversion or nominal ending. |
 | Useful inference | 「書類名を追記した版では、確認の電話が5件から1件に減りました。この試行では、書類名の明記が確認の手間を減らした可能性があります。」 | Preserve the limited, uncertain inference. Do not remove every conclusion after an example or turn this into a universal causal claim. |
+| Human-side words | 「とりあえず手元で動かしてみたら、思ったより簡単でした！設定ファイルは3行で済む。もっと早く試せばよかったと思う。」 | Leave it as it is. In narrative mode, 「とりあえず」, 「〜と思う」, exclamation marks and mixed styles are not deleted or unified. Do not add impressions that are not in the material. |
 
 Also try a write request with only these facts: an application requires a name and
 email address. Ask for a short personal blog introduction but supply no personal

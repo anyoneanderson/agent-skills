@@ -161,6 +161,7 @@ not requirements to add episodes, emotions or a dramatic arc. Keep the shared co
 - Preserve the writer's stated reactions. Do not add time spent, feelings or relief that the writer did not provide.
 - A question to the reader may stay when it serves a purpose. Do not add questions just to make an introduction or closing more engaging.
 - Second-person address is fine at key points such as the introduction and the close.
+- Do not delete or unify what the writer wrote themselves: 「〜と思う」, 「とりあえず」, 「〜してみた」, 「色々」, exclamation marks, and a mix of the です・ます and だ・である styles. These human-side words are what declined in technical articles by 2026, and removing them moves the text toward an AI-written article. "Do not settle for hesitant weak predicates" under Removing Redundancy does not apply to 「〜と思う」 written as the writer's own impression. The rule against adding impressions or exclamation marks that are not in the material stays.
 
 Even in narrative mode, keep the following. Do not hide thin content behind anecdotes. Do not omit concrete technical information, procedures or numbers. Emotion and colloquialism are seasoning; the subject is the technology.
 
@@ -239,6 +240,7 @@ The test: how an engineer on the job would actually say the word aloud.
 - Code, APIs, reserved words, type names, proper nouns, commands → keep the original (Latin letters). Do not katakana-ize (do not write `after_create` as 「アフタークリエイト」 or the `users` table as 「ユーザーズテーブル」).
 - Established loanwords → katakana is fine (テーブル / コミット / デプロイ / マージ / リンク / レビュー / リクエスト).
 - Ordinary words and English phrasings that translate → translate into Japanese. Do not paste the original (small/focused→小さく集中して, what not why→何をだけでなくなぜ, link to context→文脈へのリンク, humanize→人間らしく).
+- Do not replace an established loanword with a Sino-Japanese word. The test above applies in the other direction too: when people on the job say 「デフォルト」 and 「ポイント」, write those, not 「既定」 and 「要点」. Use the Sino-Japanese word where it is the formal name, as in a setting name or a term from a standard.
 
 ## Source
 
