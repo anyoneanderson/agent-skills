@@ -214,6 +214,11 @@ expect_no_id calque-staging "$out" calque
 # Counts in a row are not test results (Issue #182); a count next to a test word still is.
 out="$(check_text log-counts argument '紹介会社は、全国の検索結果 38,668 件を 20 件ずつ約 1,934 ページ送る。' '問い合わせ 1,200 件のうち 300 件に返信した。' 'パスワードの再設定は 1,200 件パスワード変更は 300 件あった。')"
 expect_summary log-counts "$out" PASS "tier1=0	tier2=0	tier3=0"
+out="$(check_text log-usecase argument 'ユースケースは 12 件ある。' 'ショーケースに 24 件並べた。')"
+expect_summary log-usecase "$out" PASS "tier1=0	tier2=0	tier3=0"
+out="$(check_text log-testcase argument 'テストケースは 12 件ある。' '境界のケースを 12 件足した。')"
+expect_id log-testcase "$out" implementation-log 1
+expect_id log-testcase "$out" implementation-log 2
 out="$(check_text log-tests argument 'テスト 1,919 件すべて通過。' 'orchestrator 1919件、agent-runtime 234件すべて通過。' '追加したケースは 48 件です。' '結合試験は 1,919 件 PASS した。')"
 for n in 1 2 3 4; do expect_id log-tests "$out" implementation-log "$n"; done
 

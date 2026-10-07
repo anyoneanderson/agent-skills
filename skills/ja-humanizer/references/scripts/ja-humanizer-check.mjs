@@ -148,7 +148,8 @@ const PRECONDITION = /同意|承諾|承認|許可|権限|有効|お持ち|問題
 const ESTIMATE = /[0-9０-９〇一二三四五六七八九十]+(?:営業日|日|週間|時間|か月|ヶ月|カ月)|期限|納期|見込み|まで(?:に)?(?:完了|対応|納品)/u;
 // Implementation-log residue in a PR or Issue body: review round counts, test counts, coverage values.
 // A count needs a test word next to it; counts in a row (「38,668 件を 20 件ずつ」) are not test results.
-const IMPLEMENTATION_LOG = /(?:レビュー|検査|spec-review|spec-inspect|Codex)[^。]{0,20}[0-9０-９]+\s*ラウンド|[0-9０-９]+\s*ラウンド[^。]{0,12}(?:レビュー|検査)|(?:テスト|ケース)[^。]{0,8}[0-9０-９,，]{2,}\s*件|[0-9０-９,，]{3,}\s*件[^。]{0,10}(?:通過|パス(?![ワキ])|PASS|すべて)|(?:カバレッジ|coverage|statements|branches|functions|lines)\s*[0-9０-９.]+\s*[%％]/iu;
+// 「ケース」 inside another katakana word (ユースケース) and 「パス」 in パスワード or パスキー are not test words.
+const IMPLEMENTATION_LOG = /(?:レビュー|検査|spec-review|spec-inspect|Codex)[^。]{0,20}[0-9０-９]+\s*ラウンド|[0-9０-９]+\s*ラウンド[^。]{0,12}(?:レビュー|検査)|(?:テスト|(?<![ァ-ヶー])ケース)[^。]{0,8}[0-9０-９,，]{2,}\s*件|[0-9０-９,，]{3,}\s*件[^。]{0,10}(?:通過|パス(?![ワキ])|PASS|すべて)|(?:カバレッジ|coverage|statements|branches|functions|lines)\s*[0-9０-９.]+\s*[%％]/iu;
 const TADASHI = /^(?:ただし|但し)[、,]?/u;
 const REASON = /ので|ため|から|につき|ゆえ/u;
 const HEADING_AS_SENTENCE = /(?:した|きた|なった|動いた|変わった|揃った|ます|です|である|だ|ない)[。！!]?$/u;
