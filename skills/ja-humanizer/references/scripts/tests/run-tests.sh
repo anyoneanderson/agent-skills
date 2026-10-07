@@ -463,6 +463,11 @@ out="$(check_text comparison-bullets argument '## RESTとgRPCの違い' '通信�
 expect_no_id comparison-bullets "$out" comparison-without-consequence
 out="$(check_text comparison-nested argument '## RESTとgRPCの違い' '通信方式は次のように選ぶ。' '### REST' '既存のHTTPクライアントを使うので、導入の工数が少ない。' '### gRPC' '通信量を削減できるため、速度を優先するときに選ぶ。')"
 expect_no_id comparison-nested "$out" comparison-without-consequence
+# Safety, compatibility and fit are consequences too; 「選ぶ」 alone is not, since every comparison uses it.
+out="$(check_text comparison-safety argument '## パスワードとパスキーの違い' 'パスキーは接続先のドメインを検証するので、偽サイトでは使えず安全である。' '## RESTとgRPCの比較' 'gRPCは内部の通信に向いている。' '## v1とv2の違い' 'v2はv1と互換がある。' '## 自作か購入か' 'セキュリティの更新を自分たちで続けることになる。')"
+expect_no_id comparison-safety "$out" comparison-without-consequence
+out="$(check_text comparison-choose-only argument '## RESTとgRPCの違い' 'RESTはHTTPでJSONを送る。用途に合わせて選ぶ。')"
+expect_id comparison-choose-only "$out" comparison-without-consequence 1
 out="$(check_text comparison-next-section argument '## RESTとgRPCの違い' 'RESTはHTTPでJSONを送る。' '### gRPC' 'gRPCはProtocol Buffersを送る。' '## 導入の工数' '工数は2日だった。')"
 expect_id comparison-next-section "$out" comparison-without-consequence 1
 out="$(check_text comparison-url argument '## RESTとgRPCの違い' 'RESTはHTTPでJSONを送る。gRPCはProtocol Buffersを送る。' '[資料](https://example.com/運用)')"

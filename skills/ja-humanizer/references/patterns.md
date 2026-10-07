@@ -90,7 +90,7 @@ Example:
 
 ### A comparison without its consequence
 
-Detect: a section headed 「A と B の違い」, 「A と B の比較」 or 「A か B か」 sets two descriptions side by side and never says what changes for the person choosing (usable language, speed, cost, effort, constraints, operation). It has no evaluative word, so it passes the thin-sentence check. The checker picks the section by the form of its heading and reports when no consequence word appears in its body text, bullets or subsections. A heading with a question word, such as 「どこから取得するか」, is not treated as a comparison. A comparison inside a paragraph, opened by 「一方」 or 「に対し」, is not checked and is confirmed by reading.
+Detect: a section headed 「A と B の違い」, 「A と B の比較」 or 「A か B か」 sets two descriptions side by side and never says what changes for the person choosing (usable language, speed, cost, effort, constraints, operation, safety, compatibility, which one fits). It has no evaluative word, so it passes the thin-sentence check. The checker picks the section by the form of its heading and reports when no consequence word appears in its body text, bullets or subsections. A heading with a question word, such as 「どこから取得するか」, is not treated as a comparison. A comparison inside a paragraph, opened by 「一方」 or 「に対し」, is not checked and is confirmed by reading.
 
 Fix: the skill does not add the consequence. Ask "What does this difference change in the reader's choice?" and write it once the answer arrives.
 

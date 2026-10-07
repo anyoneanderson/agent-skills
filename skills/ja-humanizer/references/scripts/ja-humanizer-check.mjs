@@ -110,7 +110,7 @@ const NOUN_END = "[一-龠ァ-ヶーA-Za-z0-9）)]";
 const EITHER_OR_HEADING = new RegExp(`${NOUN_END}\\s*か(?!ら)[\\s、]*\\S*${NOUN_END}\\s*か[?？]?$`, "u");
 const INTERROGATIVE = /どこ|何|なに|いつ|どう|なぜ|どれ|どの|どんな|誰|だれ/u;
 const isComparisonHeading = (heading) => COMPARISON_HEADING.test(heading) || (EITHER_OR_HEADING.test(heading) && !INTERROGATIVE.test(heading));
-const CONSEQUENCE = /言語|速度|速[いくさ]|遅[いくさ]|性能|コスト|費用|工数|手間|制約|制限|オーバーヘッド|保守|運用|依存/u;
+const CONSEQUENCE = /言語|速度|速[いくさ]|遅[いくさ]|性能|コスト|費用|工数|手間|制約|制限|オーバーヘッド|保守|運用|依存|安全|セキュリティ|向[くいかけ]|互換/u;
 
 const THREAT_CLOSER = /(?:この(?:数字|数値|情報|実績)がないと|がなければ)[^。]*(?:できません|判断できない|手遅れ)|手遅れになります/u;
 
@@ -582,7 +582,7 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
     const said = sec.scope.filter((p) => p.kind === "body" || p.kind === "bullet" || p.kind === "heading");
     if (!isComparisonHeading(sec.heading) || !said.some((p) => p.kind !== "heading")) continue;
     if (!CONSEQUENCE.test(said.map((p) => shownText(p.text)).join("\n"))) {
-      push(1, "comparison-without-consequence", sec.line, "the section compares two things but never says what changes for the reader (language, speed, cost, effort, constraint, operation)", { question: question("comparison-without-consequence") });
+      push(1, "comparison-without-consequence", sec.line, "the section compares two things but never says what changes for the reader (language, speed, cost, effort, constraint, operation, safety, fit)", { question: question("comparison-without-consequence") });
     }
   }
 

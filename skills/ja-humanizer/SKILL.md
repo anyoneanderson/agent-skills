@@ -250,7 +250,7 @@ thresholds are in `references/patterns.md`):
 | `rhythm-mismatch` | 2 | With `--voice`: the draft's mean sentence length is below 0.75 times the sample's, or its share of connective sentences is 20 points or more lower |
 | `negation-closer` | 2 | Two or more sentences end in 「〜ではない」「〜わけではない」「〜とは限らない」, at one or more per 1,000 characters |
 | `section-closer-repeat` | 2, with a question | Three or more sections end on the same form (「必要がある」「〜したい」「ことになる」「注意」) |
-| `comparison-without-consequence` | 1, with a question | A section headed 「A と B の違い／比較／使い分け／選び方」 or 「A か B か」 (noun phrases, no question word) names no language, speed, cost, effort, constraint or operation in its text, bullets or subsections |
+| `comparison-without-consequence` | 1, with a question | A section headed 「A と B の違い／比較／使い分け／選び方」 or 「A か B か」 (noun phrases, no question word) names no language, speed, cost, effort, constraint, operation, safety, compatibility or fit in its text, bullets or subsections |
 | `summary-heading`, `heading-emoji` | 2 | A 「まとめ」 or 「おわりに」 heading; an emoji in a heading. Use the disable comment when the caller requires the heading |
 
 `commas_per_sentence` is a figure for comparison with the writer's sample, not
