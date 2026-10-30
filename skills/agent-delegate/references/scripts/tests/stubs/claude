@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+JSON_TOOL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/json-tool.mjs"
+if command -v cygpath >/dev/null 2>&1; then JSON_TOOL="$(cygpath -m "$JSON_TOOL")"; fi
+json_tool() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' node "$JSON_TOOL" "$@"; }
+
 session_id="stub-claude-session"
 previous=""
 for arg in "$@"; do
@@ -22,5 +26,5 @@ message="stub claude completed"
 if [ "${AGENT_DELEGATE_STUB_REVIEW:-0}" = 1 ]; then
   message=$'type: review\n## Meta\nbackend: stub\n## Findings\n### Critical\nNone\n### Improvement\nNone\n### Minor\nNone\n## Summary\nGate: PASS'
 fi
-jq -nc --arg session "$session_id" --arg result "$message" --arg prompt "$prompt" \
-  '{session_id:$session,result:$result,prompt_bytes:($prompt|length)}'
+printf '%s' "$prompt" | json_tool -R -s -c --arg session "$session_id" --arg result "$message" \
+  '({session_id:$.session,result:$.result,prompt_bytes:len(d)})'

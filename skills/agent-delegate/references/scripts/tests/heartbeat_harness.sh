@@ -3,6 +3,10 @@ set -euo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$(cd "$TEST_DIR/.." && pwd)/agent-delegate.sh"
+JSON_TOOL="$(cd "$TEST_DIR/.." && pwd)/json-tool.mjs"
+if command -v cygpath >/dev/null 2>&1; then JSON_TOOL="$(cygpath -m "$JSON_TOOL")"; fi
+json_tool() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' node "$JSON_TOOL" "$@"; }
+json_file() { local file="$1"; shift; [ -f "$file" ] && [ -r "$file" ] || return 2; json_tool "$@" < "$file"; }
 TARGET="claude"
 SCENARIO="done"
 OUT_DIR=""
@@ -79,9 +83,9 @@ close_control() {
 fallback_cleanup() {
   local sentinel="$HANDOFF_DIR/handoff-sentinel.json" child base unknown=0
   [ -d "$HANDOFF_DIR" ] || return 0
-  if [ -f "$sentinel" ] && jq -e --arg handoff "$HANDOFF_DIR" '
-    .handoff_dir==$handoff and (.created_fifos|type)=="array"
-  ' "$sentinel" >/dev/null 2>&1; then
+  if [ -f "$sentinel" ] && json_file "$sentinel" -e --arg handoff "$HANDOFF_DIR" '
+    eq(d?.handoff_dir, $.handoff) && type(d.created_fifos)==="array"
+  ' >/dev/null 2>&1; then
     while IFS= read -r base; do
       case "$base" in
         launcher-to-monitor.fifo|monitor-to-launcher.fifo|harness-to-monitor.fifo|monitor-to-harness.fifo) : ;;
@@ -89,7 +93,7 @@ fallback_cleanup() {
       esac
       child="$HANDOFF_DIR/$base"
       [ ! -e "$child" ] || { [ -p "$child" ] && rm -f "$child" || unknown=1; }
-    done < <(jq -r '.created_fifos[]' "$sentinel")
+    done < <(json_file "$sentinel" -r 'each(d?.created_fifos)')
     [ "$unknown" -ne 0 ] || rm -f "${sentinel}.tmp."* "$sentinel"
   else
     while IFS= read -r child; do
@@ -139,12 +143,12 @@ deadline=$(( $(now_epoch) + 10 ))
 
 while :; do
   [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: owner readiness timeout\n' >&2; exit 1; }
-  if [ -f "$OWNER_FILE" ] && [ -f "$PID_FILE" ] && jq -e --argjson launcher "$LAUNCHER_PID" --arg handoff "$HANDOFF_DIR" '
-    .run_kind=="detach" and .launcher_pid==$launcher and .runner_pid==.monitor_pid and
-    .worker_pid==null and .handoff_phase=="not_started" and .handoff_dir==$handoff
-  ' "$OWNER_FILE" >/dev/null 2>&1; then
-    MONITOR_PID="$(jq -r '.monitor_pid' "$OWNER_FILE")"
-    expected_run="$(jq -r '.run_id' "$OWNER_FILE")"
+  if [ -f "$OWNER_FILE" ] && [ -f "$PID_FILE" ] && json_file "$OWNER_FILE" -e --argjson launcher "$LAUNCHER_PID" --arg handoff "$HANDOFF_DIR" '
+    eq(d?.run_kind, "detach") && eq(d.launcher_pid, $.launcher) && eq(d.runner_pid, d.monitor_pid) &&
+    eq(d.worker_pid, null) && eq(d.handoff_phase, "not_started") && eq(d.handoff_dir, $.handoff)
+  ' >/dev/null 2>&1; then
+    MONITOR_PID="$(json_file "$OWNER_FILE" -r 'd?.monitor_pid')"
+    expected_run="$(json_file "$OWNER_FILE" -r 'd?.run_id')"
     if process_alive "$MONITOR_PID" &&
        [ "$(awk -F': ' '$1=="pid"{print $2;exit}' "$PID_FILE")" = "$MONITOR_PID" ] &&
        [ "$(awk -F': ' '$1=="run_id"{print $2;exit}' "$PID_FILE")" = "$expected_run" ]; then
@@ -159,14 +163,14 @@ done
 sentinel="$HANDOFF_DIR/handoff-sentinel.json"
 while :; do
   [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: FIFO readiness timeout\n' >&2; exit 1; }
-  if [ -f "$sentinel" ] && jq -e --arg run "$expected_run" --argjson launcher "$LAUNCHER_PID" \
+  if [ -f "$sentinel" ] && json_file "$sentinel" -e --arg run "$expected_run" --argjson launcher "$LAUNCHER_PID" \
       --argjson monitor "$MONITOR_PID" --arg handoff "$HANDOFF_DIR" '
-      .run_id==$run and .launcher_pid==$launcher and .monitor_pid==$monitor and
-      .handoff_dir==$handoff and .state=="fifo_ready" and .handoff_phase=="not_started" and
-      .handoff_fifos==["launcher-to-monitor.fifo","monitor-to-launcher.fifo"] and
-      .control_fifos==["harness-to-monitor.fifo","monitor-to-harness.fifo"] and
-      (.created_fifos|length)==4
-    ' "$sentinel" >/dev/null 2>&1; then
+      eq(d?.run_id, $.run) && eq(d.launcher_pid, $.launcher) && eq(d.monitor_pid, $.monitor) &&
+      eq(d.handoff_dir, $.handoff) && eq(d.state, "fifo_ready") && eq(d.handoff_phase, "not_started") &&
+      eq(d.handoff_fifos, ["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]) &&
+      eq(d.control_fifos, ["harness-to-monitor.fifo","monitor-to-harness.fifo"]) &&
+      len(d.created_fifos)===4
+    ' >/dev/null 2>&1; then
     ready=1
     for name in launcher-to-monitor monitor-to-launcher harness-to-monitor monitor-to-harness; do
       path="$HANDOFF_DIR/$name.fifo"
@@ -202,10 +206,10 @@ if [ "$SCENARIO" = monitor-kill-before-heartbeat ]; then
   owner_after_worker="$OUT_DIR/$LABEL-owner-before-first-heartbeat.json"
   while :; do
     [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: worker owner publication timeout\n' >&2; exit 1; }
-    if [ ! -e "$HEARTBEAT_FILE" ] && jq -e --arg run "$expected_run" '
-      .run_id==$run and (.worker_pid|type)=="number" and .worker_pid>0
-    ' "$OWNER_FILE" >/dev/null 2>&1; then
-      WORKER_PID="$(jq -r '.worker_pid' "$OWNER_FILE")"
+    if [ ! -e "$HEARTBEAT_FILE" ] && json_file "$OWNER_FILE" -e --arg run "$expected_run" '
+      eq(d?.run_id, $.run) && type(d.worker_pid)==="number" && d.worker_pid>0
+    ' >/dev/null 2>&1; then
+      WORKER_PID="$(json_file "$OWNER_FILE" -r 'd?.worker_pid')"
       process_alive "$WORKER_PID" || continue
       cp "$OWNER_FILE" "$owner_after_worker"
       break
@@ -216,13 +220,13 @@ if [ "$SCENARIO" = monitor-kill-before-heartbeat ]; then
   for _ in $(seq 1 10000); do process_alive "$MONITOR_PID" || break; done
   process_alive "$MONITOR_PID" && { printf 'heartbeat-harness: monitor survived injected KILL\n' >&2; exit 1; }
   process_alive "$WORKER_PID" || { printf 'heartbeat-harness: worker did not survive initial monitor loss\n' >&2; exit 1; }
-  jq -n --arg run_id "$expected_run" --arg owner_snapshot "$owner_after_worker" \
+  json_tool -n --arg run_id "$expected_run" --arg owner_snapshot "$owner_after_worker" \
     --arg heartbeat_path "$HEARTBEAT_FILE" --argjson launcher_pid "$LAUNCHER_PID" \
     --argjson monitor_pid "$MONITOR_PID" --argjson worker_pid "$WORKER_PID" '
-    {run_id:$run_id,scenario:"monitor-kill-before-heartbeat",launcher_pid:$launcher_pid,
-     monitor_pid:$monitor_pid,worker_pid:$worker_pid,owner_snapshot:$owner_snapshot,
-     heartbeat_path:$heartbeat_path,monitor_alive:false,worker_alive_before_cleanup:true,
-     heartbeat_absent:true}
+    ({run_id:$.run_id,scenario:"monitor-kill-before-heartbeat",launcher_pid:$.launcher_pid,
+     monitor_pid:$.monitor_pid,worker_pid:$.worker_pid,owner_snapshot:$.owner_snapshot,
+     heartbeat_path:$.heartbeat_path,monitor_alive:false,worker_alive_before_cleanup:true,
+     heartbeat_absent:true})
   ' > "$RESULT_FILE"
   close_control
   kill -TERM "$WORKER_PID" 2>/dev/null || true
@@ -258,9 +262,9 @@ case "$SCENARIO" in
         [ "$observed" = "observed $observed_sequence running $beat" ] || {
           printf 'heartbeat-harness: invalid beat acknowledgement: %s\n' "$observed" >&2; exit 1;
         }
-        jq -e --arg run "$expected_run" --arg beat "$beat" '
-          .run_id==$run and .state=="running" and .last_beat==$beat
-        ' "$HEARTBEAT_FILE" >/dev/null
+        json_file "$HEARTBEAT_FILE" -e --arg run "$expected_run" --arg beat "$beat" '
+          eq(d?.run_id, $.run) && eq(d.state, "running") && eq(d.last_beat, $.beat)
+        ' >/dev/null
         cp "$HEARTBEAT_FILE" "$OUT_DIR/$LABEL-heartbeat-$observed_sequence.json"
         cp "$OWNER_FILE" "$OUT_DIR/$LABEL-owner-$observed_sequence.json"
         printf '%s\tbeat\t%s\n' "$((5 + observed_sequence))" "$beat" >> "$EVENTS_FILE"
@@ -292,27 +296,27 @@ done
 [ ! -e "$OWNER_FILE" ] && [ ! -e "$PID_FILE" ] || { printf 'heartbeat-harness: runtime owner residue\n' >&2; exit 1; }
 [ ! -d "$HANDOFF_DIR" ] || { printf 'heartbeat-harness: handoff directory residue\n' >&2; exit 1; }
 
-report_status="$(jq -r '.status' "$REPORT_FILE")"
-report_run="$(jq -r '.meta.run_id' "$REPORT_FILE")"
+report_status="$(json_file "$REPORT_FILE" -r 'd?.status')"
+report_run="$(json_file "$REPORT_FILE" -r 'd?.meta?.run_id')"
 [ "$report_run" = "$expected_run" ] || { printf 'heartbeat-harness: report run mismatch\n' >&2; exit 1; }
 if [ -f "$HEARTBEAT_FILE" ]; then
-  heartbeat_state="$(jq -r '.state' "$HEARTBEAT_FILE")"
-  heartbeat_run="$(jq -r '.run_id' "$HEARTBEAT_FILE")"
+  heartbeat_state="$(json_file "$HEARTBEAT_FILE" -r 'd?.state')"
+  heartbeat_run="$(json_file "$HEARTBEAT_FILE" -r 'd?.run_id')"
 else
   heartbeat_state="absent"; heartbeat_run="absent"
 fi
 direction="codex->claude"; [ "$TARGET" = codex ] && direction="claude->codex"
 beat_count="$(find "$OUT_DIR" -maxdepth 1 -name "$LABEL-heartbeat-[0-9]*.json" | wc -l | tr -d ' ')"
-jq -n --arg run_id "$expected_run" --arg target "$TARGET" --arg direction "$direction" \
+json_tool -n --arg run_id "$expected_run" --arg target "$TARGET" --arg direction "$direction" \
   --arg scenario "$SCENARIO" --arg report_path "$REPORT_FILE" --arg heartbeat_path "$HEARTBEAT_FILE" \
   --arg report_status "$report_status" --arg heartbeat_state "$heartbeat_state" --arg heartbeat_run "$heartbeat_run" \
   --argjson launcher_pid "$LAUNCHER_PID" --argjson monitor_pid "$MONITOR_PID" --argjson launcher_exit "$launcher_exit" \
   --argjson beat_count "$beat_count" '
-  {run_id:$run_id,target:$target,direction:$direction,scenario:$scenario,
-   launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,launcher_exit:$launcher_exit,
-   peer_calls:0,beat_count:$beat_count,report_path:$report_path,heartbeat_path:$heartbeat_path,
-   report_status:$report_status,heartbeat_state:$heartbeat_state,heartbeat_run_id:$heartbeat_run,
-   handoff_removed:true}
+  ({run_id:$.run_id,target:$.target,direction:$.direction,scenario:$.scenario,
+   launcher_pid:$.launcher_pid,monitor_pid:$.monitor_pid,launcher_exit:$.launcher_exit,
+   peer_calls:0,beat_count:$.beat_count,report_path:$.report_path,heartbeat_path:$.heartbeat_path,
+   report_status:$.report_status,heartbeat_state:$.heartbeat_state,heartbeat_run_id:$.heartbeat_run,
+   handoff_removed:true})
   ' > "$RESULT_FILE"
 printf '%s\n' "$RESULT_FILE"
 trap - EXIT TERM INT HUP
