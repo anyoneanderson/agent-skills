@@ -28,7 +28,7 @@ usage() {
 
 die() { printf 'TEST_FAIL\t%s\n' "$*" >&2; exit 1; }
 require_command() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }
-mode_of() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
 sha256_file() { shasum -a 256 "$1" | awk '{print $1}'; }
 
 while [ "$#" -gt 0 ]; do
@@ -1072,8 +1072,8 @@ case_run_ownership_force_resume() {
     monitor_pid:999999,worker_pid:null,started_at:"2000-01-01T00:00:00Z",lease_at:"2000-01-01T00:00:00Z",
     handoff_dir:$handoff,handoff_phase:"not_started"}' > "$dir/wronguid-owner.json"
   printf 'pid: 999999\nrun_id: old-run\n' > "$dir/wronguid.pid"
-  metadata="$(jq -nc --argjson uid "$(( $(id -u) + 1 ))" --argjson dev "$(stat -f %d "$old_handoff" 2>/dev/null || stat -c %d "$old_handoff")" \
-    --argjson ino "$(stat -f %i "$old_handoff" 2>/dev/null || stat -c %i "$old_handoff")" \
+  metadata="$(jq -nc --argjson uid "$(( $(id -u) + 1 ))" --argjson dev "$(stat -c %d "$old_handoff" 2>/dev/null || stat -f %d "$old_handoff")" \
+    --argjson ino "$(stat -c %i "$old_handoff" 2>/dev/null || stat -f %i "$old_handoff")" \
     '{source:"heartbeat_test_injection",type:"directory",symlink:false,uid:$uid,mode:700,device:$dev,inode:$ino}')"
   set +e
   AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$new_handoff" AGENT_DELEGATE_TEST_LSTAT_METADATA="$metadata" \
@@ -2272,7 +2272,7 @@ check_rollback_branch() {
   printf 'old-owner\n' > "$dir/$label-owner.json"; printf 'old-report\n' > "$dir/$label-report.json"; printf 'old-heartbeat\n' > "$dir/$label-heartbeat.json"
   if [ "$with_old_pid" = yes ]; then
     printf 'pid: 999999\nrun_id: old-run\n' > "$dir/$label.pid"
-    pid_hash="$(sha256_file "$dir/$label.pid")"; pid_ino="$(stat -f %i "$dir/$label.pid" 2>/dev/null || stat -c %i "$dir/$label.pid")"
+    pid_hash="$(sha256_file "$dir/$label.pid")"; pid_ino="$(stat -c %i "$dir/$label.pid" 2>/dev/null || stat -f %i "$dir/$label.pid")"
   fi
   owner_hash="$(sha256_file "$dir/$label-owner.json")"; report_hash="$(sha256_file "$dir/$label-report.json")"; heartbeat_hash="$(sha256_file "$dir/$label-heartbeat.json")"
   set +e
@@ -2285,7 +2285,7 @@ check_rollback_branch() {
   [ "$owner_after" = "$owner_hash" ] && [ "$report_after" = "$report_hash" ] && [ "$heartbeat_after" = "$heartbeat_hash" ] || return 1
   if [ "$with_old_pid" = yes ]; then
     pid_after="$(sha256_file "$dir/$label.pid")"
-    [ "$pid_after" = "$pid_hash" ] && [ "$(stat -f %i "$dir/$label.pid" 2>/dev/null || stat -c %i "$dir/$label.pid")" = "$pid_ino" ] || return 1
+    [ "$pid_after" = "$pid_hash" ] && [ "$(stat -c %i "$dir/$label.pid" 2>/dev/null || stat -f %i "$dir/$label.pid")" = "$pid_ino" ] || return 1
   else [ ! -e "$dir/$label.pid" ] || return 1
   fi
   ! find "$dir" -maxdepth 1 \( -name '*.tmp.*' -o -name '*.backup.*' -o -name '*report.candidate*' -o -name '*owner.lock*' \) -print -quit | grep -q . || return 1

@@ -334,10 +334,10 @@ file_hash_or_absent() {
   fi
 }
 
-stat_mode() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
-stat_uid() { stat -f '%u' "$1" 2>/dev/null || stat -c '%u' "$1"; }
-stat_dev() { stat -f '%d' "$1" 2>/dev/null || stat -c '%d' "$1"; }
-stat_ino() { stat -f '%i' "$1" 2>/dev/null || stat -c '%i' "$1"; }
+stat_mode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+stat_uid() { stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"; }
+stat_dev() { stat -c '%d' "$1" 2>/dev/null || stat -f '%d' "$1"; }
+stat_ino() { stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"; }
 
 process_probe() {
   local pid="$1" probe

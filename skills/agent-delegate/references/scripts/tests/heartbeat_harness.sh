@@ -64,7 +64,7 @@ WORKER_PID=""
 LAUNCHER_PID=""
 CONTROL_OPEN=0
 
-mode_of() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
 process_alive() { kill -0 "$1" >/dev/null 2>&1; }
 now_epoch() { date -u +%s; }
 epoch_rfc3339() { date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
