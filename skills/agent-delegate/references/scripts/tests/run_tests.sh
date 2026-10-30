@@ -2344,6 +2344,8 @@ case_json_tool_semantics() {
 
   json_tool_expect num-conversion 0 '12' '' -n --arg v 12 'num($.v)'
   json_tool_expect num-conversion 5 '' '' -n --arg v 12x 'num($.v)'
+  json_tool_expect num-conversion 5 '' '' -n --arg v 0x10 'num($.v)'
+  json_tool_expect num-conversion 0 '-1.5' '' -n --arg v -1.5 'num($.v)'
   checked="$checked num-conversion"
 
   json_tool_expect multiple-values 0 $'"c"\n{"r":"h"}' '{"commit":"c","hashes":{"r":"h"}}' -c 'each([d.commit, d.hashes])'
@@ -2355,6 +2357,8 @@ case_json_tool_semantics() {
   checked="$checked raw-slurp"
 
   json_tool_expect undefined-argument 5 '' '' -n '$.missing'
+  json_tool_expect undefined-argument 0 'x' '' -n -r --arg __proto__ x '$.__proto__'
+  json_tool_expect undefined-argument 0 '1' '' -n --argjson __proto__ 1 '$.__proto__'
   checked="$checked undefined-argument"
 
   json_tool_expect pretty-format 0 $'{\n  "a": [\n    1,\n    {\n      "b": null\n    }\n  ],\n  "c": {}\n}' '{"a":[1,{"b":null}],"c":{}}' 'd'

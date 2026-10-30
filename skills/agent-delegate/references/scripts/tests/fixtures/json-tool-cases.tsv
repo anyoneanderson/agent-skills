@@ -6,9 +6,9 @@ jsonl-stream	line-delimited input is read value by value; a broken line stops wi
 large-output-then-error	output already written reaches a pipe in full when a later value fails
 argument-unconverted	--arg /tmp/x reaches the output unchanged
 codepoint-length	len counts code points
-num-conversion	num turns numeric strings into numbers and rejects others
+num-conversion	num turns decimal numeric strings into numbers and rejects others, including 0x10
 multiple-values	each([a, b]) prints two lines
 raw-slurp	-R -s yields the whole input; the touched list expression gives [] for empty and one item per line
-undefined-argument	reading an argument that was not passed exits 5
+undefined-argument	reading an argument that was not passed exits 5; a name such as __proto__ is an ordinary argument
 pretty-format	default output is jq-style two-space JSON; -c is one line
 long-report-fields	a 40000-character stderr line and 3000 touched files reach report.json through stdin

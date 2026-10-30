@@ -75,7 +75,8 @@ function keepNull(_key, v) {
 // jq tonumber: a numeric string becomes a number; anything else is an error.
 function num(v) {
   if (typeof v === "number") return v;
-  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  // Decimal only: Number() alone would also accept 0x10, 0b1 and 0o7.
+  if (typeof v === "string" && /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(v)) return Number(v);
   throw new Error(`Cannot parse ${JSON.stringify(v)} as a number`);
 }
 
@@ -95,7 +96,8 @@ function fail(code, message) {
 function main() {
   if (Number(process.versions.node.split(".")[0]) < 18) fail(2, "node 18 or later is required");
   const opts = { e: false, r: false, c: false, n: false, s: false, R: false };
-  const args = {};
+  // No prototype, so names such as __proto__ become ordinary keys.
+  const args = Object.create(null);
   let expr = null;
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i += 1) {
