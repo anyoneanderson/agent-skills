@@ -348,9 +348,12 @@ stat_dev() { stat -c '%d' "$1" 2>/dev/null || stat -f '%d' "$1"; }
 stat_ino() { stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"; }
 
 # MSYS and Cygwin ship a ps that rejects -o, so every -o reader returns empty
-# there and process probing silently stops working. Their default listing
-# carries PID PPID PGID WINPID TTY UID STIME COMMAND, which holds the same
-# fields, so probe -o once and read those columns when it is missing.
+# there and process probing silently stops working. Reading their ps columns
+# instead is not safe: the listing prefixes some rows with a status character,
+# which shifts PPID into the PGID column, and its COMMAND holds only the
+# executable path, so --_monitor and --_worker cannot be told apart. Their
+# /proc carries the process group and the full command line, so probe -o once
+# and read /proc when it is missing.
 PS_HAS_O=""
 ps_has_o() {
   if [ -z "$PS_HAS_O" ]; then
@@ -360,16 +363,24 @@ ps_has_o() {
 }
 ps_command_of() {
   if ps_has_o; then ps -p "$1" -o command= 2>/dev/null; return 0; fi
-  ps -p "$1" 2>/dev/null | awk 'NR>1 { for (i = 1; i < 8; i++) $i = ""; sub(/^ +/, ""); print; exit }'
+  [ -r "/proc/$1/cmdline" ] || return 0
+  tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null
 }
 ps_pgid_of() {
   if ps_has_o; then ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'; return 0; fi
-  ps -p "$1" 2>/dev/null | awk 'NR>1 { print $3; exit }' | tr -d '[:space:]'
+  [ -r "/proc/$1/pgid" ] || return 0
+  tr -d '[:space:]' < "/proc/$1/pgid" 2>/dev/null
 }
 ps_pid_pgid_command() {
+  local entry pid pgid
   if ps_has_o; then ps -axo pid=,pgid=,command= 2>/dev/null; return 0; fi
-  ps -e 2>/dev/null |
-    awk 'NR>1 { pid = $1; pgid = $3; for (i = 1; i < 8; i++) $i = ""; sub(/^ +/, ""); print pid, pgid, $0 }'
+  for entry in /proc/[0-9]*; do
+    pid="${entry#/proc/}"
+    [ -r "$entry/pgid" ] && [ -r "$entry/cmdline" ] || continue
+    pgid="$(tr -d '[:space:]' < "$entry/pgid" 2>/dev/null)"
+    [ -n "$pgid" ] || continue
+    printf '%s %s %s\n' "$pid" "$pgid" "$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null)"
+  done
 }
 
 # Git Bash's default noacl mount ignores chmod on directories, so a handoff
