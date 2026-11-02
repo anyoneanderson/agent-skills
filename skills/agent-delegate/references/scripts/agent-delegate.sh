@@ -347,6 +347,30 @@ stat_uid() { stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"; }
 stat_dev() { stat -c '%d' "$1" 2>/dev/null || stat -f '%d' "$1"; }
 stat_ino() { stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"; }
 
+# Git Bash's default noacl mount ignores chmod on directories, so a handoff
+# directory can never report 700 there. True only on Windows when a probe under
+# the handoff root confirms chmod has no effect; macOS and Linux always keep the
+# mode check. A failed probe also keeps it.
+CHMOD_INEFFECTIVE=""
+chmod_is_ineffective() {
+  local probe first second ineffective=0
+  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) return 1 ;; esac
+  if [ -z "$CHMOD_INEFFECTIVE" ]; then
+    probe="$(mktemp -d "${HANDOFF_ROOT:-${TMPDIR:-/tmp}}/agent-delegate-chmod-probe.XXXXXX")" || return 1
+    if chmod 700 "$probe" && first="$(stat_mode "$probe")" && [ -n "$first" ] &&
+       chmod 755 "$probe" && second="$(stat_mode "$probe")" && [ -n "$second" ] &&
+       { [ "$first" != 700 ] || [ "$second" != 755 ]; }; then
+      ineffective=1
+    fi
+    if ! rmdir "$probe"; then
+      err "could not remove chmod probe $probe; keeping the mode check"
+      ineffective=0
+    fi
+    CHMOD_INEFFECTIVE="$ineffective"
+  fi
+  [ "$CHMOD_INEFFECTIVE" = 1 ]
+}
+
 process_probe() {
   local pid="$1" probe
   case "$pid" in ''|*[!0-9]*|0) printf 'absent'; return ;; esac
@@ -777,7 +801,8 @@ classify_handoff_metadata() {
   embedded_pid="${BASH_REMATCH[1]}"
   [ "$embedded_pid" = "$launcher_pid" ] || return 1
   [ "$type" = "directory" ] && [ "$symlink" = "false" ] || return 1
-  [ "$uid" = "$expected_uid" ] && [ "$mode" = "700" ] || return 1
+  [ "$uid" = "$expected_uid" ] || return 1
+  [ "$mode" = "700" ] || chmod_is_ineffective || return 1
   if [ -n "$expected_dev" ]; then [ "$dev" = "$expected_dev" ] || return 1; fi
   if [ -n "$expected_ino" ]; then [ "$ino" = "$expected_ino" ] || return 1; fi
   [ -n "$path" ]
@@ -2283,7 +2308,7 @@ if [ "$DETACH" -eq 1 ]; then
        [ ! -d "$HANDOFF_DIR" ] || [ -L "$HANDOFF_DIR" ] ||
        [ "$(dirname "$HANDOFF_DIR")" != "$HANDOFF_ROOT" ] ||
        [ "$(stat_uid "$HANDOFF_DIR")" != "$(id -u)" ] ||
-       [ "$(stat_mode "$HANDOFF_DIR")" != 700 ] ||
+       { [ "$(stat_mode "$HANDOFF_DIR")" != 700 ] && ! chmod_is_ineffective; } ||
        [ -n "$(find "$HANDOFF_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)" ]; then
       err "test handoff directory must be an empty mode 0700 directory directly under $HANDOFF_ROOT"
       exit 2

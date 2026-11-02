@@ -33,6 +33,14 @@ usage() {
 die() { printf 'TEST_FAIL\t%s\n' "$*" >&2; exit 1; }
 require_command() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }
 mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+# True on a Windows host whose mount ignores chmod (Git Bash's default noacl).
+host_ignores_chmod() {
+  local probe first
+  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) return 1 ;; esac
+  probe="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-chmod-probe.XXXXXX")" || return 1
+  chmod 600 "$probe"; first="$(mode_of "$probe")"; rm -f "$probe"
+  [ "$first" != 600 ]
+}
 sha256_file() { shasum -a 256 "$1" | awk '{print $1}'; }
 
 while [ "$#" -gt 0 ]; do
@@ -2118,7 +2126,7 @@ case_heartbeat_harness_contract() {
   local dir result
   dir="$(new_work_dir)"; result="$(run_harness "$dir" "$1" claude done)"
   check_harness_positive_and_negative "$result" 2 done
-  [ "$(mode_of "$dir/$1-sentinel-ready.json")" = 600 ]
+  [ "$(mode_of "$dir/$1-sentinel-ready.json")" = 600 ] || host_ignores_chmod
   awk -F '\t' '$2=="owner-before-fifo"{owner=NR} $2=="fifo-ready"{fifo=NR} END{exit !(owner && fifo && owner<fifo)}' "$dir/$1-harness-events.tsv"
   rm -rf "$dir"
 }
@@ -2300,6 +2308,93 @@ json_tool_expect() {
   [ "$out" = "$want_out" ] || die "json-tool $id: unexpected output: $out"
 }
 
+# Runs the stale reaper against a handoff directory left at mode 755.
+# expected: retain or remove. path_prefix: fake commands placed ahead of PATH.
+check_stale_handoff_mode() (
+  local expected="$1" path_prefix="$2" root dir label handoff probe monitor rc
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"; monitor="$(absent_test_pid)"
+  dir="$(new_work_dir)"; label="windows-mode"; printf 'prompt\n' > "$dir/prompt.md"
+  handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 755 "$handoff"
+  probe="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 700 "$probe"
+  trap 'rm -rf "$dir" "$handoff" "$probe"' EXIT TERM INT HUP
+  mkfifo "$handoff/launcher-to-monitor.fifo"
+  write_stale_sentinel "$handoff/handoff-sentinel.json" run-mode 101 "$monitor" "$handoff"
+  write_stale_detach_records "$dir" "$label" "$handoff" run-mode 101 "$monitor"
+  set +e
+  PATH="$path_prefix$PATH" AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$probe" AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid \
+    bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label "$label" \
+      --target claude --detach > "$dir/launch.out" 2> "$dir/launch.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || return 1
+  if [ "$expected" = remove ]; then
+    [ ! -e "$handoff" ] && [ ! -e "$dir/$label-owner.json" ]
+  else
+    [ -p "$handoff/launcher-to-monitor.fifo" ] && [ -f "$dir/$label-owner.json" ]
+  fi
+)
+
+# Launches with a test handoff directory left at mode 755 and reports whether
+# the launcher refused it for its mode.
+handoff_mode_gate_refuses() (
+  local path_prefix="$1" root dir probe
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"
+  dir="$(new_work_dir)"; printf 'prompt\n' > "$dir/prompt.md"
+  probe="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 755 "$probe"
+  trap 'rm -rf "$dir" "$probe"' EXIT TERM INT HUP
+  set +e
+  PATH="$path_prefix$PATH" AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$probe" AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid \
+    bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label windows-gate \
+      --target claude --detach > "$dir/launch.out" 2> "$dir/launch.err"
+  set -e
+  grep -q 'must be an empty mode 0700 directory' "$dir/launch.err"
+)
+
+case_windows_mode_check() (
+  local fakes uname_only chmod_only both chmod_fails rmdir_fails real_chmod real_rmdir
+  fakes="$(new_work_dir)"; uname_only="$fakes/uname-only"; chmod_only="$fakes/chmod-only"; both="$fakes/both"
+  chmod_fails="$fakes/chmod-fails"; rmdir_fails="$fakes/rmdir-fails"
+  real_chmod="$(command -v chmod)"; real_rmdir="$(command -v rmdir)"
+  trap 'rm -rf "$fakes"' EXIT TERM INT HUP
+  mkdir "$uname_only" "$chmod_only" "$both" "$chmod_fails" "$rmdir_fails"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$uname_only/uname"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$both/uname"
+  printf '#!/bin/sh\necho Linux\n' > "$chmod_only/uname"
+  printf '#!/bin/sh\nexit 0\n' > "$chmod_only/chmod"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$chmod_fails/uname"
+  printf '#!/bin/sh\ncase "$2" in *agent-delegate-chmod-probe*) exit 9 ;; esac\nexec "%s" "$@"\n' "$real_chmod" > "$chmod_fails/chmod"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$rmdir_fails/uname"
+  printf '#!/bin/sh\nexit 0\n' > "$rmdir_fails/chmod"
+  printf '#!/bin/sh\n"%s" "$@"\ncase "$1" in *agent-delegate-chmod-probe*) exit 1 ;; esac\n' "$real_rmdir" > "$rmdir_fails/rmdir"
+  printf '#!/bin/sh\nexit 0\n' > "$both/chmod"
+  chmod +x "$uname_only/uname" "$chmod_only/uname" "$chmod_only/chmod" "$both/uname" "$both/chmod" \
+    "$chmod_fails/uname" "$chmod_fails/chmod" "$rmdir_fails/uname" "$rmdir_fails/chmod" "$rmdir_fails/rmdir"
+
+  if host_ignores_chmod; then
+    # The real noacl mount: the probe finds chmod ineffective and skips the check.
+    check_stale_handoff_mode remove "" || return 1
+    if handoff_mode_gate_refuses ""; then return 1; fi
+    return 0
+  fi
+  # macOS and Linux keep the check.
+  check_stale_handoff_mode retain "" || return 1
+  handoff_mode_gate_refuses "" || return 1
+  # The Windows name alone is not enough while chmod still works.
+  check_stale_handoff_mode retain "$uname_only:" || return 1
+  handoff_mode_gate_refuses "$uname_only:" || return 1
+  # An ineffective chmod alone is not enough outside Windows.
+  check_stale_handoff_mode retain "$chmod_only:" || return 1
+  handoff_mode_gate_refuses "$chmod_only:" || return 1
+  # A probe that could not finish proves nothing, so the check stays.
+  check_stale_handoff_mode retain "$chmod_fails:" || return 1
+  handoff_mode_gate_refuses "$chmod_fails:" || return 1
+  check_stale_handoff_mode retain "$rmdir_fails:" || return 1
+  handoff_mode_gate_refuses "$rmdir_fails:" || return 1
+  # Windows with chmod ineffective is the only way to skip it.
+  check_stale_handoff_mode remove "$both:" || return 1
+  if handoff_mode_gate_refuses "$both:"; then return 1; fi
+)
+
 case_json_tool_semantics() {
   local dir id checked="" out rc repo home report i
   json_tool_expect missing-field-null 0 null '{}' -r 'd.x'
@@ -2413,9 +2508,9 @@ write_repeat_manifest() {
     --arg fixture "$fixture_hash" --arg harness "$harness_hash" --argjson beats "$CURRENT_HEARTBEATS" \
     --argjson terminals "$CURRENT_TERMINALS" '
     ({iteration:$.iteration,commit:$.commit,hashes:{runner:$.runner,fixture:$.fixture,harness:$.harness},
-     case_count:28,exit_code:0,heartbeat_updates:$.beats,terminal_reports:$.terminals,runtime_residue:false})
+     case_count:29,exit_code:0,heartbeat_updates:$.beats,terminal_reports:$.terminals,runtime_residue:false})
   ' > "$out"
-  json_file "$out" -e 'eq(d?.case_count, 28) && eq(d?.exit_code, 0) && d?.heartbeat_updates >= 2 && d?.terminal_reports >= 1 && eq(d?.runtime_residue, false)' >/dev/null
+  json_file "$out" -e 'eq(d?.case_count, 29) && eq(d?.exit_code, 0) && d?.heartbeat_updates >= 2 && d?.terminal_reports >= 1 && eq(d?.runtime_residue, false)' >/dev/null
 }
 
 if [ -n "$RUN_CASE" ]; then
@@ -2447,12 +2542,12 @@ done
 if [ "$REPEAT" -eq 3 ]; then
   aggregate="$repeat_root/aggregate.json"
   json_tool -n --argjson repeats "$REPEAT" --arg commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" \
-    '({commit:$.commit,repeats:$.repeats,registered_cases:28,passed_cases:28,failed_cases:0,
+    '({commit:$.commit,repeats:$.repeats,registered_cases:29,passed_cases:29,failed_cases:0,
       meta_cases:["readonly-gate-evidence","all-repeat-3"]})' > "$aggregate"
-  json_file "$aggregate" -e 'eq(d?.repeats, 3) && eq(d?.registered_cases, 28) && eq(d?.passed_cases, 28) && eq(d?.failed_cases, 0)' >/dev/null
+  json_file "$aggregate" -e 'eq(d?.repeats, 3) && eq(d?.registered_cases, 29) && eq(d?.passed_cases, 29) && eq(d?.failed_cases, 0)' >/dev/null
   printf 'PASS\tall-repeat-3\n'
   printf 'AGGREGATE\t%s\n' "$(json_file "$aggregate" -c 'd')"
-  printf 'ALL_PASS\trepeats=%s\tcases=28/28\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=29/29\n' "$REPEAT"
 else
-  printf 'ALL_PASS\trepeats=%s\tcases=27/28\tmeta=all-repeat-3-deferred\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=28/29\tmeta=all-repeat-3-deferred\n' "$REPEAT"
 fi

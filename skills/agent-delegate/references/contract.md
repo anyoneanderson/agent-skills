@@ -279,7 +279,10 @@ the reaper validates that the stored absolute path is directly below the
 configured root and that its basename contains the expected launcher PID before
 removing the owner and optional pid record. An existing handoff must be a
 non-symlink mode-0700 directory owned by the current user with an unchanged
-device/inode. When a sentinel exists, its JSON identity must also match. Only
+device/inode. On Windows the mode requirement is skipped only when a probe finds
+that `chmod` has no effect, as under Git Bash's default `noacl` mount, so a
+`TMPDIR` pointing at a shared folder loses the protection against a handoff
+directory other users can write; macOS and Linux always enforce it. When a sentinel exists, its JSON identity must also match. Only
 enumerated FIFOs, matching temporary files, and the sentinel may be removed;
 unknown or mismatched content is retained and diagnosed rather than removed.
 

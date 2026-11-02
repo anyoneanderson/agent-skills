@@ -28,3 +28,4 @@ T-A26	abnormal-cleanup-real-filesystem	suite	abnormal-cleanup	abnormal-cleanup-c
 T-A27	artifact-recovery-contract	suite	artifact-recovery	artifact-recovery.tsv	recovery-decisions-and-public-docs
 T-A28	monitor-term-review-recovery	suite	monitor-term-recovery	monitor-term-review-cases.tsv	same-run-review-recovery-and-fail-closed-negatives
 T-A29	json-tool-semantics	suite	json-tool	json-tool-cases.tsv	json-tool-semantics-summary
+T-A30	windows-mode-check	suite	windows-mode	handoff-cases.tsv	windows-mode-check-summary
