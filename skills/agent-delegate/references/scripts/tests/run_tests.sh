@@ -1043,9 +1043,32 @@ case_artifact_recovery_contract() {
   rm -f "$bad_docs"
 }
 
+# The group-termination gate only signals a process group once it has confirmed
+# the group still holds one of ours, so the forms a peer CLI takes on each
+# platform have to be recognised. A bare name is not enough: a Windows install
+# runs codex.exe, and the packaged Claude CLI runs as claude-code/cli.js under
+# node, with either path separator.
+check_peer_command_fixture() {
+  local file="$1" id command_line expected got count=0
+  while IFS=$'\t' read -r id command_line expected; do
+    [ "$id" = case_id ] && continue
+    case "$expected" in match|no-match) : ;; *) return 1 ;; esac
+    got="$(bash "$SCRIPT" --_match-command "$command_line" 2>/dev/null)" || return 1
+    [ "$got" = "$expected" ] || return 1
+    count=$((count + 1))
+  done < "$file"
+  [ "$count" -eq 14 ]
+}
+
 case_run_ownership_force_resume() {
-  local bad dir rc barrier old_pid deadline old_run old_runner new_run prior_run resumed_run raw old_handoff new_handoff metadata
+  local bad dir rc barrier old_pid old_cli release_pid deadline old_run old_runner new_run prior_run resumed_run raw old_handoff new_handoff metadata
   check_ownership_fixture "$FIXTURE_DIR/ownership-cases.tsv" || die "ownership fixture rejected"
+  check_peer_command_fixture "$FIXTURE_DIR/peer-command-cases.tsv" || die "peer command fixture rejected"
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-peer-command.XXXXXX")"
+  awk 'BEGIN{FS=OFS="\t"} $1=="windows-codex-exe-slash"{$3="no-match"} {print}' \
+    "$FIXTURE_DIR/peer-command-cases.tsv" > "$bad"
+  if check_peer_command_fixture "$bad"; then rm -f "$bad"; die "peer command checker accepted a corrupted expectation"; fi
+  rm -f "$bad"
   bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-ownership.XXXXXX")"
   awk 'BEGIN{FS=OFS="\t"} NR==2{$NF="retain"} {print}' "$FIXTURE_DIR/ownership-cases.tsv" > "$bad"
   if check_ownership_fixture "$bad"; then rm -f "$bad"; die "ownership checker accepted a corrupted expectation"; fi
@@ -1075,15 +1098,24 @@ case_run_ownership_force_resume() {
   [ -f "$dir/forced-owner.json" ] || { kill "$old_pid" 2>/dev/null || true; die "force fixture old owner missing"; }
   old_run="$(json_file "$dir/forced-owner.json" -r 'd?.run_id')"
   old_runner="$(json_file "$dir/forced-owner.json" -r 'd?.runner_pid')"
+  old_cli="$(cat "$barrier/claude.pid" 2>/dev/null || true)"
   run_sync "$dir" forced claude delegate done --force
   new_run="$(json_file "$dir/forced-report.json" -r 'd?.meta?.run_id')"; [ "$new_run" != "$old_run" ]
-  # --force must have ended the old runner before the barrier is released, or a
-  # host where the process probe reports nothing would keep two runs going and
-  # still pass the checks below.
+  # --force must have ended the old runner and the peer CLI it was holding
+  # before the barrier is released, or a host where the process probe reports
+  # nothing would keep two runs going and still pass the checks below.
   wait_for_pid_stop "$old_runner" || die "--force left the old runner $old_runner running"
-  # The stub holding the barrier is gone with its runner, so nothing reads the
-  # FIFO any more and an unguarded write would block here.
-  timeout 5 bash -c 'printf "release\n" > "$1"' _ "$barrier/release.fifo" 2>/dev/null || true
+  [ -z "$old_cli" ] || wait_for_pid_stop "$old_cli" ||
+    die "--force left the old peer CLI $old_cli running"
+  # Nothing reads the FIFO once that pair is gone, so the write has to be able
+  # to give up. macOS ships no timeout(1), so release it from a background
+  # write and kill that instead.
+  ( printf 'release\n' > "$barrier/release.fifo" ) 2>/dev/null &
+  release_pid=$!
+  deadline=$(( $(date -u +%s) + 5 ))
+  while kill -0 "$release_pid" 2>/dev/null && [ "$(date -u +%s)" -lt "$deadline" ]; do :; done
+  kill "$release_pid" 2>/dev/null || true
+  wait "$release_pid" 2>/dev/null || true
   wait "$old_pid" 2>/dev/null || true
   json_file "$dir/forced-report.json" -e --arg run "$new_run" 'eq(d?.meta?.run_id, $.run)' >/dev/null
   [ ! -e "$dir/forced-owner.json" ] && [ ! -e "$dir/forced.pid" ] && [ ! -e "$dir/forced-heartbeat.json" ]

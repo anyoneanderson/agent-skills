@@ -1,0 +1,15 @@
+case_id	command_line	expected
+posix-codex	/usr/bin/codex exec --json	match
+posix-claude	/usr/bin/claude -p	match
+bare-codex	codex	match
+windows-codex-exe-slash	C:/Tools/codex.exe exec --json	match
+windows-codex-exe-backslash	C:\Tools\codex.exe exec --json	match
+bare-claude-exe	claude.exe	match
+packaged-cli-js-slash	node /c/npm/@anthropic-ai/claude-code/cli.js -p	match
+packaged-cli-js-backslash	node C:\npm\@anthropic-ai\claude-code\cli.js -p	match
+self-monitor	bash /x/agent-delegate.sh --_monitor	match
+self-worker	bash /x/agent-delegate.sh --_worker	match
+plain-shell	/usr/bin/bash	no-match
+unrelated-sleep	/usr/bin/sleep 30	no-match
+name-prefix-only	/usr/bin/codexother	no-match
+name-suffix-only	myclaude --x	no-match

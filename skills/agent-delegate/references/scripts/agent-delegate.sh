@@ -58,7 +58,8 @@ SANDBOX=""
 REVIEW_OUTPUT=""
 DETACH=0
 FORCE=0
-INTERNAL=""   # "", "worker", "monitor" — set only by re-invocation
+INTERNAL=""   # "", "worker", "monitor", "match-command" — set by re-invocation
+MATCH_COMMAND=""   # only with --_match-command, which the tests read the matcher through
 
 # --- resolved state (also carried across re-invocation via _AD_* env) ------
 
@@ -372,14 +373,18 @@ ps_pgid_of() {
   tr -d '[:space:]' < "/proc/$1/pgid" 2>/dev/null
 }
 ps_pid_pgid_command() {
-  local entry pid pgid
+  local entry pid pgid command
   if ps_has_o; then ps -axo pid=,pgid=,command= 2>/dev/null; return 0; fi
   for entry in /proc/[0-9]*; do
     pid="${entry#/proc/}"
-    [ -r "$entry/pgid" ] && [ -r "$entry/cmdline" ] || continue
-    pgid="$(tr -d '[:space:]' < "$entry/pgid" 2>/dev/null)"
+    # A process can exit between the listing and these reads. Each read is
+    # guarded so a vanished entry is skipped on its own: a bare assignment from
+    # a failing command carries its status, which under set -e would end the
+    # whole listing and leave every later process unexamined.
+    if ! pgid="$(tr -d '[:space:]' < "$entry/pgid" 2>/dev/null)"; then continue; fi
     [ -n "$pgid" ] || continue
-    printf '%s %s %s\n' "$pid" "$pgid" "$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null)"
+    if ! command="$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null)"; then continue; fi
+    printf '%s %s %s\n' "$pid" "$pgid" "$command"
   done
 }
 
@@ -654,6 +659,22 @@ terminate_confirmed_old_process() {
   kill -KILL "$pid" 2>/dev/null || true
 }
 
+# True when a command line belongs to this skill's own re-invocation or to a
+# peer CLI. The peer forms differ by platform: a bare "codex" or "claude" on
+# macOS and Linux, "codex.exe" from a Windows install, and the packaged
+# "claude-code/cli.js" run through node. Path separators differ too, so both
+# slashes are accepted before the name. Used to confirm a process group still
+# holds one of ours before the group is signalled.
+command_is_delegate_or_peer() {
+  local command="$1" self
+  self="$(basename "$SELF")"
+  [[ "$command" == *"$self"*"--_monitor"* ]] && return 0
+  [[ "$command" == *"$self"*"--_worker"* ]] && return 0
+  [[ "$command" =~ (^|[[:space:]/\\])(codex|claude)(\.exe)?([[:space:]]|$) ]] && return 0
+  [[ "$command" =~ (^|[[:space:]/\\])claude-code[/\\]cli\.js([[:space:]]|$) ]] && return 0
+  return 1
+}
+
 terminate_confirmed_old_monitor_group() {
   local monitor_pid="$1" pid pgid command current_pgid="" confirmed=0 i
   case "$monitor_pid" in ''|*[!0-9]*|0) return 0 ;; esac
@@ -667,9 +688,7 @@ terminate_confirmed_old_monitor_group() {
   # unrelated process group.
   while read -r pid pgid command; do
     [ "$pgid" = "$monitor_pid" ] || continue
-    if [[ "$command" == *"$(basename "$SELF")"*"--_monitor"* ]] ||
-       [[ "$command" == *"$(basename "$SELF")"*"--_worker"* ]] ||
-       [[ "$command" =~ (^|[[:space:]/])(codex|claude)([[:space:]]|$) ]]; then
+    if command_is_delegate_or_peer "$command"; then
       confirmed=1
       break
     fi
@@ -2176,12 +2195,17 @@ while [ $# -gt 0 ]; do
     --force) FORCE=1; shift ;;
     --_worker) INTERNAL="worker"; shift ;;
     --_monitor) INTERNAL="monitor"; shift ;;
+    --_match-command) INTERNAL="match-command"; MATCH_COMMAND="$2"; shift 2 ;;
     -h|--help) show_help ;;
     *) err "unknown argument: $1"; usage ;;
   esac
 done
 
 # Internal re-invocations skip parsing/resolution and load from env.
+if [ "$INTERNAL" = "match-command" ]; then
+  if command_is_delegate_or_peer "$MATCH_COMMAND"; then printf 'match\n'; else printf 'no-match\n'; fi
+  exit 0
+fi
 if [ "$INTERNAL" = "worker" ]; then run_worker; exit 0; fi
 if [ "$INTERNAL" = "monitor" ]; then run_monitor; exit 0; fi
 
