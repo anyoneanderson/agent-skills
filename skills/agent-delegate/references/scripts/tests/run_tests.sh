@@ -33,6 +33,40 @@ usage() {
 die() { printf 'TEST_FAIL\t%s\n' "$*" >&2; exit 1; }
 require_command() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }
 mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+# MSYS and Cygwin ship a ps that rejects -o. Their default listing carries
+# PID PPID PGID WINPID TTY UID STIME COMMAND, so probe -o once and read those
+# columns when it is missing. The listing has no process-state column, so there
+# a pid that still appears counts as running.
+PS_HAS_O=""
+ps_has_o() {
+  if [ -z "$PS_HAS_O" ]; then
+    if ps -o pid= -p "$$" >/dev/null 2>&1; then PS_HAS_O=yes; else PS_HAS_O=no; fi
+  fi
+  [ "$PS_HAS_O" = yes ]
+}
+# mkdir -m returns 1 on a mount that ignores chmod (Git Bash's default noacl)
+# even though it has already made the directory, which stops the suite under
+# set -e. Keep the mode request where it works and tolerate only that refusal.
+mkdir_700() {
+  mkdir "$1" || return 1
+  chmod 700 "$1" 2>/dev/null || host_ignores_chmod || return 1
+}
+# True on a Windows host whose ln -s copies instead of linking (Git Bash's
+# default, which needs MSYS=winsymlinks plus Developer Mode to do otherwise).
+HOST_LN_S_COPIES=""
+host_ln_s_copies() {
+  local dir
+  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) return 1 ;; esac
+  if [ -z "$HOST_LN_S_COPIES" ]; then
+    HOST_LN_S_COPIES=no
+    dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-delegate-lns-probe.XXXXXX")" || return 1
+    : > "$dir/target"
+    ln -s "$dir/target" "$dir/link" 2>/dev/null
+    [ -L "$dir/link" ] || HOST_LN_S_COPIES=yes
+    rm -rf "$dir"
+  fi
+  [ "$HOST_LN_S_COPIES" = yes ]
+}
 # True on a Windows host whose mount ignores chmod (Git Bash's default noacl).
 host_ignores_chmod() {
   local probe first
@@ -418,6 +452,13 @@ check_live_stale_reaper_fixture() {
           ' > "$handoff/handoff-sentinel.json"
         ;;
       absent_with_external_symlink)
+        if host_ln_s_copies; then
+          printf 'TEST_SKIP\t%s: ln -s cannot make a symlink on this host\n' "$id" >&2
+          rm -f "$handoff/launcher-to-monitor.fifo" "$handoff/monitor-to-launcher.fifo"
+          rmdir "$handoff" "$new_handoff" 2>/dev/null || true
+          rm -rf "$dir"
+          continue
+        fi
         outside_file="$dir/outside-protected.txt"
         printf 'must survive stale reaping\n' > "$outside_file"
         ln -s "$outside_file" "$handoff/outside-link"
@@ -494,6 +535,10 @@ run_sync() {
 
 pid_is_running() {
   local state
+  if ! ps_has_o; then
+    ps -p "$1" 2>/dev/null | awk 'NR>1 { found = 1 } END { exit found ? 0 : 1 }'
+    return $?
+  fi
   state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d '[:space:]')"
   [ -n "$state" ] && [[ "$state" != Z* ]]
 }
@@ -725,6 +770,10 @@ run_partial_handoff_safe_cleanup() (
   root="$(cd "${TMPDIR:-/tmp}" && pwd)"; monitor="$(absent_test_pid)"
   trap 'rm -rf "${probe:-}" "${handoff:-}" "${target:-}" "${dir:-}"' EXIT TERM INT HUP
   for variant in missing-listed-fifo outside-root symlink unknown-entry sentinel-run-mismatch fifo-type-mismatch; do
+    if [ "$variant" = symlink ] && host_ln_s_copies; then
+      printf 'TEST_SKIP\tpartial-symlink: ln -s cannot make a symlink on this host\n' >&2
+      continue
+    fi
     dir="$(new_work_dir)"; label="partial-$variant"; run="run-$variant"; printf 'prompt\n' > "$dir/prompt.md"
     target=""; expected=retain
     case "$variant" in
@@ -732,10 +781,10 @@ run_partial_handoff_safe_cleanup() (
         handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
         mkfifo "$handoff/launcher-to-monitor.fifo"; expected=remove ;;
       outside-root)
-        handoff="$dir/agent-delegate-handoff.101.outside"; mkdir -m 700 "$handoff"
+        handoff="$dir/agent-delegate-handoff.101.outside"; mkdir_700 "$handoff"
         mkfifo "$handoff/launcher-to-monitor.fifo" ;;
       symlink)
-        target="$dir/symlink-target"; mkdir -m 700 "$target"; mkfifo "$target/launcher-to-monitor.fifo"
+        target="$dir/symlink-target"; mkdir_700 "$target"; mkfifo "$target/launcher-to-monitor.fifo"
         handoff="$root/agent-delegate-handoff.101.symlink"; rm -f "$handoff"; ln -s "$target" "$handoff" ;;
       unknown-entry)
         handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
@@ -1040,7 +1089,7 @@ case_run_ownership_force_resume() {
 
   dir="$(new_work_dir)"; printf 'prompt\n' > "$dir/prompt.md"
   old_handoff="$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-handoff.101.wronguid"; new_handoff="$(mktemp -d "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-heartbeat-handoff.XXXXXX")"
-  rm -rf "$old_handoff"; mkdir -m 700 "$old_handoff"; mkfifo "$old_handoff/launcher-to-monitor.fifo"
+  rm -rf "$old_handoff"; mkdir_700 "$old_handoff"; mkfifo "$old_handoff/launcher-to-monitor.fifo"
   json_tool -n --arg handoff "$old_handoff" '({run_id:"old-run",run_kind:"detach",runner_pid:999999,launcher_pid:101,
     monitor_pid:999999,worker_pid:null,started_at:"2000-01-01T00:00:00Z",lease_at:"2000-01-01T00:00:00Z",
     handoff_dir:$.handoff,handoff_phase:"not_started"})' > "$dir/wronguid-owner.json"
@@ -1735,7 +1784,8 @@ check_compatibility_fixture() {
 }
 
 process_group_of() {
-  ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'
+  if ps_has_o; then ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'; return 0; fi
+  ps -p "$1" 2>/dev/null | awk 'NR>1 { print $3; exit }' | tr -d '[:space:]'
 }
 
 cleanup_detach_stub_fixture() {

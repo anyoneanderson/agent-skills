@@ -347,6 +347,31 @@ stat_uid() { stat -c '%u' "$1" 2>/dev/null || stat -f '%u' "$1"; }
 stat_dev() { stat -c '%d' "$1" 2>/dev/null || stat -f '%d' "$1"; }
 stat_ino() { stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"; }
 
+# MSYS and Cygwin ship a ps that rejects -o, so every -o reader returns empty
+# there and process probing silently stops working. Their default listing
+# carries PID PPID PGID WINPID TTY UID STIME COMMAND, which holds the same
+# fields, so probe -o once and read those columns when it is missing.
+PS_HAS_O=""
+ps_has_o() {
+  if [ -z "$PS_HAS_O" ]; then
+    if ps -o pid= -p "${BASHPID:-$$}" >/dev/null 2>&1; then PS_HAS_O=yes; else PS_HAS_O=no; fi
+  fi
+  [ "$PS_HAS_O" = yes ]
+}
+ps_command_of() {
+  if ps_has_o; then ps -p "$1" -o command= 2>/dev/null; return 0; fi
+  ps -p "$1" 2>/dev/null | awk 'NR>1 { for (i = 1; i < 8; i++) $i = ""; sub(/^ +/, ""); print; exit }'
+}
+ps_pgid_of() {
+  if ps_has_o; then ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'; return 0; fi
+  ps -p "$1" 2>/dev/null | awk 'NR>1 { print $3; exit }' | tr -d '[:space:]'
+}
+ps_pid_pgid_command() {
+  if ps_has_o; then ps -axo pid=,pgid=,command= 2>/dev/null; return 0; fi
+  ps -e 2>/dev/null |
+    awk 'NR>1 { pid = $1; pgid = $3; for (i = 1; i < 8; i++) $i = ""; sub(/^ +/, ""); print pid, pgid, $0 }'
+}
+
 # Git Bash's default noacl mount ignores chmod on directories, so a handoff
 # directory can never report 700 there. True only on Windows when a probe under
 # the handoff root confirms chmod has no effect; macOS and Linux always keep the
@@ -603,7 +628,7 @@ terminate_confirmed_old_process() {
   local pid="$1" role="$2" command i
   case "$pid" in ''|*[!0-9]*|0) return 0 ;; esac
   [ "$pid" != "${BASHPID:-$$}" ] || return 0
-  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  command="$(ps_command_of "$pid" || true)"
   case "$role" in
     monitor) [[ "$command" == *"$(basename "$SELF")"*"--_monitor"* ]] || return 0 ;;
     worker) [[ "$command" == *"$(basename "$SELF")"*"--_worker"* ]] || return 0 ;;
@@ -621,7 +646,7 @@ terminate_confirmed_old_process() {
 terminate_confirmed_old_monitor_group() {
   local monitor_pid="$1" pid pgid command current_pgid="" confirmed=0 i
   case "$monitor_pid" in ''|*[!0-9]*|0) return 0 ;; esac
-  current_pgid="$(ps -o pgid= -p "${BASHPID:-$$}" 2>/dev/null | tr -d '[:space:]')"
+  current_pgid="$(ps_pgid_of "${BASHPID:-$$}")"
   [ "$monitor_pid" != "$current_pgid" ] || return 0
 
   # Detached monitors are launched as process-group leaders. If the monitor and
@@ -637,7 +662,7 @@ terminate_confirmed_old_monitor_group() {
       confirmed=1
       break
     fi
-  done < <(ps -axo pid=,pgid=,command= 2>/dev/null)
+  done < <(ps_pid_pgid_command)
   [ "$confirmed" -eq 1 ] || return 0
 
   kill -TERM -- "-$monitor_pid" 2>/dev/null || return 0
@@ -1952,7 +1977,7 @@ monitor_finalize_abnormal() {
   # Ignore a second delivery while terminating our process group. The worker,
   # peer CLI, and heartbeat loop share the monitor's isolated group.
   trap '' TERM INT HUP
-  pgid="$(ps -o pgid= -p "$monitor_pid" 2>/dev/null | tr -d '[:space:]')"
+  pgid="$(ps_pgid_of "$monitor_pid")"
   if [ -n "$pgid" ] && [ "$pgid" = "$monitor_pid" ]; then
     kill -TERM -- "-$pgid" 2>/dev/null || true
   else
@@ -2018,7 +2043,7 @@ disarm_monitor_guard() {
 
 terminate_remaining_monitor_group() {
   local pgid
-  pgid="$(ps -o pgid= -p "$MONITOR_PID" 2>/dev/null | tr -d '[:space:]')"
+  pgid="$(ps_pgid_of "$MONITOR_PID")"
   [ -n "$pgid" ] && [ "$pgid" = "$MONITOR_PID" ] || return 0
   # A killed worker can orphan the peer CLI in this process group. Keep the
   # monitor alive while terminating every remaining group member.
