@@ -22,3 +22,6 @@ handover.md
 # Agent local config / hooks (not shared)
 .claude/
 .codex/
+
+# Windows crash dumps
+*.stackdump
