@@ -665,14 +665,27 @@ terminate_confirmed_old_process() {
 # "claude-code/cli.js" run through node. Path separators differ too, so both
 # slashes are accepted before the name. Used to confirm a process group still
 # holds one of ours before the group is signalled.
+#
+# The peer forms are matched without regard to case, because Windows file names
+# do not distinguish it: codex.EXE and Claude.Exe name the same programs a
+# lowercase spelling does, and a listing reports whatever spelling the caller
+# typed. Only these two patterns are matched that way, and the shell's previous
+# setting is put back, because the rest of the script relies on matching that
+# does distinguish case.
 command_is_delegate_or_peer() {
-  local command="$1" self
+  local command="$1" self nocase=0 rc=1
   self="$(basename "$SELF")"
   [[ "$command" == *"$self"*"--_monitor"* ]] && return 0
   [[ "$command" == *"$self"*"--_worker"* ]] && return 0
-  [[ "$command" =~ (^|[[:space:]/\\])(codex|claude)(\.exe)?([[:space:]]|$) ]] && return 0
-  [[ "$command" =~ (^|[[:space:]/\\])claude-code[/\\]cli\.js([[:space:]]|$) ]] && return 0
-  return 1
+  shopt -q nocasematch && nocase=1
+  shopt -s nocasematch
+  if [[ "$command" =~ (^|[[:space:]/\\])(codex|claude)(\.exe)?([[:space:]]|$) ]]; then
+    rc=0
+  elif [[ "$command" =~ (^|[[:space:]/\\])claude-code[/\\]cli\.js([[:space:]]|$) ]]; then
+    rc=0
+  fi
+  [ "$nocase" -eq 1 ] || shopt -u nocasematch
+  return "$rc"
 }
 
 terminate_confirmed_old_monitor_group() {

@@ -1048,6 +1048,8 @@ case_artifact_recovery_contract() {
 # platform have to be recognised. A bare name is not enough: a Windows install
 # runs codex.exe, and the packaged Claude CLI runs as claude-code/cli.js under
 # node, with either path separator.
+# Windows file names do not distinguish case either, so codex.EXE and Claude.Exe
+# name the same programs and have to be recognised as well.
 check_peer_command_fixture() {
   local file="$1" id command_line expected got count=0
   while IFS=$'\t' read -r id command_line expected; do
@@ -1057,7 +1059,7 @@ check_peer_command_fixture() {
     [ "$got" = "$expected" ] || return 1
     count=$((count + 1))
   done < "$file"
-  [ "$count" -eq 14 ]
+  [ "$count" -eq 17 ]
 }
 
 case_run_ownership_force_resume() {
