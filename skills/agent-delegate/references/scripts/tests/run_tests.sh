@@ -51,21 +51,37 @@ mkdir_700() {
   mkdir "$1" || return 1
   chmod 700 "$1" 2>/dev/null || host_ignores_chmod || return 1
 }
-# True on a Windows host whose ln -s copies instead of linking (Git Bash's
-# default, which needs MSYS=winsymlinks plus Developer Mode to do otherwise).
-HOST_LN_S_COPIES=""
-host_ln_s_copies() {
+# Git Bash's ln -s copies instead of linking, because MSYS carries no
+# winsymlinks setting by default. MSYS=winsymlinks:nativestrict makes it link
+# where the host allows native symlinks (Developer Mode or an elevated shell),
+# and fails where it does not. Probe both once: ln_s prefixes ln -s with the
+# setting when it is needed and works, and host_ln_s_copies stays true only
+# where no form of ln -s can make a symlink, so the cases that need a real one
+# are skipped there instead of failing.
+LN_S_MODE=""
+ln_s_probe() {
   local dir
-  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) return 1 ;; esac
-  if [ -z "$HOST_LN_S_COPIES" ]; then
-    HOST_LN_S_COPIES=no
-    dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-delegate-lns-probe.XXXXXX")" || return 1
-    : > "$dir/target"
-    ln -s "$dir/target" "$dir/link" 2>/dev/null
-    [ -L "$dir/link" ] || HOST_LN_S_COPIES=yes
-    rm -rf "$dir"
+  if [ -n "$LN_S_MODE" ]; then return 0; fi
+  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) LN_S_MODE=plain; return 0 ;; esac
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-delegate-lns-probe.XXXXXX")" || { LN_S_MODE=none; return 0; }
+  : > "$dir/target"
+  ln -s "$dir/target" "$dir/plain" 2>/dev/null
+  if [ -L "$dir/plain" ]; then
+    LN_S_MODE=plain
+  else
+    MSYS=winsymlinks:nativestrict ln -s "$dir/target" "$dir/native" 2>/dev/null
+    if [ -L "$dir/native" ]; then LN_S_MODE=native; else LN_S_MODE=none; fi
   fi
-  [ "$HOST_LN_S_COPIES" = yes ]
+  rm -rf "$dir"
+}
+ln_s() {
+  ln_s_probe
+  if [ "$LN_S_MODE" = native ]; then MSYS=winsymlinks:nativestrict ln -s "$@"; return $?; fi
+  ln -s "$@"
+}
+host_ln_s_copies() {
+  ln_s_probe
+  [ "$LN_S_MODE" = none ]
 }
 # True on a Windows host whose mount ignores chmod (Git Bash's default noacl).
 host_ignores_chmod() {
@@ -461,7 +477,7 @@ check_live_stale_reaper_fixture() {
         fi
         outside_file="$dir/outside-protected.txt"
         printf 'must survive stale reaping\n' > "$outside_file"
-        ln -s "$outside_file" "$handoff/outside-link"
+        ln_s "$outside_file" "$handoff/outside-link"
         ;;
       *) case_ok=0 ;;
     esac
@@ -536,7 +552,7 @@ run_sync() {
 pid_is_running() {
   local state
   if ! ps_has_o; then
-    ps -p "$1" 2>/dev/null | awk 'NR>1 { found = 1 } END { exit found ? 0 : 1 }'
+    [ -r "/proc/$1/stat" ] || [ -r "/proc/$1/pgid" ]
     return $?
   fi
   state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d '[:space:]')"
@@ -785,7 +801,7 @@ run_partial_handoff_safe_cleanup() (
         mkfifo "$handoff/launcher-to-monitor.fifo" ;;
       symlink)
         target="$dir/symlink-target"; mkdir_700 "$target"; mkfifo "$target/launcher-to-monitor.fifo"
-        handoff="$root/agent-delegate-handoff.101.symlink"; rm -f "$handoff"; ln -s "$target" "$handoff" ;;
+        handoff="$root/agent-delegate-handoff.101.symlink"; rm -f "$handoff"; ln_s "$target" "$handoff" ;;
       unknown-entry)
         handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
         mkfifo "$handoff/launcher-to-monitor.fifo"; printf 'protected\n' > "$handoff/unknown-entry" ;;
@@ -1027,9 +1043,34 @@ case_artifact_recovery_contract() {
   rm -f "$bad_docs"
 }
 
+# The group-termination gate only signals a process group once it has confirmed
+# the group still holds one of ours, so the forms a peer CLI takes on each
+# platform have to be recognised. A bare name is not enough: a Windows install
+# runs codex.exe, and the packaged Claude CLI runs as claude-code/cli.js under
+# node, with either path separator.
+# Windows file names do not distinguish case either, so codex.EXE and Claude.Exe
+# name the same programs and have to be recognised as well.
+check_peer_command_fixture() {
+  local file="$1" id command_line expected got count=0
+  while IFS=$'\t' read -r id command_line expected; do
+    [ "$id" = case_id ] && continue
+    case "$expected" in match|no-match) : ;; *) return 1 ;; esac
+    got="$(bash "$SCRIPT" --_match-command "$command_line" 2>/dev/null)" || return 1
+    [ "$got" = "$expected" ] || return 1
+    count=$((count + 1))
+  done < "$file"
+  [ "$count" -eq 17 ]
+}
+
 case_run_ownership_force_resume() {
-  local bad dir rc barrier old_pid deadline old_run new_run prior_run resumed_run raw old_handoff new_handoff metadata
+  local bad dir rc barrier old_pid old_cli release_pid deadline old_run old_runner new_run prior_run resumed_run raw old_handoff new_handoff metadata
   check_ownership_fixture "$FIXTURE_DIR/ownership-cases.tsv" || die "ownership fixture rejected"
+  check_peer_command_fixture "$FIXTURE_DIR/peer-command-cases.tsv" || die "peer command fixture rejected"
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-peer-command.XXXXXX")"
+  awk 'BEGIN{FS=OFS="\t"} $1=="windows-codex-exe-slash"{$3="no-match"} {print}' \
+    "$FIXTURE_DIR/peer-command-cases.tsv" > "$bad"
+  if check_peer_command_fixture "$bad"; then rm -f "$bad"; die "peer command checker accepted a corrupted expectation"; fi
+  rm -f "$bad"
   bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-ownership.XXXXXX")"
   awk 'BEGIN{FS=OFS="\t"} NR==2{$NF="retain"} {print}' "$FIXTURE_DIR/ownership-cases.tsv" > "$bad"
   if check_ownership_fixture "$bad"; then rm -f "$bad"; die "ownership checker accepted a corrupted expectation"; fi
@@ -1058,9 +1099,30 @@ case_run_ownership_force_resume() {
   done
   [ -f "$dir/forced-owner.json" ] || { kill "$old_pid" 2>/dev/null || true; die "force fixture old owner missing"; }
   old_run="$(json_file "$dir/forced-owner.json" -r 'd?.run_id')"
+  old_runner="$(json_file "$dir/forced-owner.json" -r 'd?.runner_pid')"
+  old_cli="$(cat "$barrier/claude.pid" 2>/dev/null || true)"
   run_sync "$dir" forced claude delegate done --force
   new_run="$(json_file "$dir/forced-report.json" -r 'd?.meta?.run_id')"; [ "$new_run" != "$old_run" ]
-  printf 'release\n' > "$barrier/release.fifo" || true
+  # --force must have ended the old runner before the barrier is released, or a
+  # host where the process probe reports nothing would keep two runs going and
+  # still pass the checks below.
+  wait_for_pid_stop "$old_runner" || die "--force left the old runner $old_runner running"
+  # The peer CLI this run was holding is not checked here, because --force does
+  # not reach it on a sync run: the owner records monitor_pid as null and
+  # worker_pid as the runner's own pid, so the group termination is skipped and
+  # the worker role match needs --_worker, which a sync runner never carries.
+  # Only the runner is signalled. Whether --force should also end the peer is a
+  # behaviour question, not a gap in this test; $old_cli is kept so the check
+  # can be added here once that is decided.
+  # Nothing reads the FIFO once that pair is gone, so the write has to be able
+  # to give up. macOS ships no timeout(1), so release it from a background
+  # write and kill that instead.
+  ( printf 'release\n' > "$barrier/release.fifo" ) 2>/dev/null &
+  release_pid=$!
+  deadline=$(( $(date -u +%s) + 5 ))
+  while kill -0 "$release_pid" 2>/dev/null && [ "$(date -u +%s)" -lt "$deadline" ]; do :; done
+  kill "$release_pid" 2>/dev/null || true
+  wait "$release_pid" 2>/dev/null || true
   wait "$old_pid" 2>/dev/null || true
   json_file "$dir/forced-report.json" -e --arg run "$new_run" 'eq(d?.meta?.run_id, $.run)' >/dev/null
   [ ! -e "$dir/forced-owner.json" ] && [ ! -e "$dir/forced.pid" ] && [ ! -e "$dir/forced-heartbeat.json" ]
@@ -1785,7 +1847,8 @@ check_compatibility_fixture() {
 
 process_group_of() {
   if ps_has_o; then ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'; return 0; fi
-  ps -p "$1" 2>/dev/null | awk 'NR>1 { print $3; exit }' | tr -d '[:space:]'
+  [ -r "/proc/$1/pgid" ] || return 0
+  tr -d '[:space:]' < "/proc/$1/pgid" 2>/dev/null
 }
 
 cleanup_detach_stub_fixture() {

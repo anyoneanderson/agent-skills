@@ -58,7 +58,8 @@ SANDBOX=""
 REVIEW_OUTPUT=""
 DETACH=0
 FORCE=0
-INTERNAL=""   # "", "worker", "monitor" — set only by re-invocation
+INTERNAL=""   # "", "worker", "monitor", "match-command" — set by re-invocation
+MATCH_COMMAND=""   # only with --_match-command, which the tests read the matcher through
 
 # --- resolved state (also carried across re-invocation via _AD_* env) ------
 
@@ -348,9 +349,12 @@ stat_dev() { stat -c '%d' "$1" 2>/dev/null || stat -f '%d' "$1"; }
 stat_ino() { stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"; }
 
 # MSYS and Cygwin ship a ps that rejects -o, so every -o reader returns empty
-# there and process probing silently stops working. Their default listing
-# carries PID PPID PGID WINPID TTY UID STIME COMMAND, which holds the same
-# fields, so probe -o once and read those columns when it is missing.
+# there and process probing silently stops working. Reading their ps columns
+# instead is not safe: the listing prefixes some rows with a status character,
+# which shifts PPID into the PGID column, and its COMMAND holds only the
+# executable path, so --_monitor and --_worker cannot be told apart. Their
+# /proc carries the process group and the full command line, so probe -o once
+# and read /proc when it is missing.
 PS_HAS_O=""
 ps_has_o() {
   if [ -z "$PS_HAS_O" ]; then
@@ -360,16 +364,28 @@ ps_has_o() {
 }
 ps_command_of() {
   if ps_has_o; then ps -p "$1" -o command= 2>/dev/null; return 0; fi
-  ps -p "$1" 2>/dev/null | awk 'NR>1 { for (i = 1; i < 8; i++) $i = ""; sub(/^ +/, ""); print; exit }'
+  [ -r "/proc/$1/cmdline" ] || return 0
+  tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null
 }
 ps_pgid_of() {
   if ps_has_o; then ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'; return 0; fi
-  ps -p "$1" 2>/dev/null | awk 'NR>1 { print $3; exit }' | tr -d '[:space:]'
+  [ -r "/proc/$1/pgid" ] || return 0
+  tr -d '[:space:]' < "/proc/$1/pgid" 2>/dev/null
 }
 ps_pid_pgid_command() {
+  local entry pid pgid command
   if ps_has_o; then ps -axo pid=,pgid=,command= 2>/dev/null; return 0; fi
-  ps -e 2>/dev/null |
-    awk 'NR>1 { pid = $1; pgid = $3; for (i = 1; i < 8; i++) $i = ""; sub(/^ +/, ""); print pid, pgid, $0 }'
+  for entry in /proc/[0-9]*; do
+    pid="${entry#/proc/}"
+    # A process can exit between the listing and these reads. Each read is
+    # guarded so a vanished entry is skipped on its own: a bare assignment from
+    # a failing command carries its status, which under set -e would end the
+    # whole listing and leave every later process unexamined.
+    if ! pgid="$(tr -d '[:space:]' < "$entry/pgid" 2>/dev/null)"; then continue; fi
+    [ -n "$pgid" ] || continue
+    if ! command="$(tr '\0' ' ' < "$entry/cmdline" 2>/dev/null)"; then continue; fi
+    printf '%s %s %s\n' "$pid" "$pgid" "$command"
+  done
 }
 
 # Git Bash's default noacl mount ignores chmod on directories, so a handoff
@@ -643,6 +659,35 @@ terminate_confirmed_old_process() {
   kill -KILL "$pid" 2>/dev/null || true
 }
 
+# True when a command line belongs to this skill's own re-invocation or to a
+# peer CLI. The peer forms differ by platform: a bare "codex" or "claude" on
+# macOS and Linux, "codex.exe" from a Windows install, and the packaged
+# "claude-code/cli.js" run through node. Path separators differ too, so both
+# slashes are accepted before the name. Used to confirm a process group still
+# holds one of ours before the group is signalled.
+#
+# The peer forms are matched without regard to case, because Windows file names
+# do not distinguish it: codex.EXE and Claude.Exe name the same programs a
+# lowercase spelling does, and a listing reports whatever spelling the caller
+# typed. Only these two patterns are matched that way, and the shell's previous
+# setting is put back, because the rest of the script relies on matching that
+# does distinguish case.
+command_is_delegate_or_peer() {
+  local command="$1" self nocase=0 rc=1
+  self="$(basename "$SELF")"
+  [[ "$command" == *"$self"*"--_monitor"* ]] && return 0
+  [[ "$command" == *"$self"*"--_worker"* ]] && return 0
+  shopt -q nocasematch && nocase=1
+  shopt -s nocasematch
+  if [[ "$command" =~ (^|[[:space:]/\\])(codex|claude)(\.exe)?([[:space:]]|$) ]]; then
+    rc=0
+  elif [[ "$command" =~ (^|[[:space:]/\\])claude-code[/\\]cli\.js([[:space:]]|$) ]]; then
+    rc=0
+  fi
+  [ "$nocase" -eq 1 ] || shopt -u nocasematch
+  return "$rc"
+}
+
 terminate_confirmed_old_monitor_group() {
   local monitor_pid="$1" pid pgid command current_pgid="" confirmed=0 i
   case "$monitor_pid" in ''|*[!0-9]*|0) return 0 ;; esac
@@ -656,9 +701,7 @@ terminate_confirmed_old_monitor_group() {
   # unrelated process group.
   while read -r pid pgid command; do
     [ "$pgid" = "$monitor_pid" ] || continue
-    if [[ "$command" == *"$(basename "$SELF")"*"--_monitor"* ]] ||
-       [[ "$command" == *"$(basename "$SELF")"*"--_worker"* ]] ||
-       [[ "$command" =~ (^|[[:space:]/])(codex|claude)([[:space:]]|$) ]]; then
+    if command_is_delegate_or_peer "$command"; then
       confirmed=1
       break
     fi
@@ -2165,12 +2208,17 @@ while [ $# -gt 0 ]; do
     --force) FORCE=1; shift ;;
     --_worker) INTERNAL="worker"; shift ;;
     --_monitor) INTERNAL="monitor"; shift ;;
+    --_match-command) INTERNAL="match-command"; MATCH_COMMAND="$2"; shift 2 ;;
     -h|--help) show_help ;;
     *) err "unknown argument: $1"; usage ;;
   esac
 done
 
 # Internal re-invocations skip parsing/resolution and load from env.
+if [ "$INTERNAL" = "match-command" ]; then
+  if command_is_delegate_or_peer "$MATCH_COMMAND"; then printf 'match\n'; else printf 'no-match\n'; fi
+  exit 0
+fi
 if [ "$INTERNAL" = "worker" ]; then run_worker; exit 0; fi
 if [ "$INTERNAL" = "monitor" ]; then run_monitor; exit 0; fi
 
