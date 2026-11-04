@@ -243,6 +243,7 @@ sync owner は、`monitor_pid` と `handoff_dir` が null、runner、launcher、
 detach owner では monitor が不在でなければならず、pid ファイルのパスが残っている場合は run id と monitor PID も owner と一致しなければならない。
 handoff ディレクトリがすでに消失している場合、stale-reaper は保存済みパスが設定 root の直下にある絶対パスで、basename に想定する launcher PID が含まれることを確認してから、owner と残っている pid record を削除する。
 handoff ディレクトリが残っている場合、実行ユーザーが所有する非 symlink の mode 0700 のディレクトリであり、検査中に device と inode が変わらないことを要求する。
+Windows では、Git Bash の既定の `noacl` マウントのように `chmod` が効かないと確かめられたときだけ mode の判定を飛ばす。このとき `TMPDIR` を共有フォルダに向けると、他のユーザーが書き込める handoff ディレクトリを拒否できなくなる。macOS と Linux では常に判定する。
 sentinel があれば JSON の識別情報も一致しなければならない。
 stale-reaper が削除できるのは、列挙済みの FIFO、一致する一時ファイル、sentinel だけである。
 未知の項目や識別情報の不一致があれば handoff ディレクトリを残し、診断を出力する。

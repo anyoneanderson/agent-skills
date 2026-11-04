@@ -7,6 +7,10 @@ HARNESS="$TEST_DIR/heartbeat_harness.sh"
 QUALITY="$TEST_DIR/check_skill_quality.sh"
 QUALITY_CONTRACT="$TEST_DIR/check_skill_quality_contract.sh"
 STUB_DIR="$TEST_DIR/stubs"
+JSON_TOOL="$(cd "$TEST_DIR/.." && pwd)/json-tool.mjs"
+if command -v cygpath >/dev/null 2>&1; then JSON_TOOL="$(cygpath -m "$JSON_TOOL")"; fi
+json_tool() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' node "$JSON_TOOL" "$@"; }
+json_file() { local file="$1"; shift; [ -f "$file" ] && [ -r "$file" ] || return 2; json_tool "$@" < "$file"; }
 FIXTURE_DIR="$TEST_DIR/fixtures"
 REPO_ROOT="$(git -C "$TEST_DIR" rev-parse --show-toplevel)"
 MANIFEST="$FIXTURE_DIR/case-manifest.tsv"
@@ -28,7 +32,65 @@ usage() {
 
 die() { printf 'TEST_FAIL\t%s\n' "$*" >&2; exit 1; }
 require_command() { command -v "$1" >/dev/null 2>&1 || die "missing command: $1"; }
-mode_of() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+# MSYS and Cygwin ship a ps that rejects -o. Their default listing carries
+# PID PPID PGID WINPID TTY UID STIME COMMAND, so probe -o once and read those
+# columns when it is missing. The listing has no process-state column, so there
+# a pid that still appears counts as running.
+PS_HAS_O=""
+ps_has_o() {
+  if [ -z "$PS_HAS_O" ]; then
+    if ps -o pid= -p "$$" >/dev/null 2>&1; then PS_HAS_O=yes; else PS_HAS_O=no; fi
+  fi
+  [ "$PS_HAS_O" = yes ]
+}
+# mkdir -m returns 1 on a mount that ignores chmod (Git Bash's default noacl)
+# even though it has already made the directory, which stops the suite under
+# set -e. Keep the mode request where it works and tolerate only that refusal.
+mkdir_700() {
+  mkdir "$1" || return 1
+  chmod 700 "$1" 2>/dev/null || host_ignores_chmod || return 1
+}
+# Git Bash's ln -s copies instead of linking, because MSYS carries no
+# winsymlinks setting by default. MSYS=winsymlinks:nativestrict makes it link
+# where the host allows native symlinks (Developer Mode or an elevated shell),
+# and fails where it does not. Probe both once: ln_s prefixes ln -s with the
+# setting when it is needed and works, and host_ln_s_copies stays true only
+# where no form of ln -s can make a symlink, so the cases that need a real one
+# are skipped there instead of failing.
+LN_S_MODE=""
+ln_s_probe() {
+  local dir
+  if [ -n "$LN_S_MODE" ]; then return 0; fi
+  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) LN_S_MODE=plain; return 0 ;; esac
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-delegate-lns-probe.XXXXXX")" || { LN_S_MODE=none; return 0; }
+  : > "$dir/target"
+  ln -s "$dir/target" "$dir/plain" 2>/dev/null
+  if [ -L "$dir/plain" ]; then
+    LN_S_MODE=plain
+  else
+    MSYS=winsymlinks:nativestrict ln -s "$dir/target" "$dir/native" 2>/dev/null
+    if [ -L "$dir/native" ]; then LN_S_MODE=native; else LN_S_MODE=none; fi
+  fi
+  rm -rf "$dir"
+}
+ln_s() {
+  ln_s_probe
+  if [ "$LN_S_MODE" = native ]; then MSYS=winsymlinks:nativestrict ln -s "$@"; return $?; fi
+  ln -s "$@"
+}
+host_ln_s_copies() {
+  ln_s_probe
+  [ "$LN_S_MODE" = none ]
+}
+# True on a Windows host whose mount ignores chmod (Git Bash's default noacl).
+host_ignores_chmod() {
+  local probe first
+  case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) return 1 ;; esac
+  probe="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-chmod-probe.XXXXXX")" || return 1
+  chmod 600 "$probe"; first="$(mode_of "$probe")"; rm -f "$probe"
+  [ "$first" != 600 ]
+}
 sha256_file() { shasum -a 256 "$1" | awk '{print $1}'; }
 
 while [ "$#" -gt 0 ]; do
@@ -84,46 +146,24 @@ run_harness() {
 
 check_harness_core() {
   local result="$1" min_beats="$2" expected_status="$3" run report heartbeat label out
-  jq -e --argjson min "$min_beats" --arg status "$expected_status" '
-    (.run_id|type)=="string" and (.run_id|length)>0 and
-    (.launcher_pid|type)=="number" and (.monitor_pid|type)=="number" and
-    .launcher_pid!=.monitor_pid and .launcher_exit==0 and .peer_calls==0 and
-    .beat_count >= $min and .report_status==$status and .handoff_removed==true
-  ' "$result" >/dev/null || return 1
-  run="$(jq -r '.run_id' "$result")"; report="$(jq -r '.report_path' "$result")"
+  json_file "$result" -e --argjson min "$min_beats" --arg status "$expected_status" 'eq((type(d?.run_id)), "string") && (len(d?.run_id)) > 0 && eq((type(d?.launcher_pid)), "number") && eq((type(d?.monitor_pid)), "number") && !eq(d?.launcher_pid, d?.monitor_pid) && eq(d?.launcher_exit, 0) && eq(d?.peer_calls, 0) && d?.beat_count >= $.min && eq(d?.report_status, $.status) && eq(d?.handoff_removed, true)' >/dev/null || return 1
+  run="$(json_file "$result" -r 'd?.run_id')"; report="$(json_file "$result" -r 'd?.report_path')"
   out="$(dirname "$result")"; label="$(basename "$result" -harness-result.json)"
   [ -f "$report" ] || return 1
-  jq -e --arg run "$run" --arg status "$expected_status" '
-    .meta.run_id==$run and .status==$status and
-    (.summary|type)=="string" and (.touchedFiles|type)=="array" and
-    (.artifacts|type)=="object" and (.meta.direction|type)=="string"
-  ' "$report" >/dev/null || return 1
+  json_file "$report" -e --arg run "$run" --arg status "$expected_status" 'eq(d?.meta?.run_id, $.run) && eq(d?.status, $.status) && eq((type(d?.summary)), "string") && eq((type(d?.touchedFiles)), "array") && eq((type(d?.artifacts)), "object") && eq((type(d?.meta?.direction)), "string")' >/dev/null || return 1
   if [ "$min_beats" -gt 0 ]; then
-    heartbeat="$(jq -r '.heartbeat_path' "$result")"
+    heartbeat="$(json_file "$result" -r 'd?.heartbeat_path')"
     [ -f "$heartbeat" ] || return 1
-    jq -e --arg run "$run" --arg state "$expected_status" '
-      .run_id==$run and .state==$state and (.pid|type)=="number" and
-      (.monitor_pid|type)=="number" and (.started_at|type)=="string" and
-      (.last_beat|type)=="string" and (.report_path|type)=="string"
-    ' "$heartbeat" >/dev/null || return 1
+    json_file "$heartbeat" -e --arg run "$run" --arg state "$expected_status" 'eq(d?.run_id, $.run) && eq(d?.state, $.state) && eq((type(d?.pid)), "number") && eq((type(d?.monitor_pid)), "number") && eq((type(d?.started_at)), "string") && eq((type(d?.last_beat)), "string") && eq((type(d?.report_path)), "string")' >/dev/null || return 1
     [ -f "$out/$label-heartbeat-1.json" ] && [ -f "$out/$label-owner-1.json" ] || return 1
-    jq -e --slurpfile heartbeat "$out/$label-heartbeat-1.json" --arg run "$run" '
-      .run_id==$run and .runner_pid==.monitor_pid and .worker_pid==$heartbeat[0].pid and
-      .monitor_pid==$heartbeat[0].monitor_pid and .lease_at==$heartbeat[0].last_beat
-    ' "$out/$label-owner-1.json" >/dev/null || return 1
+    json_file "$out/$label-owner-1.json" -e --argjson heartbeat "$(cat "$out/$label-heartbeat-1.json")" --arg run "$run" 'eq(d?.run_id, $.run) && eq(d?.runner_pid, d?.monitor_pid) && eq(d?.worker_pid, $.heartbeat?.pid) && eq(d?.monitor_pid, $.heartbeat?.monitor_pid) && eq(d?.lease_at, $.heartbeat?.last_beat)' >/dev/null || return 1
   fi
   [ -f "$out/$label-owner-before-worker.json" ] && [ -f "$out/$label-pid-before-worker.txt" ] &&
     [ -f "$out/$label-sentinel-ready.json" ] || return 1
-  jq -e --arg run "$run" '
-    .run_id==$run and .run_kind=="detach" and .runner_pid==.monitor_pid and
-    .worker_pid==null and .handoff_phase=="not_started"
-  ' "$out/$label-owner-before-worker.json" >/dev/null || return 1
-  jq -e --arg run "$run" '
-    .run_id==$run and .state=="fifo_ready" and .handoff_phase=="not_started" and
-    (.created_fifos|length)==4 and (.control_fifos|length)==2
-  ' "$out/$label-sentinel-ready.json" >/dev/null || return 1
+  json_file "$out/$label-owner-before-worker.json" -e --arg run "$run" 'eq(d?.run_id, $.run) && eq(d?.run_kind, "detach") && eq(d?.runner_pid, d?.monitor_pid) && eq(d?.worker_pid, null) && eq(d?.handoff_phase, "not_started")' >/dev/null || return 1
+  json_file "$out/$label-sentinel-ready.json" -e --arg run "$run" 'eq(d?.run_id, $.run) && eq(d?.state, "fifo_ready") && eq(d?.handoff_phase, "not_started") && eq((len(d?.created_fifos)), 4) && eq((len(d?.control_fifos)), 2)' >/dev/null || return 1
   [ -f "$out/$label-handoff-sentinel-cleanup.json" ] || return 1
-  jq -e --arg run "$run" '.run_id==$run and .state=="cleanup_pending"' "$out/$label-handoff-sentinel-cleanup.json" >/dev/null || return 1
+  json_file "$out/$label-handoff-sentinel-cleanup.json" -e --arg run "$run" 'eq(d?.run_id, $.run) && eq(d?.state, "cleanup_pending")' >/dev/null || return 1
   [ ! -e "$out/$label-owner.json" ] && [ ! -e "$out/$label.pid" ] || return 1
 }
 
@@ -131,9 +171,9 @@ check_harness_positive_and_negative() {
   local result="$1" min_beats="$2" expected_status="$3" bad_result bad_report original_report
   check_harness_core "$result" "$min_beats" "$expected_status" || die "raw harness artifacts rejected: $result"
   bad_result="${result%.json}.negative.json"; bad_report="${result%.json}.negative-report.json"
-  original_report="$(jq -r '.report_path' "$result")"
-  jq '.meta.run_id="corrupted-run"' "$original_report" > "$bad_report"
-  jq --arg report "$bad_report" '.report_path=$report' "$result" > "$bad_result"
+  original_report="$(json_file "$result" -r 'd?.report_path')"
+  json_file "$original_report" '({...d, meta: {...d?.meta, run_id: "corrupted-run"}})' > "$bad_report"
+  json_file "$result" --arg report "$bad_report" '({...d, report_path: $.report})' > "$bad_result"
   if check_harness_core "$bad_result" "$min_beats" "$expected_status"; then
     die "harness checker accepted corrupted run relation"
   fi
@@ -356,9 +396,9 @@ check_ownership_fixture() {
 
 check_shared_run_files() {
   local dir="$1" run="$2"
-  jq -e --arg run "$run" '.meta.run_id==$run' "$dir/report.json" >/dev/null &&
-    jq -e --arg run "$run" '.run_id==$run' "$dir/heartbeat.json" >/dev/null &&
-    jq -e --arg run "$run" '.run_id==$run' "$dir/owner.json" >/dev/null &&
+  json_file "$dir/report.json" -e --arg run "$run" 'eq(d?.meta?.run_id, $.run)' >/dev/null &&
+    json_file "$dir/heartbeat.json" -e --arg run "$run" 'eq(d?.run_id, $.run)' >/dev/null &&
+    json_file "$dir/owner.json" -e --arg run "$run" 'eq(d?.run_id, $.run)' >/dev/null &&
     [ "$(awk -F ': ' '$1=="run_id"{print $2;exit}' "$dir/pid")" = "$run" ]
 }
 
@@ -420,27 +460,34 @@ check_live_stale_reaper_fixture() {
       valid|run_id_mismatch)
         sentinel_run="$run_id"
         [ "$sentinel_variant" != run_id_mismatch ] || sentinel_run="mutated-$run_id"
-        jq -n --arg run_id "$sentinel_run" --argjson launcher_pid "$launcher_pid" \
+        json_tool -n --arg run_id "$sentinel_run" --argjson launcher_pid "$launcher_pid" \
           --argjson monitor_pid "$monitor_pid" --arg handoff_dir "$handoff" '
-            {run_id:$run_id,launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,
-             handoff_dir:$handoff_dir,
-             created_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]}
+            ({run_id:$.run_id,launcher_pid:$.launcher_pid,monitor_pid:$.monitor_pid,
+             handoff_dir:$.handoff_dir,
+             created_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]})
           ' > "$handoff/handoff-sentinel.json"
         ;;
       absent_with_external_symlink)
+        if host_ln_s_copies; then
+          printf 'TEST_SKIP\t%s: ln -s cannot make a symlink on this host\n' "$id" >&2
+          rm -f "$handoff/launcher-to-monitor.fifo" "$handoff/monitor-to-launcher.fifo"
+          rmdir "$handoff" "$new_handoff" 2>/dev/null || true
+          rm -rf "$dir"
+          continue
+        fi
         outside_file="$dir/outside-protected.txt"
         printf 'must survive stale reaping\n' > "$outside_file"
-        ln -s "$outside_file" "$handoff/outside-link"
+        ln_s "$outside_file" "$handoff/outside-link"
         ;;
       *) case_ok=0 ;;
     esac
     owner="$dir/$label-owner.json"; pid_file="$dir/$label.pid"; stderr_file="$dir/$label.err"
-    jq -n --arg run_id "$run_id" --argjson launcher_pid "$launcher_pid" \
+    json_tool -n --arg run_id "$run_id" --argjson launcher_pid "$launcher_pid" \
       --argjson monitor_pid "$monitor_pid" --arg handoff_dir "$handoff" '
-        {run_id:$run_id,run_kind:"detach",runner_pid:$monitor_pid,
-         launcher_pid:$launcher_pid,monitor_pid:$monitor_pid,worker_pid:null,
+        ({run_id:$.run_id,run_kind:"detach",runner_pid:$.monitor_pid,
+         launcher_pid:$.launcher_pid,monitor_pid:$.monitor_pid,worker_pid:null,
          started_at:"2000-01-01T00:00:00Z",lease_at:"2000-01-01T00:00:00Z",
-         handoff_dir:$handoff_dir,handoff_phase:"not_started"}
+         handoff_dir:$.handoff_dir,handoff_phase:"not_started"})
       ' > "$owner"
     printf 'pid: %s\nrun_id: %s\n' "$monitor_pid" "$run_id" > "$pid_file"
     owner_hash="$(sha256_file "$owner")"; pid_hash="$(sha256_file "$pid_file")"
@@ -499,14 +546,15 @@ run_sync() {
   [ "$rc" -eq 0 ] || return "$rc"
   report="$(tail -1 "$dir/$label-launch.out")"
   [ "$report" = "$dir/$label-report.json" ] && [ -f "$report" ] || return 1
-  jq -e --arg target "$target" --arg mode "$mode" '
-    (.status=="done" or .status=="blocked") and (.meta.run_id|type)=="string" and
-    .meta.mode==$mode and (.touchedFiles|type)=="array" and (.artifacts|type)=="object"
-  ' "$report" >/dev/null
+  json_file "$report" -e --arg target "$target" --arg mode "$mode" '((eq(d?.status, "done") || eq(d?.status, "blocked"))) && eq((type(d?.meta?.run_id)), "string") && eq(d?.meta?.mode, $.mode) && eq((type(d?.touchedFiles)), "array") && eq((type(d?.artifacts)), "object")' >/dev/null
 }
 
 pid_is_running() {
   local state
+  if ! ps_has_o; then
+    [ -r "/proc/$1/stat" ] || [ -r "/proc/$1/pgid" ]
+    return $?
+  fi
   state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d '[:space:]')"
   [ -n "$state" ] && [[ "$state" != Z* ]]
 }
@@ -532,10 +580,10 @@ run_stale_detach_and_sync_owner() (
   monitor="$(absent_test_pid)"
   handoff="$root/agent-delegate-handoff.101.missing"
   rm -rf "$handoff"
-  jq -n --arg handoff "$handoff" --argjson monitor "$monitor" '
-    {run_id:"stale-detach-run",run_kind:"detach",runner_pid:$monitor,launcher_pid:101,
-     monitor_pid:$monitor,worker_pid:null,started_at:"2000-01-01T00:00:00Z",
-     lease_at:"2000-01-01T00:00:00Z",handoff_dir:$handoff,handoff_phase:"not_started"}
+  json_tool -n --arg handoff "$handoff" --argjson monitor "$monitor" '
+    ({run_id:"stale-detach-run",run_kind:"detach",runner_pid:$.monitor,launcher_pid:101,
+     monitor_pid:$.monitor,worker_pid:null,started_at:"2000-01-01T00:00:00Z",
+     lease_at:"2000-01-01T00:00:00Z",handoff_dir:$.handoff,handoff_phase:"not_started"})
   ' > "$dir/$label-owner.json"
   printf 'pid: %s\nrun_id: stale-detach-run\n' "$monitor" > "$dir/$label.pid"
   probe_handoff="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 700 "$probe_handoff"
@@ -551,10 +599,10 @@ run_stale_detach_and_sync_owner() (
   label=stale-detach-negative
   handoff="$root/agent-delegate-handoff.101.owner-mismatch"
   rm -rf "$handoff"
-  jq -n --arg handoff "$handoff" --argjson monitor "$monitor" '
-    {run_id:"negative-detach-run",run_kind:"detach",runner_pid:$monitor,launcher_pid:102,
-     monitor_pid:$monitor,worker_pid:null,started_at:"2000-01-01T00:00:00Z",
-     lease_at:"2000-01-01T00:00:00Z",handoff_dir:$handoff,handoff_phase:"not_started"}
+  json_tool -n --arg handoff "$handoff" --argjson monitor "$monitor" '
+    ({run_id:"negative-detach-run",run_kind:"detach",runner_pid:$.monitor,launcher_pid:102,
+     monitor_pid:$.monitor,worker_pid:null,started_at:"2000-01-01T00:00:00Z",
+     lease_at:"2000-01-01T00:00:00Z",handoff_dir:$.handoff,handoff_phase:"not_started"})
   ' > "$dir/$label-owner.json"
   printf 'pid: %s\nrun_id: negative-detach-run\n' "$monitor" > "$dir/$label.pid"
   owner_hash="$(sha256_file "$dir/$label-owner.json")"; pid_hash="$(sha256_file "$dir/$label.pid")"
@@ -579,12 +627,12 @@ run_stale_detach_and_sync_owner() (
     pid_is_running "$sync_pid" || break
   done
   [ -f "$dir/$label-owner.json" ] && [ -f "$barrier/claude.pid" ] || return 1
-  peer="$(cat "$barrier/claude.pid")"; old_run="$(jq -r '.run_id' "$dir/$label-owner.json")"
+  peer="$(cat "$barrier/claude.pid")"; old_run="$(json_file "$dir/$label-owner.json" -r 'd?.run_id')"
   kill -KILL "$sync_pid"; wait "$sync_pid" 2>/dev/null || true
-  jq '.lease_at="2000-01-01T00:00:00Z"' "$dir/$label-owner.json" > "$dir/$label-owner.tmp"
+  json_file "$dir/$label-owner.json" '({...d, lease_at: "2000-01-01T00:00:00Z"})' > "$dir/$label-owner.tmp"
   mv "$dir/$label-owner.tmp" "$dir/$label-owner.json"
   run_sync "$dir" "$label" claude delegate done
-  new_run="$(jq -r '.meta.run_id' "$dir/$label-report.json")"
+  new_run="$(json_file "$dir/$label-report.json" -r 'd?.meta?.run_id')"
   [ "$new_run" != "$old_run" ] && [ ! -e "$dir/$label-owner.json" ] || return 1
   if pid_is_running "$peer"; then printf 'release\n' > "$barrier/release.fifo"; fi
   wait_for_pid_stop "$peer" || kill -KILL "$peer" 2>/dev/null || true
@@ -606,7 +654,7 @@ run_live_sync_collision() (
     pid_is_running "$pid" || break
   done
   [ -f "$owner" ] || return 1
-  run="$(jq -r '.run_id' "$owner")"; peer="$(cat "$barrier/claude.pid")"
+  run="$(json_file "$owner" -r 'd?.run_id')"; peer="$(cat "$barrier/claude.pid")"
   printf '{"protected":"report"}\n' > "$dir/$label-report.json"
   printf '{"protected":"stdout"}\n' > "$dir/$label-stdout.json"
   printf 'protected last\n' > "$dir/$label-last.txt"
@@ -620,10 +668,10 @@ run_live_sync_collision() (
   [ "$rc" -eq 2 ] && grep -q "live sync run for label '$label'" "$dir/collision.err" || return 1
   [ "$(sha256_file "$owner")" = "$owner_hash" ] && [ "$(sha256_file "$dir/$label-report.json")" = "$report_hash" ] &&
     [ "$(sha256_file "$dir/$label-stdout.json")" = "$stdout_hash" ] && [ "$(sha256_file "$dir/$label-last.txt")" = "$last_hash" ] || return 1
-  jq -e --arg run "$run" '.run_id==$run and .run_kind=="sync"' "$owner" >/dev/null || return 1
+  json_file "$owner" -e --arg run "$run" 'eq(d?.run_id, $.run) && eq(d?.run_kind, "sync")' >/dev/null || return 1
   [ ! -e "$dir/$label.pid" ] && [ ! -e "$dir/$label-heartbeat.json" ] || return 1
   printf 'release\n' > "$barrier/release.fifo"; wait "$pid"
-  jq -e --arg run "$run" '.meta.run_id==$run and .status=="done"' "$dir/$label-report.json" >/dev/null
+  json_file "$dir/$label-report.json" -e --arg run "$run" 'eq(d?.meta?.run_id, $.run) && eq(d?.status, "done")' >/dev/null
 )
 
 run_stale_reaper_lock_timeout() (
@@ -649,19 +697,19 @@ run_force_orphan_peer_isolation() (
   mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'prompt\n' > "$dir/prompt.md"
   launch_detach_review_stub "$dir" "$label" "$barrier" || return 1
   wait_for_detach_stub_runtime "$dir" "$label" "$barrier" || return 1
-  owner="$dir/$label-owner.json"; monitor="$(jq -r '.monitor_pid' "$owner")"; worker="$(jq -r '.worker_pid' "$owner")"
-  peer="$(cat "$barrier/claude.pid")"; handoff="$(jq -r '.handoff_dir' "$owner")"; old_run="$(jq -r '.run_id' "$owner")"
+  owner="$dir/$label-owner.json"; monitor="$(json_file "$owner" -r 'd?.monitor_pid')"; worker="$(json_file "$owner" -r 'd?.worker_pid')"
+  peer="$(cat "$barrier/claude.pid")"; handoff="$(json_file "$owner" -r 'd?.handoff_dir')"; old_run="$(json_file "$owner" -r 'd?.run_id')"
   [ "$(process_group_of "$monitor")" = "$monitor" ] && pid_is_running "$peer" || return 1
   kill -KILL "$worker" "$monitor" 2>/dev/null || return 1
   wait_for_pid_stop "$worker" || return 1; wait_for_pid_stop "$monitor" || return 1
   pid_is_running "$peer" || return 1
-  jq '.lease_at="2000-01-01T00:00:00Z"' "$owner" > "$owner.tmp"; mv "$owner.tmp" "$owner"
+  json_file "$owner" '({...d, lease_at: "2000-01-01T00:00:00Z"})' > "$owner.tmp"; mv "$owner.tmp" "$owner"
   rm -rf "$handoff"
   run_sync "$dir" "$label" claude delegate done --force
-  new_run="$(jq -r '.meta.run_id' "$dir/$label-report.json")"
+  new_run="$(json_file "$dir/$label-report.json" -r 'd?.meta?.run_id')"
   [ "$new_run" != "$old_run" ] && wait_for_pid_stop "$peer" || return 1
-  jq -e --arg run "$new_run" '.meta.run_id==$run and .status=="done"' "$dir/$label-report.json" >/dev/null || return 1
-  jq -e '.session_id=="stub-claude-session" and .result=="stub claude completed"' "$dir/$label-stdout.json" >/dev/null || return 1
+  json_file "$dir/$label-report.json" -e --arg run "$new_run" 'eq(d?.meta?.run_id, $.run) && eq(d?.status, "done")' >/dev/null || return 1
+  json_file "$dir/$label-stdout.json" -e 'eq(d?.session_id, "stub-claude-session") && eq(d?.result, "stub claude completed")' >/dev/null || return 1
   [ "$(cat "$dir/$label-last.txt")" = 'stub claude completed' ] || return 1
   before_stdout="$(sha256_file "$dir/$label-stdout.json")"; before_last="$(sha256_file "$dir/$label-last.txt")"
   [ "$(sha256_file "$dir/$label-stdout.json")" = "$before_stdout" ] &&
@@ -670,12 +718,7 @@ run_force_orphan_peer_isolation() (
 
 check_readiness_timeout_sentinel() {
   local sentinel="$1" owner="$2"
-  jq -e --slurpfile owner "$owner" '
-    .state=="setup_failed" and .failure_stage=="readiness_timeout" and
-    .handoff_phase=="not_started" and .run_id==$owner[0].run_id and
-    .launcher_pid==$owner[0].launcher_pid and .monitor_pid==$owner[0].monitor_pid and
-    (.created_fifos|type)=="array"
-  ' "$sentinel" >/dev/null
+  json_file "$sentinel" -e --argjson owner "$(cat "$owner")" 'eq(d?.state, "setup_failed") && eq(d?.failure_stage, "readiness_timeout") && eq(d?.handoff_phase, "not_started") && eq(d?.run_id, $.owner?.run_id) && eq(d?.launcher_pid, $.owner?.launcher_pid) && eq(d?.monitor_pid, $.owner?.monitor_pid) && eq((type(d?.created_fifos)), "array")' >/dev/null
 }
 
 run_setup_term_readiness_sentinel() (
@@ -708,33 +751,33 @@ EOF
     pid_is_running "$launcher" || break
   done
   [ -f "$owner" ] && [ -f "$barrier/mkfifo.ready" ] || return 1
-  monitor="$(jq -r '.monitor_pid' "$owner")"; kill -TERM "$monitor"
+  monitor="$(json_file "$owner" -r 'd?.monitor_pid')"; kill -TERM "$monitor"
   printf 'release\n' > "$barrier/release.fifo"
   set +e; wait "$launcher"; rc=$?; set -e
   [ "$rc" -eq 0 ] || return 1
   sentinel="$dir/$label-handoff-sentinel-final.json"; owner="$dir/$label-owner-final.json"
   check_readiness_timeout_sentinel "$sentinel" "$owner" || return 1
-  jq -e '.status=="blocked" and .blocker_category=="env_error"' "$dir/$label-report.json" >/dev/null || return 1
-  bad="$dir/$label-handoff-sentinel.negative.json"; jq '.run_id="corrupted-run"' "$sentinel" > "$bad"
+  json_file "$dir/$label-report.json" -e 'eq(d?.status, "blocked") && eq(d?.blocker_category, "env_error")' >/dev/null || return 1
+  bad="$dir/$label-handoff-sentinel.negative.json"; json_file "$sentinel" '({...d, run_id: "corrupted-run"})' > "$bad"
   if check_readiness_timeout_sentinel "$bad" "$owner"; then return 1; fi
   [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] && [ ! -d "$handoff" ]
 )
 
 write_stale_detach_records() {
   local dir="$1" label="$2" handoff="$3" run="$4" launcher="$5" monitor="$6"
-  jq -n --arg run "$run" --arg handoff "$handoff" --argjson launcher "$launcher" --argjson monitor "$monitor" '
-    {run_id:$run,run_kind:"detach",runner_pid:$monitor,launcher_pid:$launcher,monitor_pid:$monitor,
+  json_tool -n --arg run "$run" --arg handoff "$handoff" --argjson launcher "$launcher" --argjson monitor "$monitor" '
+    ({run_id:$.run,run_kind:"detach",runner_pid:$.monitor,launcher_pid:$.launcher,monitor_pid:$.monitor,
      worker_pid:null,started_at:"2000-01-01T00:00:00Z",lease_at:"2000-01-01T00:00:00Z",
-     handoff_dir:$handoff,handoff_phase:"not_started"}
+     handoff_dir:$.handoff,handoff_phase:"not_started"})
   ' > "$dir/$label-owner.json"
   printf 'pid: %s\nrun_id: %s\n' "$monitor" "$run" > "$dir/$label.pid"
 }
 
 write_stale_sentinel() {
   local path="$1" run="$2" launcher="$3" monitor="$4" handoff="$5"
-  jq -n --arg run "$run" --arg handoff "$handoff" --argjson launcher "$launcher" --argjson monitor "$monitor" '
-    {run_id:$run,launcher_pid:$launcher,monitor_pid:$monitor,handoff_dir:$handoff,
-     created_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]}
+  json_tool -n --arg run "$run" --arg handoff "$handoff" --argjson launcher "$launcher" --argjson monitor "$monitor" '
+    ({run_id:$.run,launcher_pid:$.launcher,monitor_pid:$.monitor,handoff_dir:$.handoff,
+     created_fifos:["launcher-to-monitor.fifo","monitor-to-launcher.fifo"]})
   ' > "$path"
 }
 
@@ -743,6 +786,10 @@ run_partial_handoff_safe_cleanup() (
   root="$(cd "${TMPDIR:-/tmp}" && pwd)"; monitor="$(absent_test_pid)"
   trap 'rm -rf "${probe:-}" "${handoff:-}" "${target:-}" "${dir:-}"' EXIT TERM INT HUP
   for variant in missing-listed-fifo outside-root symlink unknown-entry sentinel-run-mismatch fifo-type-mismatch; do
+    if [ "$variant" = symlink ] && host_ln_s_copies; then
+      printf 'TEST_SKIP\tpartial-symlink: ln -s cannot make a symlink on this host\n' >&2
+      continue
+    fi
     dir="$(new_work_dir)"; label="partial-$variant"; run="run-$variant"; printf 'prompt\n' > "$dir/prompt.md"
     target=""; expected=retain
     case "$variant" in
@@ -750,11 +797,11 @@ run_partial_handoff_safe_cleanup() (
         handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
         mkfifo "$handoff/launcher-to-monitor.fifo"; expected=remove ;;
       outside-root)
-        handoff="$dir/agent-delegate-handoff.101.outside"; mkdir -m 700 "$handoff"
+        handoff="$dir/agent-delegate-handoff.101.outside"; mkdir_700 "$handoff"
         mkfifo "$handoff/launcher-to-monitor.fifo" ;;
       symlink)
-        target="$dir/symlink-target"; mkdir -m 700 "$target"; mkfifo "$target/launcher-to-monitor.fifo"
-        handoff="$root/agent-delegate-handoff.101.symlink"; rm -f "$handoff"; ln -s "$target" "$handoff" ;;
+        target="$dir/symlink-target"; mkdir_700 "$target"; mkfifo "$target/launcher-to-monitor.fifo"
+        handoff="$root/agent-delegate-handoff.101.symlink"; rm -f "$handoff"; ln_s "$target" "$handoff" ;;
       unknown-entry)
         handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 700 "$handoff"
         mkfifo "$handoff/launcher-to-monitor.fifo"; printf 'protected\n' > "$handoff/unknown-entry" ;;
@@ -767,7 +814,7 @@ run_partial_handoff_safe_cleanup() (
     esac
     write_stale_sentinel "$handoff/handoff-sentinel.json" "$run" 101 "$monitor" "$handoff"
     if [ "$variant" = sentinel-run-mismatch ]; then
-      jq '.run_id="corrupted-run"' "$handoff/handoff-sentinel.json" > "$handoff/s.tmp"
+      json_file "$handoff/handoff-sentinel.json" '({...d, run_id: "corrupted-run"})' > "$handoff/s.tmp"
       mv "$handoff/s.tmp" "$handoff/handoff-sentinel.json"
     fi
     write_stale_detach_records "$dir" "$label" "$handoff" "$run" 101 "$monitor"
@@ -838,9 +885,9 @@ case_heartbeat_timing_contract() {
   check_harness_positive_and_negative "$result" 2 done
   first="$dir/$label-heartbeat-1.json"; second="$dir/$label-heartbeat-2.json"
   owner1="$dir/$label-owner-1.json"; owner2="$dir/$label-owner-2.json"
-  jq -e --slurpfile second "$second" '.run_id==$second[0].run_id and .started_at==$second[0].started_at and .last_beat < $second[0].last_beat' "$first" >/dev/null
-  jq -e --slurpfile heartbeat "$first" '.run_id==$heartbeat[0].run_id and .lease_at==$heartbeat[0].last_beat' "$owner1" >/dev/null
-  jq -e --slurpfile heartbeat "$second" '.run_id==$heartbeat[0].run_id and .lease_at==$heartbeat[0].last_beat' "$owner2" >/dev/null
+  json_file "$first" -e --argjson second "$(cat "$second")" 'eq(d?.run_id, $.second?.run_id) && eq(d?.started_at, $.second?.started_at) && d?.last_beat < $.second?.last_beat' >/dev/null
+  json_file "$owner1" -e --argjson heartbeat "$(cat "$first")" 'eq(d?.run_id, $.heartbeat?.run_id) && eq(d?.lease_at, $.heartbeat?.last_beat)' >/dev/null
+  json_file "$owner2" -e --argjson heartbeat "$(cat "$second")" 'eq(d?.run_id, $.heartbeat?.run_id) && eq(d?.lease_at, $.heartbeat?.last_beat)' >/dev/null
   grep -q '^HEARTBEAT_INTERVAL=30$' "$SCRIPT" && grep -q '^HEARTBEAT_FRESHNESS=90$' "$SCRIPT"
   ! grep -Eq '(^|[[:space:]])sleep([[:space:]]|$)' "$HARNESS"
   rm -rf "$dir"
@@ -859,9 +906,8 @@ case_atomic_runtime_records() {
     bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label "$setup_label" --target claude --detach \
       > "$dir/launch.out" 2> "$dir/launch.err"
   setup_report="$(tail -1 "$dir/launch.out")"
-  jq -e '.status=="blocked" and .blocker_category=="env_error"' "$setup_report" >/dev/null
-  jq -e '.state=="setup_failed" and .failure_stage=="fifo_monitor_to_launcher" and .created_fifos==["launcher-to-monitor.fifo"]' \
-    "$dir/$setup_label-handoff-sentinel-final.json" >/dev/null
+  json_file "$setup_report" -e 'eq(d?.status, "blocked") && eq(d?.blocker_category, "env_error")' >/dev/null
+  json_file "$dir/$setup_label-handoff-sentinel-final.json" -e 'eq(d?.state, "setup_failed") && eq(d?.failure_stage, "fifo_monitor_to_launcher") && eq(d?.created_fifos, ["launcher-to-monitor.fifo"])' >/dev/null
   [ ! -d "$handoff" ] && [ ! -e "$dir/$setup_label-owner.json" ] && [ ! -e "$dir/$setup_label.pid" ] &&
     [ ! -e "$dir/$setup_label-heartbeat.json" ]
   ! find "$dir" -maxdepth 1 \( -name '*.tmp.*' -o -name '*report.candidate*' -o -name '*owner.lock*' \) -print -quit | grep -q .
@@ -872,8 +918,8 @@ case_terminal_done_retention() {
   local dir result label="$1" heartbeat before after
   dir="$(new_work_dir)"; result="$(run_harness "$dir" "$label" claude done)"
   check_harness_positive_and_negative "$result" 2 done
-  heartbeat="$(jq -r '.heartbeat_path' "$result")"; before="$(sha256_file "$heartbeat")"
-  jq -e '.state=="done"' "$heartbeat" >/dev/null; after="$(sha256_file "$heartbeat")"
+  heartbeat="$(json_file "$result" -r 'd?.heartbeat_path')"; before="$(sha256_file "$heartbeat")"
+  json_file "$heartbeat" -e 'eq(d?.state, "done")' >/dev/null; after="$(sha256_file "$heartbeat")"
   [ "$before" = "$after" ]; rm -rf "$dir"
 }
 
@@ -882,7 +928,7 @@ case_worker_death_synthesis() {
   local dir result report
   dir="$(new_work_dir)"; result="$(run_harness "$dir" "$1" claude worker-death)"
   check_harness_positive_and_negative "$result" 2 blocked
-  report="$(jq -r '.report_path' "$result")"; jq -e '.blocker_category=="env_error"' "$report" >/dev/null
+  report="$(json_file "$result" -r 'd?.report_path')"; json_file "$report" -e 'eq(d?.blocker_category, "env_error")' >/dev/null
   rm -rf "$dir"
 }
 
@@ -891,7 +937,7 @@ case_invalid_terminal_report() {
   for scenario in invalid-json invalid-status wrong-run; do
     dir="$(new_work_dir)"; result="$(run_harness "$dir" "$1-$scenario" claude "$scenario")"
     check_harness_positive_and_negative "$result" 2 blocked
-    jq -e '.blocker_category=="env_error"' "$(jq -r '.report_path' "$result")" >/dev/null
+    json_file "$(json_file "$result" -r 'd?.report_path')" -e 'eq(d?.blocker_category, "env_error")' >/dev/null
     rm -rf "$dir"
   done
 }
@@ -932,20 +978,12 @@ case_caller_initial_heartbeat_death() {
 
   dir="$(new_work_dir)"
   result="$(run_harness "$dir" initial-heartbeat claude monitor-kill-before-heartbeat)"
-  owner="$(jq -r '.owner_snapshot' "$result")"
-  jq -e --slurpfile owner "$owner" '
-    .scenario=="monitor-kill-before-heartbeat" and .monitor_alive==false and
-    .worker_alive_before_cleanup==true and .heartbeat_absent==true and
-    .run_id==$owner[0].run_id and .monitor_pid==$owner[0].monitor_pid and
-    .worker_pid==$owner[0].worker_pid
-  ' "$result" >/dev/null || die "initial heartbeat runtime evidence rejected"
-  [ ! -e "$(jq -r '.heartbeat_path' "$result")" ] || die "initial heartbeat was published before injected monitor death"
+  owner="$(json_file "$result" -r 'd?.owner_snapshot')"
+  json_file "$result" -e --argjson owner "$(cat "$owner")" 'eq(d?.scenario, "monitor-kill-before-heartbeat") && eq(d?.monitor_alive, false) && eq(d?.worker_alive_before_cleanup, true) && eq(d?.heartbeat_absent, true) && eq(d?.run_id, $.owner?.run_id) && eq(d?.monitor_pid, $.owner?.monitor_pid) && eq(d?.worker_pid, $.owner?.worker_pid)' >/dev/null || die "initial heartbeat runtime evidence rejected"
+  [ ! -e "$(json_file "$result" -r 'd?.heartbeat_path')" ] || die "initial heartbeat was published before injected monitor death"
   bad_owner="$dir/initial-heartbeat-owner.negative.json"
-  jq '.worker_pid += 1' "$owner" > "$bad_owner"
-  if jq -e --slurpfile owner "$bad_owner" '
-    .run_id==$owner[0].run_id and .monitor_pid==$owner[0].monitor_pid and
-    .worker_pid==$owner[0].worker_pid
-  ' "$result" >/dev/null; then
+  json_file "$owner" '({...d, worker_pid: d?.worker_pid + 1})' > "$bad_owner"
+  if json_file "$result" -e --argjson owner "$(cat "$bad_owner")" 'eq(d?.run_id, $.owner?.run_id) && eq(d?.monitor_pid, $.owner?.monitor_pid) && eq(d?.worker_pid, $.owner?.worker_pid)' >/dev/null; then
     rm -rf "$dir"
     die "initial heartbeat runtime checker accepted a corrupted owner worker PID"
   fi
@@ -1005,9 +1043,34 @@ case_artifact_recovery_contract() {
   rm -f "$bad_docs"
 }
 
+# The group-termination gate only signals a process group once it has confirmed
+# the group still holds one of ours, so the forms a peer CLI takes on each
+# platform have to be recognised. A bare name is not enough: a Windows install
+# runs codex.exe, and the packaged Claude CLI runs as claude-code/cli.js under
+# node, with either path separator.
+# Windows file names do not distinguish case either, so codex.EXE and Claude.Exe
+# name the same programs and have to be recognised as well.
+check_peer_command_fixture() {
+  local file="$1" id command_line expected got count=0
+  while IFS=$'\t' read -r id command_line expected; do
+    [ "$id" = case_id ] && continue
+    case "$expected" in match|no-match) : ;; *) return 1 ;; esac
+    got="$(bash "$SCRIPT" --_match-command "$command_line" 2>/dev/null)" || return 1
+    [ "$got" = "$expected" ] || return 1
+    count=$((count + 1))
+  done < "$file"
+  [ "$count" -eq 17 ]
+}
+
 case_run_ownership_force_resume() {
-  local bad dir rc barrier old_pid deadline old_run new_run prior_run resumed_run raw old_handoff new_handoff metadata
+  local bad dir rc barrier old_pid old_cli release_pid deadline old_run old_runner new_run prior_run resumed_run raw old_handoff new_handoff metadata
   check_ownership_fixture "$FIXTURE_DIR/ownership-cases.tsv" || die "ownership fixture rejected"
+  check_peer_command_fixture "$FIXTURE_DIR/peer-command-cases.tsv" || die "peer command fixture rejected"
+  bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-peer-command.XXXXXX")"
+  awk 'BEGIN{FS=OFS="\t"} $1=="windows-codex-exe-slash"{$3="no-match"} {print}' \
+    "$FIXTURE_DIR/peer-command-cases.tsv" > "$bad"
+  if check_peer_command_fixture "$bad"; then rm -f "$bad"; die "peer command checker accepted a corrupted expectation"; fi
+  rm -f "$bad"
   bad="$(mktemp "${TMPDIR:-/tmp}/agent-delegate-ownership.XXXXXX")"
   awk 'BEGIN{FS=OFS="\t"} NR==2{$NF="retain"} {print}' "$FIXTURE_DIR/ownership-cases.tsv" > "$bad"
   if check_ownership_fixture "$bad"; then rm -f "$bad"; die "ownership checker accepted a corrupted expectation"; fi
@@ -1035,46 +1098,67 @@ case_run_ownership_force_resume() {
     kill -0 "$old_pid" >/dev/null 2>&1 || break
   done
   [ -f "$dir/forced-owner.json" ] || { kill "$old_pid" 2>/dev/null || true; die "force fixture old owner missing"; }
-  old_run="$(jq -r '.run_id' "$dir/forced-owner.json")"
+  old_run="$(json_file "$dir/forced-owner.json" -r 'd?.run_id')"
+  old_runner="$(json_file "$dir/forced-owner.json" -r 'd?.runner_pid')"
+  old_cli="$(cat "$barrier/claude.pid" 2>/dev/null || true)"
   run_sync "$dir" forced claude delegate done --force
-  new_run="$(jq -r '.meta.run_id' "$dir/forced-report.json")"; [ "$new_run" != "$old_run" ]
-  printf 'release\n' > "$barrier/release.fifo" || true
+  new_run="$(json_file "$dir/forced-report.json" -r 'd?.meta?.run_id')"; [ "$new_run" != "$old_run" ]
+  # --force must have ended the old runner before the barrier is released, or a
+  # host where the process probe reports nothing would keep two runs going and
+  # still pass the checks below.
+  wait_for_pid_stop "$old_runner" || die "--force left the old runner $old_runner running"
+  # The peer CLI this run was holding is not checked here, because --force does
+  # not reach it on a sync run: the owner records monitor_pid as null and
+  # worker_pid as the runner's own pid, so the group termination is skipped and
+  # the worker role match needs --_worker, which a sync runner never carries.
+  # Only the runner is signalled. Whether --force should also end the peer is a
+  # behaviour question, not a gap in this test; $old_cli is kept so the check
+  # can be added here once that is decided.
+  # Nothing reads the FIFO once that pair is gone, so the write has to be able
+  # to give up. macOS ships no timeout(1), so release it from a background
+  # write and kill that instead.
+  ( printf 'release\n' > "$barrier/release.fifo" ) 2>/dev/null &
+  release_pid=$!
+  deadline=$(( $(date -u +%s) + 5 ))
+  while kill -0 "$release_pid" 2>/dev/null && [ "$(date -u +%s)" -lt "$deadline" ]; do :; done
+  kill "$release_pid" 2>/dev/null || true
+  wait "$release_pid" 2>/dev/null || true
   wait "$old_pid" 2>/dev/null || true
-  jq -e --arg run "$new_run" '.meta.run_id==$run' "$dir/forced-report.json" >/dev/null
+  json_file "$dir/forced-report.json" -e --arg run "$new_run" 'eq(d?.meta?.run_id, $.run)' >/dev/null
   [ ! -e "$dir/forced-owner.json" ] && [ ! -e "$dir/forced.pid" ] && [ ! -e "$dir/forced-heartbeat.json" ]
 
   run_sync "$dir" resumed claude delegate done
-  prior_run="$(jq -r '.meta.run_id' "$dir/resumed-report.json")"
+  prior_run="$(json_file "$dir/resumed-report.json" -r 'd?.meta?.run_id')"
   run_sync "$dir" resumed claude delegate done '--resume stub-claude-session'
-  resumed_run="$(jq -r '.meta.run_id' "$dir/resumed-report.json")"
+  resumed_run="$(json_file "$dir/resumed-report.json" -r 'd?.meta?.run_id')"
   [ "$prior_run" != "$resumed_run" ]
-  jq -e --arg run "$resumed_run" '.meta.run_id==$run and .meta.resumed==true and .thread_id=="stub-claude-session"' "$dir/resumed-report.json" >/dev/null
+  json_file "$dir/resumed-report.json" -e --arg run "$resumed_run" 'eq(d?.meta?.run_id, $.run) && eq(d?.meta?.resumed, true) && eq(d?.thread_id, "stub-claude-session")' >/dev/null
   rm -rf "$dir"
 
   raw="$(new_work_dir)"; mkdir -p "$raw/force" "$raw/resume"
   for dir in "$raw/force" "$raw/resume"; do
     if [ "$(basename "$dir")" = force ]; then new_run=force-new; old_run=force-old; else new_run=resume-new; old_run=resume-old; fi
-    jq -n --arg run "$old_run" '{meta:{run_id:$run},completed_after_owner_switch:true}' > "$dir/old-delayed-writer.json"
-    jq -n --arg run "$new_run" '{status:"done",meta:{run_id:$run}}' > "$dir/report.json"
-    jq -n --arg run "$new_run" '{run_id:$run,state:"done"}' > "$dir/heartbeat.json"
-    jq -n --arg run "$new_run" '{run_id:$run,run_kind:"detach"}' > "$dir/owner.json"
+    json_tool -n --arg run "$old_run" '({meta:{run_id:$.run},completed_after_owner_switch:true})' > "$dir/old-delayed-writer.json"
+    json_tool -n --arg run "$new_run" '({status:"done",meta:{run_id:$.run}})' > "$dir/report.json"
+    json_tool -n --arg run "$new_run" '({run_id:$.run,state:"done"})' > "$dir/heartbeat.json"
+    json_tool -n --arg run "$new_run" '({run_id:$.run,run_kind:"detach"})' > "$dir/owner.json"
     printf 'pid: 999999\nrun_id: %s\n' "$new_run" > "$dir/pid"
     check_shared_run_files "$dir" "$new_run" || die "shared run files rejected: $dir"
-    jq '.run_id="corrupted"' "$dir/heartbeat.json" > "$dir/heartbeat.bad"; mv "$dir/heartbeat.bad" "$dir/heartbeat.json"
+    json_file "$dir/heartbeat.json" '({...d, run_id: "corrupted"})' > "$dir/heartbeat.bad"; mv "$dir/heartbeat.bad" "$dir/heartbeat.json"
     if check_shared_run_files "$dir" "$new_run"; then die "shared run checker accepted corrupted heartbeat"; fi
   done
   rm -rf "$raw"
 
   dir="$(new_work_dir)"; printf 'prompt\n' > "$dir/prompt.md"
   old_handoff="$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-handoff.101.wronguid"; new_handoff="$(mktemp -d "$(cd "${TMPDIR:-/tmp}" && pwd)/agent-delegate-heartbeat-handoff.XXXXXX")"
-  rm -rf "$old_handoff"; mkdir -m 700 "$old_handoff"; mkfifo "$old_handoff/launcher-to-monitor.fifo"
-  jq -n --arg handoff "$old_handoff" '{run_id:"old-run",run_kind:"detach",runner_pid:999999,launcher_pid:101,
+  rm -rf "$old_handoff"; mkdir_700 "$old_handoff"; mkfifo "$old_handoff/launcher-to-monitor.fifo"
+  json_tool -n --arg handoff "$old_handoff" '({run_id:"old-run",run_kind:"detach",runner_pid:999999,launcher_pid:101,
     monitor_pid:999999,worker_pid:null,started_at:"2000-01-01T00:00:00Z",lease_at:"2000-01-01T00:00:00Z",
-    handoff_dir:$handoff,handoff_phase:"not_started"}' > "$dir/wronguid-owner.json"
+    handoff_dir:$.handoff,handoff_phase:"not_started"})' > "$dir/wronguid-owner.json"
   printf 'pid: 999999\nrun_id: old-run\n' > "$dir/wronguid.pid"
-  metadata="$(jq -nc --argjson uid "$(( $(id -u) + 1 ))" --argjson dev "$(stat -f %d "$old_handoff" 2>/dev/null || stat -c %d "$old_handoff")" \
-    --argjson ino "$(stat -f %i "$old_handoff" 2>/dev/null || stat -c %i "$old_handoff")" \
-    '{source:"heartbeat_test_injection",type:"directory",symlink:false,uid:$uid,mode:700,device:$dev,inode:$ino}')"
+  metadata="$(json_tool -nc --argjson uid "$(( $(id -u) + 1 ))" --argjson dev "$(stat -c %d "$old_handoff" 2>/dev/null || stat -f %d "$old_handoff")" \
+    --argjson ino "$(stat -c %i "$old_handoff" 2>/dev/null || stat -f %i "$old_handoff")" \
+    '({source:"heartbeat_test_injection",type:"directory",symlink:false,uid:$.uid,mode:700,device:$.dev,inode:$.ino})')"
   set +e
   AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$new_handoff" AGENT_DELEGATE_TEST_LSTAT_METADATA="$metadata" \
     bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label wronguid --target claude --detach \
@@ -1090,7 +1174,7 @@ case_heartbeat_testmode_both_directions() {
   for target in claude codex; do
     dir="$(new_work_dir)"; result="$(run_harness "$dir" "$1-$target" "$target" done)"
     check_harness_positive_and_negative "$result" 2 done
-    jq -e --arg target "$target" '.target==$target and (($target=="claude" and .direction=="codex->claude") or ($target=="codex" and .direction=="claude->codex"))' "$result" >/dev/null
+    json_file "$result" -e --arg target "$target" 'eq(d?.target, $.target) && (((eq($.target, "claude") && eq(d?.direction, "codex->claude")) || (eq($.target, "codex") && eq(d?.direction, "claude->codex"))))' >/dev/null
     rm -rf "$dir"
   done
   dir="$(new_work_dir)"; printf 'prompt\n' > "$dir/prompt.md"
@@ -1762,20 +1846,22 @@ check_compatibility_fixture() {
 }
 
 process_group_of() {
-  ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'
+  if ps_has_o; then ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'; return 0; fi
+  [ -r "/proc/$1/pgid" ] || return 0
+  tr -d '[:space:]' < "/proc/$1/pgid" 2>/dev/null
 }
 
 cleanup_detach_stub_fixture() {
   local dir="$1" label="$2" owner="$dir/$label-owner.json" monitor="" worker="" pgid="" own_pgid
   local handoff="" heartbeat="$dir/$label-heartbeat.json"
-  if [ -f "$owner" ] && jq -e . "$owner" >/dev/null 2>&1; then
-    monitor="$(jq -r '.monitor_pid // empty' "$owner")"
-    worker="$(jq -r '.worker_pid // empty' "$owner")"
-    handoff="$(jq -r '.handoff_dir // empty' "$owner")"
+  if [ -f "$owner" ] && json_file "$owner" -e 'd' >/dev/null 2>&1; then
+    monitor="$(json_file "$owner" -r 'alt(d?.monitor_pid, EMPTY)')"
+    worker="$(json_file "$owner" -r 'alt(d?.worker_pid, EMPTY)')"
+    handoff="$(json_file "$owner" -r 'alt(d?.handoff_dir, EMPTY)')"
   fi
-  if [ -z "$monitor" ] && jq -e . "$heartbeat" >/dev/null 2>&1; then
-    monitor="$(jq -r '.monitor_pid // empty' "$heartbeat")"
-    worker="$(jq -r '.pid // empty' "$heartbeat")"
+  if [ -z "$monitor" ] && json_file "$heartbeat" -e 'd' >/dev/null 2>&1; then
+    monitor="$(json_file "$heartbeat" -r 'alt(d?.monitor_pid, EMPTY)')"
+    worker="$(json_file "$heartbeat" -r 'alt(d?.pid, EMPTY)')"
   fi
   own_pgid="$(process_group_of "${BASHPID:-$$}")"
   if [ -n "$monitor" ]; then
@@ -1828,8 +1914,8 @@ wait_for_detach_stub_runtime() {
   deadline=$(( $(date -u +%s) + 10 ))
   while [ "$(date -u +%s)" -lt "$deadline" ]; do
     if [ -f "$barrier/claude.ready" ] && [ -f "$owner" ] && [ -f "$heartbeat" ] &&
-       jq -e '.handoff_phase=="verified" and (.monitor_pid|type)=="number" and (.worker_pid|type)=="number"' "$owner" >/dev/null 2>&1 &&
-       jq -e '.state=="running" and (.pid|type)=="number" and (.monitor_pid|type)=="number"' "$heartbeat" >/dev/null 2>&1; then
+       json_file "$owner" -e 'eq(d?.handoff_phase, "verified") && eq((type(d?.monitor_pid)), "number") && eq((type(d?.worker_pid)), "number")' >/dev/null 2>&1 &&
+       json_file "$heartbeat" -e 'eq(d?.state, "running") && eq((type(d?.pid)), "number") && eq((type(d?.monitor_pid)), "number")' >/dev/null 2>&1; then
       return 0
     fi
   done
@@ -1842,9 +1928,9 @@ wait_for_detach_stub_terminal() {
   deadline=$(( $(date -u +%s) + 10 ))
   while [ "$(date -u +%s)" -lt "$deadline" ]; do
     if [ -f "$report" ] && [ -f "$heartbeat" ] &&
-       jq -e --arg expected "$expected" '.status==$expected and (.meta.run_id|type)=="string"' "$report" >/dev/null 2>&1 &&
-       jq -e --arg expected "$expected" --slurpfile report "$report" \
-         '.state==$expected and .run_id==$report[0].meta.run_id' "$heartbeat" >/dev/null 2>&1 &&
+       json_file "$report" -e --arg expected "$expected" 'eq(d?.status, $.expected) && eq((type(d?.meta?.run_id)), "string")' >/dev/null 2>&1 &&
+       json_file "$heartbeat" -e --arg expected "$expected" --argjson report_run "$(json_file "$report" -c 'd?.meta?.run_id')" \
+         'eq(d?.state, $.expected) && eq(d?.run_id, $.report_run)' >/dev/null 2>&1 &&
        [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] && [ ! -d "$handoff" ]; then
       return 0
     fi
@@ -1859,9 +1945,9 @@ run_detach_review_lifecycle_stub() (
   mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'review prompt\n' > "$dir/prompt.md"
   launch_detach_review_stub "$dir" "$label" "$barrier" || return 1
   wait_for_detach_stub_runtime "$dir" "$label" "$barrier" || return 1
-  owner="$dir/$label-owner.json"; monitor="$(jq -r '.monitor_pid' "$owner")"; worker="$(jq -r '.worker_pid' "$owner")"
+  owner="$dir/$label-owner.json"; monitor="$(json_file "$owner" -r 'd?.monitor_pid')"; worker="$(json_file "$owner" -r 'd?.worker_pid')"
   peer="$(cat "$barrier/claude.pid")"
-  handoff="$(jq -r '.handoff_dir' "$owner")"; driver_pgid="$(cat "$dir/$label-launcher-shell.pgid")"
+  handoff="$(json_file "$owner" -r 'd?.handoff_dir')"; driver_pgid="$(cat "$dir/$label-launcher-shell.pgid")"
   monitor_pgid="$(process_group_of "$monitor")"; worker_pgid="$(process_group_of "$worker")"
   [ -n "$monitor_pgid" ] && [ "$monitor_pgid" = "$worker_pgid" ] && [ "$monitor_pgid" != "$driver_pgid" ] || return 1
 
@@ -1875,20 +1961,20 @@ run_detach_review_lifecycle_stub() (
       printf 'release\n' > "$barrier/release.fifo"
       wait_for_detach_stub_terminal "$dir" "$label" done "$handoff" || return 1
       report="$dir/$label-report.json"
-      jq -e '.status=="done" and .meta.mode=="review"' "$report" >/dev/null || return 1
+      json_file "$report" -e 'eq(d?.status, "done") && eq(d?.meta?.mode, "review")' >/dev/null || return 1
       [ -f "$dir/$label-review.md" ] || return 1
       ! kill -0 "$peer" 2>/dev/null || return 1
       ;;
     worker-death)
       kill -KILL "$worker" 2>/dev/null || return 1
       wait_for_detach_stub_terminal "$dir" "$label" blocked "$handoff" || return 1
-      jq -e '.blocker_category=="env_error"' "$dir/$label-report.json" >/dev/null || return 1
+      json_file "$dir/$label-report.json" -e 'eq(d?.blocker_category, "env_error")' >/dev/null || return 1
       ! kill -0 "$peer" 2>/dev/null || return 1
       ;;
     monitor-termination)
       kill -TERM "$monitor" 2>/dev/null || return 1
       wait_for_detach_stub_terminal "$dir" "$label" blocked "$handoff" || return 1
-      jq -e '.blocker_category=="env_error"' "$dir/$label-report.json" >/dev/null || return 1
+      json_file "$dir/$label-report.json" -e 'eq(d?.blocker_category, "env_error")' >/dev/null || return 1
       ! kill -0 "$peer" 2>/dev/null || return 1
       ;;
     *) return 1 ;;
@@ -1906,10 +1992,10 @@ run_monitor_term_review_stub() (
   mkdir "$barrier"; mkfifo "$barrier/release.fifo"; printf 'review prompt\n' > "$dir/prompt.md"
   launch_detach_review_stub "$dir" "$label" "$barrier" "" "" monitor-term-recovery "$ready" "$release" || return 1
   wait_for_detach_stub_runtime "$dir" "$label" "$barrier" || return 1
-  owner="$dir/$label-owner.json"; monitor="$(jq -r '.monitor_pid' "$owner")"; worker="$(jq -r '.worker_pid' "$owner")"
-  peer="$(cat "$barrier/claude.pid")"; handoff="$(jq -r '.handoff_dir' "$owner")"
+  owner="$dir/$label-owner.json"; monitor="$(json_file "$owner" -r 'd?.monitor_pid')"; worker="$(json_file "$owner" -r 'd?.worker_pid')"
+  peer="$(cat "$barrier/claude.pid")"; handoff="$(json_file "$owner" -r 'd?.handoff_dir')"
   driver_pgid="$(cat "$dir/$label-launcher-shell.pgid")"; monitor_pgid="$(process_group_of "$monitor")"
-  worker_pgid="$(process_group_of "$worker")"; run="$(jq -r '.run_id' "$owner")"
+  worker_pgid="$(process_group_of "$worker")"; run="$(json_file "$owner" -r 'd?.run_id')"
   candidate="$dir/$label-report.candidate.$run.json"; review="$dir/$label-review.md"
   [ -n "$monitor_pgid" ] && [ "$monitor_pgid" = "$worker_pgid" ] && [ "$monitor_pgid" != "$driver_pgid" ] || return 1
   kill -TERM -- "-$driver_pgid" 2>/dev/null || true
@@ -1928,7 +2014,7 @@ run_monitor_term_review_stub() (
     missing-review) rm -f "$review" ;;
     malformed-review) printf 'type: review\n## Findings\n' > "$review" ;;
     wrong-run)
-      jq '.meta.run_id="stale-run"' "$candidate" > "$candidate.tmp" && mv -f "$candidate.tmp" "$candidate"
+      json_file "$candidate" '({...d, meta: {...d?.meta, run_id: "stale-run"}})' > "$candidate.tmp" && mv -f "$candidate.tmp" "$candidate"
       ;;
     *) return 1 ;;
   esac
@@ -1936,16 +2022,14 @@ run_monitor_term_review_stub() (
   wait_for_detach_stub_terminal "$dir" "$label" "$expected_status" "$handoff" || return 1
   report="$dir/$label-report.json"
   if [ "$expected_status" = done ]; then
-    jq -e --arg run "$run" --arg review "$review" \
-      '.status=="done" and .blocker==null and .blocker_category==null and
-       .meta.run_id==$run and .meta.mode=="review" and .touchedFiles==[] and
-       .artifacts.review_file==$review' "$report" >/dev/null || return 1
+    json_file "$report" -e --arg run "$run" --arg review "$review" \
+      'eq(d?.status, "done") && eq(d?.blocker, null) && eq(d?.blocker_category, null) && eq(d?.meta?.run_id, $.run) && eq(d?.meta?.mode, "review") && eq(d?.touchedFiles, []) && eq(d?.artifacts?.review_file, $.review)' >/dev/null || return 1
     grep -q '^type: review' "$review" && grep -q '^## Meta' "$review" &&
       grep -q '^## Findings' "$review" && grep -qE 'Gate:[[:space:]]*(PASS|FAIL)' "$review" || return 1
   else
-    jq -e --arg run "$run" \
-      '.status=="blocked" and .blocker_category=="env_error" and
-       .meta.run_id==$run and (.blocker|contains("TERM"))' "$report" >/dev/null || return 1
+    json_file "$report" -e --arg run "$run" \
+      'eq(d?.status, "blocked") && eq(d.blocker_category, "env_error") &&
+       eq(d.meta?.run_id, $.run) && type(d.blocker)==="string" && d.blocker.includes("TERM")' >/dev/null || return 1
   fi
   [ ! -e "$candidate" ] && [ ! -e "$candidate.tmp" ] || return 1
   trap - EXIT TERM INT HUP
@@ -1978,14 +2062,11 @@ case_monitor_term_review_recovery() {
 check_owner_lock_signal_artifacts() {
   local report="$1" heartbeat="$2" dir="$3" label="$4" handoff="$5" expected_status="$6"
   [ -f "$report" ] && [ -f "$heartbeat" ] || return 1
-  jq -e --arg status "$expected_status" '
-    .status==$status and (.meta.run_id|type)=="string" and (.meta.run_id|length)>0 and
-    .blocker_category=="env_error" and (.blocker|contains("TERM"))
-  ' "$report" >/dev/null || return 1
-  jq -e --arg status "$expected_status" --slurpfile report "$report" '
-    .state==$status and .run_id==$report[0].meta.run_id and
-    (.pid|type)=="number" and (.monitor_pid|type)=="number"
-  ' "$heartbeat" >/dev/null || return 1
+  json_file "$report" -e --arg status "$expected_status" '
+    eq(d?.status, $.status) && type(d.meta?.run_id)==="string" && len(d.meta.run_id)>0 &&
+    eq(d.blocker_category, "env_error") && type(d.blocker)==="string" && d.blocker.includes("TERM")
+  ' >/dev/null || return 1
+  json_file "$heartbeat" -e --arg status "$expected_status" --argjson report_run "$(json_file "$report" -c 'd?.meta?.run_id')" 'eq(d?.state, $.status) && eq(d?.run_id, $.report_run) && eq((type(d?.pid)), "number") && eq((type(d?.monitor_pid)), "number")' >/dev/null || return 1
   [ ! -e "$dir/$label-owner.json" ] && [ ! -e "$dir/$label.pid" ] &&
     [ ! -e "$dir/$label-owner.lock" ] && [ ! -d "$handoff" ] || return 1
   ! find "$dir" -maxdepth 1 \( -name "$label-report.candidate.*" -o -name "$label-report.json.tmp.*" \
@@ -2005,17 +2086,17 @@ run_owner_lock_signal_stub() (
   deadline=$(( $(date -u +%s) + 10 ))
   while [ "$(date -u +%s)" -lt "$deadline" ]; do
     if check_owner_lock_signal_artifacts "$report" "$heartbeat" "$dir" "$label" "$handoff" "$expected_status"; then
-      monitor="$(jq -r '.monitor_pid' "$heartbeat")"
+      monitor="$(json_file "$heartbeat" -r 'd?.monitor_pid')"
       peer="$(cat "$barrier/claude.pid" 2>/dev/null || true)"
       if ! kill -0 "$monitor" 2>/dev/null && { [ -z "$peer" ] || ! kill -0 "$peer" 2>/dev/null; }; then break; fi
     fi
   done
   check_owner_lock_signal_artifacts "$report" "$heartbeat" "$dir" "$label" "$handoff" "$expected_status" || return 1
-  monitor="$(jq -r '.monitor_pid' "$heartbeat")"; ! kill -0 "$monitor" 2>/dev/null || return 1
+  monitor="$(json_file "$heartbeat" -r 'd?.monitor_pid')"; ! kill -0 "$monitor" 2>/dev/null || return 1
   peer="$(cat "$barrier/claude.pid" 2>/dev/null || true)"; [ -z "$peer" ] || ! kill -0 "$peer" 2>/dev/null || return 1
 
   bad_heartbeat="$dir/$label-heartbeat.negative.json"
-  jq '.run_id="corrupted-run"' "$heartbeat" > "$bad_heartbeat"
+  json_file "$heartbeat" '({...d, run_id: "corrupted-run"})' > "$bad_heartbeat"
   if check_owner_lock_signal_artifacts "$report" "$bad_heartbeat" "$dir" "$label" "$handoff" "$expected_status"; then
     return 1
   fi
@@ -2060,7 +2141,7 @@ case_clean_checkout_compatibility() {
   AGENT_DELEGATE_TEST_MODE=1 bash "$SCRIPT" --mode delegate --prompt-file "$dir/plan-prompt.md" --out-dir "$dir" --label plan --target codex --sandbox read-only | grep -q 'target=codex sandbox=read-only'
   run_sync "$dir" claude-done claude delegate done
   run_sync "$dir" claude-blocked claude delegate blocked
-  jq -e '.status=="blocked" and (.blocker|type)=="string" and (.blocker_category|type)=="string"' "$dir/claude-blocked-report.json" >/dev/null
+  json_file "$dir/claude-blocked-report.json" -e 'eq(d?.status, "blocked") && eq((type(d?.blocker)), "string") && eq((type(d?.blocker_category)), "string")' >/dev/null
   run_sync "$dir" review claude review done
   [ -f "$dir/review-review.md" ]
   run_sync "$dir" codex-done codex delegate done
@@ -2069,13 +2150,13 @@ case_clean_checkout_compatibility() {
     --label detach --target claude --sandbox workspace-write --detach > "$dir/detach-launch.out" 2> "$dir/detach-launch.err"
   detach_report="$(tail -1 "$dir/detach-launch.out")"; deadline=$(( $(date -u +%s) + 10 ))
   while [ "$(date -u +%s)" -lt "$deadline" ]; do
-    if [ -f "$detach_report" ] && jq -e '.status=="done"' "$detach_report" >/dev/null 2>&1 &&
+    if [ -f "$detach_report" ] && json_file "$detach_report" -e 'eq(d?.status, "done")' >/dev/null 2>&1 &&
        [ -f "$dir/detach-heartbeat.json" ] && [ ! -e "$dir/detach-owner.json" ] && [ ! -e "$dir/detach.pid" ]; then
       break
     fi
   done
-  jq -e '.status=="done" and (.meta.run_id|type)=="string"' "$detach_report" >/dev/null
-  jq -e --slurpfile report "$detach_report" '.state=="done" and .run_id==$report[0].meta.run_id' "$dir/detach-heartbeat.json" >/dev/null
+  json_file "$detach_report" -e 'eq(d?.status, "done") && eq((type(d?.meta?.run_id)), "string")' >/dev/null
+  json_file "$dir/detach-heartbeat.json" -e --argjson report_run "$(json_file "$detach_report" -c 'd?.meta?.run_id')" 'eq(d?.state, "done") && eq(d?.run_id, $.report_run)' >/dev/null
   [ ! -e "$dir/detach-owner.json" ] && [ ! -e "$dir/detach.pid" ]
   ! find "$dir" -maxdepth 1 -name '*.tmp.*' -print -quit | grep -q .
   rm -rf "$dir"
@@ -2110,7 +2191,7 @@ case_allowed_scope_and_skill_style() {
       AGENTS.md|README.md|README.ja.md|docs/coding-rules.md|docs/review_rules.md|docs/skill-style-guide.md) : ;;
       skills/agent-delegate/SKILL.md|skills/agent-delegate/references/contract.md|skills/agent-delegate/references/contract.ja.md) : ;;
       skills/mcp-convert/SKILL.md) : ;;
-      skills/agent-delegate/references/scripts/agent-delegate.sh|skills/agent-delegate/references/scripts/tests/*) : ;;
+      skills/agent-delegate/references/scripts/agent-delegate.sh|skills/agent-delegate/references/scripts/json-tool.mjs|skills/agent-delegate/references/scripts/tests/*) : ;;
       skills/spec-orchestrate/SKILL.md|skills/spec-orchestrate/references/role-dispatch.md|skills/spec-orchestrate/references/role-dispatch.ja.md) : ;;
       skills/spec-orchestrate/references/phases/spec_generate.md|skills/spec-orchestrate/references/phases/spec_generate.ja.md) : ;;
       skills/spec-orchestrate/references/phases/spec_review.md|skills/spec-orchestrate/references/phases/spec_review.ja.md) : ;;
@@ -2158,7 +2239,7 @@ case_heartbeat_harness_contract() {
   local dir result
   dir="$(new_work_dir)"; result="$(run_harness "$dir" "$1" claude done)"
   check_harness_positive_and_negative "$result" 2 done
-  [ "$(mode_of "$dir/$1-sentinel-ready.json")" = 600 ]
+  [ "$(mode_of "$dir/$1-sentinel-ready.json")" = 600 ] || host_ignores_chmod
   awk -F '\t' '$2=="owner-before-fifo"{owner=NR} $2=="fifo-ready"{fifo=NR} END{exit !(owner && fifo && owner<fifo)}' "$dir/$1-harness-events.tsv"
   rm -rf "$dir"
 }
@@ -2187,11 +2268,7 @@ case_synchronous_no_heartbeat() {
     kill -0 "$pid" >/dev/null 2>&1 || break
   done
   owner="$dir/$label-owner.json"; [ -f "$owner" ] || { kill "$pid" 2>/dev/null || true; die "sync owner was not observable"; }
-  jq -e --argjson pid "$pid" '
-    .run_kind=="sync" and .runner_pid==$pid and .launcher_pid==$pid and
-    .monitor_pid==null and .worker_pid==$pid and .lease_at==.started_at and
-    .handoff_dir==null and .handoff_phase=="not_applicable"
-  ' "$owner" >/dev/null
+  json_file "$owner" -e --argjson pid "$pid" 'eq(d?.run_kind, "sync") && eq(d?.runner_pid, $.pid) && eq(d?.launcher_pid, $.pid) && eq(d?.monitor_pid, null) && eq(d?.worker_pid, $.pid) && eq(d?.lease_at, d?.started_at) && eq(d?.handoff_dir, null) && eq(d?.handoff_phase, "not_applicable")' >/dev/null
   [ ! -e "$dir/$label-heartbeat.json" ] && [ ! -e "$dir/$label.pid" ]
   printf 'release\n' > "$barrier/release.fifo"; wait "$pid"
   report="$(tail -1 "$dir/out")"; [ "$report" = "$dir/$label-report.json" ]
@@ -2203,46 +2280,46 @@ check_handoff_artifacts() {
   local result="$1" scenario="$2" expected_phase="$3" expected_attempts="$4" expected_heartbeat="$5"
   local expected_publisher="$6" expected_report="$7" expected_decision="$8" publisher_override="${9:-}"
   local out label run request ack sentinel owner worker publisher decision report heartbeat
-  out="$(dirname "$result")"; label="$(basename "$result" -harness-result.json)"; run="$(jq -r '.run_id' "$result")"
+  out="$(dirname "$result")"; label="$(basename "$result" -harness-result.json)"; run="$(json_file "$result" -r 'd?.run_id')"
   request="$out/$label-handoff-request.json"; ack="$out/$label-handoff-acknowledgement.json"
   sentinel="$out/$label-handoff-sentinel-final.json"; owner="$out/$label-owner-final.json"
   worker="$out/$label-worker-result.json"; publisher="${publisher_override:-$out/$label-publisher.txt}"
-  decision="$out/$label-launcher-decision.txt"; report="$(jq -r '.report_path' "$result")"
-  heartbeat="$(jq -r '.heartbeat_path' "$result")"
+  decision="$out/$label-launcher-decision.txt"; report="$(json_file "$result" -r 'd?.report_path')"
+  heartbeat="$(json_file "$result" -r 'd?.heartbeat_path')"
   [ -f "$request" ] && [ -f "$ack" ] && [ -f "$sentinel" ] && [ -f "$owner" ] &&
     [ -f "$worker" ] && [ -f "$publisher" ] && [ -f "$decision" ] && [ -f "$report" ] || return 1
-  jq -e --arg run "$run" '.run_id==$run' "$request" >/dev/null || return 1
-  jq -e --arg run "$run" --arg phase "$expected_phase" '.run_id==$run and .handoff_phase==$phase' "$sentinel" >/dev/null || return 1
-  jq -e --arg run "$run" --arg phase "$expected_phase" '.run_id==$run and .handoff_phase==$phase' "$owner" >/dev/null || return 1
-  jq -e --argjson attempts "$expected_attempts" '.attempts==$attempts and (.started|type)=="boolean"' "$worker" >/dev/null || return 1
+  json_file "$request" -e --arg run "$run" 'eq(d?.run_id, $.run)' >/dev/null || return 1
+  json_file "$sentinel" -e --arg run "$run" --arg phase "$expected_phase" 'eq(d?.run_id, $.run) && eq(d?.handoff_phase, $.phase)' >/dev/null || return 1
+  json_file "$owner" -e --arg run "$run" --arg phase "$expected_phase" 'eq(d?.run_id, $.run) && eq(d?.handoff_phase, $.phase)' >/dev/null || return 1
+  json_file "$worker" -e --argjson attempts "$expected_attempts" 'eq(d?.attempts, $.attempts) && eq((type(d?.started)), "boolean")' >/dev/null || return 1
   [ "$(cat "$publisher")" = "$expected_publisher" ] && [ "$(cat "$decision")" = "$expected_decision" ] || return 1
   case "$expected_report" in
-    blocked) jq -e --arg run "$run" '.status=="blocked" and .meta.run_id==$run' "$report" >/dev/null || return 1 ;;
-    absent) [ "$(jq -r '.status' "$report")" != blocked ] || return 1 ;;
+    blocked) json_file "$report" -e --arg run "$run" 'eq(d?.status, "blocked") && eq(d?.meta?.run_id, $.run)' >/dev/null || return 1 ;;
+    absent) [ "$(json_file "$report" -r 'd?.status')" != blocked ] || return 1 ;;
     *) return 1 ;;
   esac
   case "$expected_heartbeat" in
     absent) [ ! -f "$heartbeat" ] || return 1 ;;
-    terminal-blocked) jq -e --arg run "$run" '.run_id==$run and .state=="blocked"' "$heartbeat" >/dev/null || return 1 ;;
-    terminal-done) jq -e --arg run "$run" '.run_id==$run and .state=="done"' "$heartbeat" >/dev/null || return 1 ;;
+    terminal-blocked) json_file "$heartbeat" -e --arg run "$run" 'eq(d?.run_id, $.run) && eq(d?.state, "blocked")' >/dev/null || return 1 ;;
+    terminal-done) json_file "$heartbeat" -e --arg run "$run" 'eq(d?.run_id, $.run) && eq(d?.state, "done")' >/dev/null || return 1 ;;
     *) return 1 ;;
   esac
   case "$scenario" in
     owner-pid-mismatch)
-      jq -e '.message=="handoff-ready"' "$request" >/dev/null && jq -e '.raw|startswith("handoff-failed ")' "$ack" >/dev/null || return 1 ;;
+      json_file "$request" -e 'eq(d?.message, "handoff-ready")' >/dev/null && json_file "$ack" -e '(type(d?.raw)==="string" && d?.raw.startsWith("handoff-failed "))' >/dev/null || return 1 ;;
     acknowledgement-mismatch)
-      jq -e '.message=="handoff-ready"' "$request" >/dev/null && jq -e '.raw|startswith("monitor-ready injected-mismatch ")' "$ack" >/dev/null || return 1 ;;
+      json_file "$request" -e 'eq(d?.message, "handoff-ready")' >/dev/null && json_file "$ack" -e '(type(d?.raw)==="string" && d?.raw.startsWith("monitor-ready injected-mismatch "))' >/dev/null || return 1 ;;
     final-ack-timeout)
-      jq -e '.message=="handoff-verified" and .verification=="ok" and .delivery=="timeout"' "$request" >/dev/null &&
-        jq -e '.raw|startswith("handoff-committed ")' "$ack" >/dev/null || return 1 ;;
+      json_file "$request" -e 'eq(d?.message, "handoff-verified") && eq(d?.verification, "ok") && eq(d?.delivery, "timeout")' >/dev/null &&
+        json_file "$ack" -e '(type(d?.raw)==="string" && d?.raw.startsWith("handoff-committed "))' >/dev/null || return 1 ;;
     expire-handoff)
-      jq -e '.message=="expire-handoff" and .expired_before_commit==true' "$request" >/dev/null || return 1 ;;
+      json_file "$request" -e 'eq(d?.message, "expire-handoff") && eq(d?.expired_before_commit, true)' >/dev/null || return 1 ;;
     worker-start-failure)
-      jq -e '.message=="handoff-verified" and .verification=="ok"' "$request" >/dev/null &&
-        jq -e '.started==false and .attempts==1' "$worker" >/dev/null || return 1 ;;
+      json_file "$request" -e 'eq(d?.message, "handoff-verified") && eq(d?.verification, "ok")' >/dev/null &&
+        json_file "$worker" -e 'eq(d?.started, false) && eq(d?.attempts, 1)' >/dev/null || return 1 ;;
     final-ack-response-lost)
-      jq -e '.message=="handoff-verified" and .verification=="ok"' "$request" >/dev/null &&
-        jq -e '.raw|startswith("handoff-verified-response-lost ")' "$ack" >/dev/null && jq -e '.started==true and .attempts==1' "$worker" >/dev/null || return 1 ;;
+      json_file "$request" -e 'eq(d?.message, "handoff-verified") && eq(d?.verification, "ok")' >/dev/null &&
+        json_file "$ack" -e '(type(d?.raw)==="string" && d?.raw.startsWith("handoff-verified-response-lost "))' >/dev/null && json_file "$worker" -e 'eq(d?.started, true) && eq(d?.attempts, 1)' >/dev/null || return 1 ;;
     *) return 1 ;;
   esac
 }
@@ -2250,17 +2327,17 @@ check_handoff_artifacts() {
 check_phase_artifacts() {
   local result="$1" sentinel_phase="$2" owner_phase="$3" attempts="$4" publisher="$5" status="$6" decision="$7" publisher_override="${8:-}"
   local out label run sentinel owner worker publisher_file decision_file report heartbeat
-  out="$(dirname "$result")"; label="$(basename "$result" -harness-result.json)"; run="$(jq -r '.run_id' "$result")"
+  out="$(dirname "$result")"; label="$(basename "$result" -harness-result.json)"; run="$(json_file "$result" -r 'd?.run_id')"
   sentinel="$out/$label-handoff-sentinel-final.json"; owner="$out/$label-owner-final.json"
   worker="$out/$label-worker-result.json"; publisher_file="${publisher_override:-$out/$label-publisher.txt}"
-  decision_file="$out/$label-launcher-decision.txt"; report="$(jq -r '.report_path' "$result")"; heartbeat="$(jq -r '.heartbeat_path' "$result")"
-  jq -e --arg run "$run" --arg phase "$sentinel_phase" '.run_id==$run and .handoff_phase==$phase' "$sentinel" >/dev/null &&
-    jq -e --arg run "$run" --arg phase "$owner_phase" '.run_id==$run and .handoff_phase==$phase' "$owner" >/dev/null &&
-    jq -e --argjson attempts "$attempts" '.attempts==$attempts' "$worker" >/dev/null || return 1
+  decision_file="$out/$label-launcher-decision.txt"; report="$(json_file "$result" -r 'd?.report_path')"; heartbeat="$(json_file "$result" -r 'd?.heartbeat_path')"
+  json_file "$sentinel" -e --arg run "$run" --arg phase "$sentinel_phase" 'eq(d?.run_id, $.run) && eq(d?.handoff_phase, $.phase)' >/dev/null &&
+    json_file "$owner" -e --arg run "$run" --arg phase "$owner_phase" 'eq(d?.run_id, $.run) && eq(d?.handoff_phase, $.phase)' >/dev/null &&
+    json_file "$worker" -e --argjson attempts "$attempts" 'eq(d?.attempts, $.attempts)' >/dev/null || return 1
   [ "$(cat "$publisher_file")" = "$publisher" ] && [ "$(cat "$decision_file")" = "$decision" ] || return 1
-  jq -e --arg run "$run" --arg status "$status" '.meta.run_id==$run and .status==$status' "$report" >/dev/null || return 1
+  json_file "$report" -e --arg run "$run" --arg status "$status" 'eq(d?.meta?.run_id, $.run) && eq(d?.status, $.status)' >/dev/null || return 1
   if [ "$attempts" -eq 0 ]; then [ ! -f "$heartbeat" ] || return 1
-  else jq -e --arg run "$run" --arg state "$status" '.run_id==$run and .state==$state' "$heartbeat" >/dev/null || return 1
+  else json_file "$heartbeat" -e --arg run "$run" --arg state "$status" 'eq(d?.run_id, $.run) && eq(d?.state, $.state)' >/dev/null || return 1
   fi
 }
 
@@ -2272,7 +2349,7 @@ check_rollback_branch() {
   printf 'old-owner\n' > "$dir/$label-owner.json"; printf 'old-report\n' > "$dir/$label-report.json"; printf 'old-heartbeat\n' > "$dir/$label-heartbeat.json"
   if [ "$with_old_pid" = yes ]; then
     printf 'pid: 999999\nrun_id: old-run\n' > "$dir/$label.pid"
-    pid_hash="$(sha256_file "$dir/$label.pid")"; pid_ino="$(stat -f %i "$dir/$label.pid" 2>/dev/null || stat -c %i "$dir/$label.pid")"
+    pid_hash="$(sha256_file "$dir/$label.pid")"; pid_ino="$(stat -c %i "$dir/$label.pid" 2>/dev/null || stat -f %i "$dir/$label.pid")"
   fi
   owner_hash="$(sha256_file "$dir/$label-owner.json")"; report_hash="$(sha256_file "$dir/$label-report.json")"; heartbeat_hash="$(sha256_file "$dir/$label-heartbeat.json")"
   set +e
@@ -2285,7 +2362,7 @@ check_rollback_branch() {
   [ "$owner_after" = "$owner_hash" ] && [ "$report_after" = "$report_hash" ] && [ "$heartbeat_after" = "$heartbeat_hash" ] || return 1
   if [ "$with_old_pid" = yes ]; then
     pid_after="$(sha256_file "$dir/$label.pid")"
-    [ "$pid_after" = "$pid_hash" ] && [ "$(stat -f %i "$dir/$label.pid" 2>/dev/null || stat -c %i "$dir/$label.pid")" = "$pid_ino" ] || return 1
+    [ "$pid_after" = "$pid_hash" ] && [ "$(stat -c %i "$dir/$label.pid" 2>/dev/null || stat -f %i "$dir/$label.pid")" = "$pid_ino" ] || return 1
   else [ ! -e "$dir/$label.pid" ] || return 1
   fi
   ! find "$dir" -maxdepth 1 \( -name '*.tmp.*' -o -name '*.backup.*' -o -name '*report.candidate*' -o -name '*owner.lock*' \) -print -quit | grep -q . || return 1
@@ -2334,6 +2411,197 @@ case_pid_handoff_barrier() {
   done < "$FIXTURE_DIR/phase-cases.tsv"
 }
 
+json_tool_expect() {
+  local id="$1" want_rc="$2" want_out="$3" input="$4" rc out
+  shift 4
+  set +e
+  out="$(printf '%s' "$input" | json_tool "$@" 2>/dev/null)"; rc=$?
+  set -e
+  [ "$rc" -eq "$want_rc" ] || die "json-tool $id: exit $rc, expected $want_rc"
+  [ "$out" = "$want_out" ] || die "json-tool $id: unexpected output: $out"
+}
+
+# Runs the stale reaper against a handoff directory left at mode 755.
+# expected: retain or remove. path_prefix: fake commands placed ahead of PATH.
+check_stale_handoff_mode() (
+  local expected="$1" path_prefix="$2" root dir label handoff probe monitor rc
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"; monitor="$(absent_test_pid)"
+  dir="$(new_work_dir)"; label="windows-mode"; printf 'prompt\n' > "$dir/prompt.md"
+  handoff="$(mktemp -d "$root/agent-delegate-handoff.101.XXXXXX")"; chmod 755 "$handoff"
+  probe="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 700 "$probe"
+  trap 'rm -rf "$dir" "$handoff" "$probe"' EXIT TERM INT HUP
+  mkfifo "$handoff/launcher-to-monitor.fifo"
+  write_stale_sentinel "$handoff/handoff-sentinel.json" run-mode 101 "$monitor" "$handoff"
+  write_stale_detach_records "$dir" "$label" "$handoff" run-mode 101 "$monitor"
+  set +e
+  PATH="$path_prefix$PATH" AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$probe" AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid \
+    bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label "$label" \
+      --target claude --detach > "$dir/launch.out" 2> "$dir/launch.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || return 1
+  if [ "$expected" = remove ]; then
+    [ ! -e "$handoff" ] && [ ! -e "$dir/$label-owner.json" ]
+  else
+    [ -p "$handoff/launcher-to-monitor.fifo" ] && [ -f "$dir/$label-owner.json" ]
+  fi
+)
+
+# Launches with a test handoff directory left at mode 755 and reports whether
+# the launcher refused it for its mode.
+handoff_mode_gate_refuses() (
+  local path_prefix="$1" root dir probe
+  root="$(cd "${TMPDIR:-/tmp}" && pwd)"
+  dir="$(new_work_dir)"; printf 'prompt\n' > "$dir/prompt.md"
+  probe="$(mktemp -d "$root/agent-delegate-heartbeat-handoff.XXXXXX")"; chmod 755 "$probe"
+  trap 'rm -rf "$dir" "$probe"' EXIT TERM INT HUP
+  set +e
+  PATH="$path_prefix$PATH" AGENT_DELEGATE_TEST_MODE=heartbeat AGENT_DELEGATE_TEST_HANDOFF_DIR="$probe" AGENT_DELEGATE_TEST_FAIL_STAGE=new_pid \
+    bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir" --label windows-gate \
+      --target claude --detach > "$dir/launch.out" 2> "$dir/launch.err"
+  set -e
+  grep -q 'must be an empty mode 0700 directory' "$dir/launch.err"
+)
+
+case_windows_mode_check() (
+  local fakes uname_only chmod_only both chmod_fails rmdir_fails real_chmod real_rmdir
+  fakes="$(new_work_dir)"; uname_only="$fakes/uname-only"; chmod_only="$fakes/chmod-only"; both="$fakes/both"
+  chmod_fails="$fakes/chmod-fails"; rmdir_fails="$fakes/rmdir-fails"
+  real_chmod="$(command -v chmod)"; real_rmdir="$(command -v rmdir)"
+  trap 'rm -rf "$fakes"' EXIT TERM INT HUP
+  mkdir "$uname_only" "$chmod_only" "$both" "$chmod_fails" "$rmdir_fails"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$uname_only/uname"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$both/uname"
+  printf '#!/bin/sh\necho Linux\n' > "$chmod_only/uname"
+  printf '#!/bin/sh\nexit 0\n' > "$chmod_only/chmod"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$chmod_fails/uname"
+  printf '#!/bin/sh\ncase "$2" in *agent-delegate-chmod-probe*) exit 9 ;; esac\nexec "%s" "$@"\n' "$real_chmod" > "$chmod_fails/chmod"
+  printf '#!/bin/sh\necho MINGW64_NT-10.0\n' > "$rmdir_fails/uname"
+  printf '#!/bin/sh\nexit 0\n' > "$rmdir_fails/chmod"
+  printf '#!/bin/sh\n"%s" "$@"\ncase "$1" in *agent-delegate-chmod-probe*) exit 1 ;; esac\n' "$real_rmdir" > "$rmdir_fails/rmdir"
+  printf '#!/bin/sh\nexit 0\n' > "$both/chmod"
+  chmod +x "$uname_only/uname" "$chmod_only/uname" "$chmod_only/chmod" "$both/uname" "$both/chmod" \
+    "$chmod_fails/uname" "$chmod_fails/chmod" "$rmdir_fails/uname" "$rmdir_fails/chmod" "$rmdir_fails/rmdir"
+
+  if host_ignores_chmod; then
+    # The real noacl mount: the probe finds chmod ineffective and skips the check.
+    check_stale_handoff_mode remove "" || return 1
+    if handoff_mode_gate_refuses ""; then return 1; fi
+    return 0
+  fi
+  # macOS and Linux keep the check.
+  check_stale_handoff_mode retain "" || return 1
+  handoff_mode_gate_refuses "" || return 1
+  # The Windows name alone is not enough while chmod still works.
+  check_stale_handoff_mode retain "$uname_only:" || return 1
+  handoff_mode_gate_refuses "$uname_only:" || return 1
+  # An ineffective chmod alone is not enough outside Windows.
+  check_stale_handoff_mode retain "$chmod_only:" || return 1
+  handoff_mode_gate_refuses "$chmod_only:" || return 1
+  # A probe that could not finish proves nothing, so the check stays.
+  check_stale_handoff_mode retain "$chmod_fails:" || return 1
+  handoff_mode_gate_refuses "$chmod_fails:" || return 1
+  check_stale_handoff_mode retain "$rmdir_fails:" || return 1
+  handoff_mode_gate_refuses "$rmdir_fails:" || return 1
+  # Windows with chmod ineffective is the only way to skip it.
+  check_stale_handoff_mode remove "$both:" || return 1
+  if handoff_mode_gate_refuses "$both:"; then return 1; fi
+)
+
+case_json_tool_semantics() {
+  local dir id checked="" out rc repo home report i
+  json_tool_expect missing-field-null 0 null '{}' -r 'd.x'
+  json_tool_expect missing-field-null 0 '' '{}' -r 'alt(d.x, EMPTY)'
+  checked="$checked missing-field-null"
+
+  json_tool_expect exit-codes 1 false '{"a":1}' -e 'd.a === 2'
+  json_tool_expect exit-codes 1 null '{"a":null}' -e 'd.a'
+  json_tool_expect exit-codes 4 '' '{}' -e 'EMPTY'
+  json_tool_expect exit-codes 0 'true' '{"a":1}' -e 'd.a === 1'
+  json_tool_expect exit-codes 2 '' 'nope' -e 'd'
+  json_tool_expect exit-codes 5 '' '{}' -e 'each(null)'
+  checked="$checked exit-codes"
+
+  json_tool_expect null-equality 0 'true' '{}' -e 'eq(d.monitor_pid, null)'
+  json_tool_expect null-equality 0 'true' '{"monitor_pid":null}' -e 'eq(d.monitor_pid, null)'
+  json_tool_expect null-equality 1 'false' '{"monitor_pid":0}' -e 'eq(d.monitor_pid, null)'
+  checked="$checked null-equality"
+
+  json_tool_expect jsonl-stream 0 'T' $'{"type":"x"}\n{"type":"thread.started","thread_id":"T"}\n' -r 'eq(d.type, "thread.started") ? d.thread_id : EMPTY'
+  json_tool_expect jsonl-stream 2 'a' $'{"v":"a"}\n{\n{"v":"b"}\n' -r 'd.v'
+  checked="$checked jsonl-stream"
+
+  dir="$(new_work_dir)"
+  node -e 'process.stdout.write(JSON.stringify("x".repeat(1000000)) + "\n{\n")' > "$dir/large.jsonl"
+  set +e
+  json_file "$dir/large.jsonl" -c 'd' 2>/dev/null | cat > "$dir/large.out"; rc="${PIPESTATUS[0]}"
+  set -e
+  [ "$rc" -eq 2 ] && [ "$(wc -c < "$dir/large.out" | tr -d ' ')" -eq 1000003 ] || die "json-tool large-output-then-error: exit $rc, $(wc -c < "$dir/large.out") bytes"
+  node -e 'process.stdout.write(JSON.stringify("x".repeat(1000000)) + "\n" + JSON.stringify(null) + "\n")' > "$dir/large-throw.jsonl"
+  set +e
+  json_file "$dir/large-throw.jsonl" -c 'd === null ? each(null) : d' 2>/dev/null | cat > "$dir/large.out"; rc="${PIPESTATUS[0]}"
+  set -e
+  [ "$rc" -eq 5 ] && [ "$(wc -c < "$dir/large.out" | tr -d ' ')" -eq 1000003 ] || die "json-tool large-output-then-error: throw exit $rc"
+  checked="$checked large-output-then-error"
+
+  json_tool_expect argument-unconverted 0 '/tmp/x' '' -n -r --arg h /tmp/x '$.h'
+  checked="$checked argument-unconverted"
+
+  json_tool_expect codepoint-length 0 '3' '' -n --arg s 'aあ😀' 'len($.s)'
+  checked="$checked codepoint-length"
+
+  json_tool_expect num-conversion 0 '12' '' -n --arg v 12 'num($.v)'
+  json_tool_expect num-conversion 5 '' '' -n --arg v 12x 'num($.v)'
+  json_tool_expect num-conversion 5 '' '' -n --arg v 0x10 'num($.v)'
+  json_tool_expect num-conversion 0 '-1.5' '' -n --arg v -1.5 'num($.v)'
+  checked="$checked num-conversion"
+
+  json_tool_expect multiple-values 0 $'"c"\n{"r":"h"}' '{"commit":"c","hashes":{"r":"h"}}' -c 'each([d.commit, d.hashes])'
+  checked="$checked multiple-values"
+
+  json_tool_expect raw-slurp 0 '[]' '' -R -s -c 'd.split("\n").filter((x) => len(x) > 0)'
+  json_tool_expect raw-slurp 0 '["a","b c"]' $'a\nb c\n' -R -s -c 'd.split("\n").filter((x) => len(x) > 0)'
+  json_tool_expect raw-slurp 0 '"a\nb"' $'a\nb' -R -s 'd'
+  checked="$checked raw-slurp"
+
+  json_tool_expect undefined-argument 5 '' '' -n '$.missing'
+  json_tool_expect undefined-argument 0 'x' '' -n -r --arg __proto__ x '$.__proto__'
+  json_tool_expect undefined-argument 0 '1' '' -n --argjson __proto__ 1 '$.__proto__'
+  checked="$checked undefined-argument"
+
+  json_tool_expect pretty-format 0 $'{\n  "a": [\n    1,\n    {\n      "b": null\n    }\n  ],\n  "c": {}\n}' '{"a":[1,{"b":null}],"c":{}}' 'd'
+  json_tool_expect pretty-format 0 '{"a":[1,{"b":null}],"c":{}}' '{"a":[1,{"b":null}],"c":{}}' -c 'd'
+  checked="$checked pretty-format"
+
+  repo="$dir/repo"; home="$dir/home"; mkdir -p "$repo" "$home/.codex" "$dir/out"
+  git -C "$repo" init -q
+  repo="$(cd "$repo" && pwd)"
+  printf '[projects."%s"]\ntrust_level = "trusted"\n' "$repo" > "$home/.codex/config.toml"
+  printf 'stub prompt\n' > "$dir/prompt.md"
+  set +e
+  (cd "$repo" && HOME="$home" PATH="$STUB_DIR:$PATH" AGENT_DELEGATE_STUB_MODE=blocked \
+    AGENT_DELEGATE_STUB_TOUCH=3000 AGENT_DELEGATE_STUB_STDERR_CHARS=40000 \
+    bash "$SCRIPT" --mode delegate --prompt-file "$dir/prompt.md" --out-dir "$dir/out" --label long \
+      --target codex --sandbox workspace-write > "$dir/long.out" 2> "$dir/long.err")
+  set -e
+  report="$dir/out/long-report.json"
+  [ -f "$report" ] || die "json-tool long-report-fields: no report"
+  json_file "$report" -e '
+    eq(d.status, "blocked") && type(d.blocker)==="string" && d.blocker.length > 40000 &&
+    d.blocker.includes("e".repeat(40000)) && len(d.touchedFiles)===3000 &&
+    d.touchedFiles.every((f) => /^touched-[0-9]+\.txt$/.test(f))
+  ' >/dev/null || die "json-tool long-report-fields: report did not carry the long blocker and touched list"
+  i=1; while [ "$i" -le 3000 ]; do printf 'touched-%s.txt\n' "$i"; i=$((i + 1)); done | sort > "$dir/expected-touched"
+  json_file "$report" -r 'each(d.touchedFiles)' | sort | cmp -s - "$dir/expected-touched" || die "json-tool long-report-fields: touched list differs"
+  checked="$checked long-report-fields"
+  rm -rf "$dir"
+
+  while IFS=$'\t' read -r id _; do
+    [ "$id" = check_id ] && continue
+    case " $checked " in *" $id "*) : ;; *) die "json-tool check is listed but not run: $id" ;; esac
+  done < "$FIXTURE_DIR/json-tool-cases.tsv"
+}
+
 run_named_case() {
   local case_name="$1" fn
   dry_validate_case "$case_name" >/dev/null
@@ -2349,13 +2617,13 @@ write_repeat_manifest() {
   runner_hash="$(sha256_file "$TEST_DIR/run_tests.sh")"
   fixture_hash="$(sha256_file "$MANIFEST")"
   harness_hash="$(sha256_file "$HARNESS")"
-  jq -n --argjson iteration "$iteration" --arg commit "$commit" --arg runner "$runner_hash" \
+  json_tool -n --argjson iteration "$iteration" --arg commit "$commit" --arg runner "$runner_hash" \
     --arg fixture "$fixture_hash" --arg harness "$harness_hash" --argjson beats "$CURRENT_HEARTBEATS" \
     --argjson terminals "$CURRENT_TERMINALS" '
-    {iteration:$iteration,commit:$commit,hashes:{runner:$runner,fixture:$fixture,harness:$harness},
-     case_count:27,exit_code:0,heartbeat_updates:$beats,terminal_reports:$terminals,runtime_residue:false}
+    ({iteration:$.iteration,commit:$.commit,hashes:{runner:$.runner,fixture:$.fixture,harness:$.harness},
+     case_count:29,exit_code:0,heartbeat_updates:$.beats,terminal_reports:$.terminals,runtime_residue:false})
   ' > "$out"
-  jq -e '.case_count==27 and .exit_code==0 and .heartbeat_updates>=2 and .terminal_reports>=1 and .runtime_residue==false' "$out" >/dev/null
+  json_file "$out" -e 'eq(d?.case_count, 29) && eq(d?.exit_code, 0) && d?.heartbeat_updates >= 2 && d?.terminal_reports >= 1 && eq(d?.runtime_residue, false)' >/dev/null
 }
 
 if [ -n "$RUN_CASE" ]; then
@@ -2364,7 +2632,7 @@ if [ -n "$RUN_CASE" ]; then
   exit 0
 fi
 
-require_command jq; require_command git; require_command shasum
+require_command node; require_command git; require_command shasum
 repeat_root="$(new_work_dir)"
 trap 'rm -rf "$repeat_root"' EXIT TERM INT HUP
 baseline_hashes=""
@@ -2379,20 +2647,20 @@ while [ "$i" -le "$REPEAT" ]; do
   run_named_case readonly-gate-evidence
   manifest_out="$repeat_root/repeat-$i.json"
   write_repeat_manifest "$manifest_out" "$i"
-  hashes="$(jq -c '.commit,.hashes' "$manifest_out")"
+  hashes="$(json_file "$manifest_out" -c 'each([d?.commit, d?.hashes])')"
   if [ -z "$baseline_hashes" ]; then baseline_hashes="$hashes"; else [ "$hashes" = "$baseline_hashes" ] || die "repeat hashes changed"; fi
   printf 'REPEAT_PASS\t%s\t%s\n' "$i" "$manifest_out"
   i=$((i + 1))
 done
 if [ "$REPEAT" -eq 3 ]; then
   aggregate="$repeat_root/aggregate.json"
-  jq -n --argjson repeats "$REPEAT" --arg commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" \
-    '{commit:$commit,repeats:$repeats,registered_cases:27,passed_cases:27,failed_cases:0,
-      meta_cases:["readonly-gate-evidence","all-repeat-3"]}' > "$aggregate"
-  jq -e '.repeats==3 and .registered_cases==27 and .passed_cases==27 and .failed_cases==0' "$aggregate" >/dev/null
+  json_tool -n --argjson repeats "$REPEAT" --arg commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" \
+    '({commit:$.commit,repeats:$.repeats,registered_cases:29,passed_cases:29,failed_cases:0,
+      meta_cases:["readonly-gate-evidence","all-repeat-3"]})' > "$aggregate"
+  json_file "$aggregate" -e 'eq(d?.repeats, 3) && eq(d?.registered_cases, 29) && eq(d?.passed_cases, 29) && eq(d?.failed_cases, 0)' >/dev/null
   printf 'PASS\tall-repeat-3\n'
-  printf 'AGGREGATE\t%s\n' "$(jq -c . "$aggregate")"
-  printf 'ALL_PASS\trepeats=%s\tcases=27/27\n' "$REPEAT"
+  printf 'AGGREGATE\t%s\n' "$(json_file "$aggregate" -c 'd')"
+  printf 'ALL_PASS\trepeats=%s\tcases=29/29\n' "$REPEAT"
 else
-  printf 'ALL_PASS\trepeats=%s\tcases=26/27\tmeta=all-repeat-3-deferred\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=28/29\tmeta=all-repeat-3-deferred\n' "$REPEAT"
 fi

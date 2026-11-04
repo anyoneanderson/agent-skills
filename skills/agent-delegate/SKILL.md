@@ -39,6 +39,9 @@ script directly; this SKILL.md is the interactive entry point for humans.
   `claude` when running under Codex.
 - Codex direction only: the workspace must be **trusted** in `~/.codex/config.toml`.
   The script stops with exit 2 and instructions if it is not.
+- **node** (18 or later) must be on `PATH`. The script reads and writes its JSON
+  records through `references/scripts/json-tool.mjs`; no other JSON tool is needed,
+  so it also runs in Git Bash on Windows.
 
 The script self-detects the host agent. If it cannot (neither `CLAUDECODE` nor a
 Codex runtime marker is set), pass `--target <codex|claude>` explicitly.
