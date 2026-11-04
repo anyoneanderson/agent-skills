@@ -2226,17 +2226,20 @@ case_spec_id_semantic_coverage() {
   local bad_dir spec_dir file label="${1:-spec-id-semantic-coverage}"
   spec_dir="$REPO_ROOT/.specs/agent-delegate-heartbeat"
   # The four spec files are not kept in this repository, so a clone holds them
-  # only where someone put them by hand. Without them there is nothing here to
-  # check, and failing ended --all at this case and left every later one unrun.
-  # Skip the way the cases that need a real symlink do: the reason goes to
-  # standard error and the case itself counts as passed, which keeps the
+  # only where someone put them by hand. Without the directory there is nothing
+  # here to check, and failing ended --all at this case and left every later one
+  # unrun. Skip the way the cases that need a real symlink do: the reason goes
+  # to standard error and the case itself counts as passed, which keeps the
   # repeat manifest's case count as it is.
+  if [ ! -d "$spec_dir" ]; then
+    printf 'TEST_SKIP\t%s: .specs/agent-delegate-heartbeat is not in this clone\n' "$label" >&2
+    return 0
+  fi
+  # A directory that is there but short of a file is a different matter: the
+  # specs were copied in and one was missed. Name the file and fail, so the copy
+  # gets finished instead of the coverage being checked against part of it.
   for file in requirement.md design.md tasks.md test.md; do
-    if [ ! -f "$spec_dir/$file" ]; then
-      printf 'TEST_SKIP\t%s: .specs/agent-delegate-heartbeat is not in this clone (%s is missing)\n' \
-        "$label" "$file" >&2
-      return 0
-    fi
+    [ -f "$spec_dir/$file" ] || die "missing spec: $file"
   done
   check_spec_ids "$FIXTURE_DIR/spec-ids.tsv" "$spec_dir" || die "spec ID coverage rejected"
   bad_dir="$(new_work_dir)"
