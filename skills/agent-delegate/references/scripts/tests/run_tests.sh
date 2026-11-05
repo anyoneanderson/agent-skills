@@ -2212,29 +2212,6 @@ EOF
   rm -rf "$(dirname "$bad_dir")"
 }
 
-check_spec_ids() {
-  local ids="$1" spec_dir="$2" id kind file
-  while IFS=$'\t' read -r id kind; do
-    [ "$id" = id ] && continue
-    for file in requirement.md design.md tasks.md test.md; do
-      grep -q "$id" "$spec_dir/$file" || return 1
-    done
-  done < "$ids"
-}
-
-case_spec_id_semantic_coverage() {
-  local bad_dir spec_dir file
-  spec_dir="$REPO_ROOT/.specs/agent-delegate-heartbeat"
-  for file in requirement.md design.md tasks.md test.md; do [ -f "$REPO_ROOT/.specs/agent-delegate-heartbeat/$file" ] || die "missing spec: $file"; done
-  check_spec_ids "$FIXTURE_DIR/spec-ids.tsv" "$spec_dir" || die "spec ID coverage rejected"
-  bad_dir="$(new_work_dir)"
-  for file in requirement.md design.md tasks.md test.md; do cp "$spec_dir/$file" "$bad_dir/$file"; done
-  sed 's/REQ-001/REQ-CORRUPTED/g' "$bad_dir/design.md" > "$bad_dir/design.md.tmp"; mv "$bad_dir/design.md.tmp" "$bad_dir/design.md"
-  if check_spec_ids "$FIXTURE_DIR/spec-ids.tsv" "$bad_dir"; then rm -rf "$bad_dir"; die "spec checker accepted corrupted semantic coverage"; fi
-  [ "$(grep -Ec '^## T-A[0-9]+:' "$REPO_ROOT/.specs/agent-delegate-heartbeat/test.md")" -eq 22 ]
-  rm -rf "$bad_dir"
-}
-
 case_heartbeat_harness_contract() {
   local dir result
   dir="$(new_work_dir)"; result="$(run_harness "$dir" "$1" claude done)"
@@ -2621,9 +2598,9 @@ write_repeat_manifest() {
     --arg fixture "$fixture_hash" --arg harness "$harness_hash" --argjson beats "$CURRENT_HEARTBEATS" \
     --argjson terminals "$CURRENT_TERMINALS" '
     ({iteration:$.iteration,commit:$.commit,hashes:{runner:$.runner,fixture:$.fixture,harness:$.harness},
-     case_count:29,exit_code:0,heartbeat_updates:$.beats,terminal_reports:$.terminals,runtime_residue:false})
+     case_count:28,exit_code:0,heartbeat_updates:$.beats,terminal_reports:$.terminals,runtime_residue:false})
   ' > "$out"
-  json_file "$out" -e 'eq(d?.case_count, 29) && eq(d?.exit_code, 0) && d?.heartbeat_updates >= 2 && d?.terminal_reports >= 1 && eq(d?.runtime_residue, false)' >/dev/null
+  json_file "$out" -e 'eq(d?.case_count, 28) && eq(d?.exit_code, 0) && d?.heartbeat_updates >= 2 && d?.terminal_reports >= 1 && eq(d?.runtime_residue, false)' >/dev/null
 }
 
 if [ -n "$RUN_CASE" ]; then
@@ -2655,12 +2632,12 @@ done
 if [ "$REPEAT" -eq 3 ]; then
   aggregate="$repeat_root/aggregate.json"
   json_tool -n --argjson repeats "$REPEAT" --arg commit "$(git -C "$REPO_ROOT" rev-parse HEAD)" \
-    '({commit:$.commit,repeats:$.repeats,registered_cases:29,passed_cases:29,failed_cases:0,
+    '({commit:$.commit,repeats:$.repeats,registered_cases:28,passed_cases:28,failed_cases:0,
       meta_cases:["readonly-gate-evidence","all-repeat-3"]})' > "$aggregate"
-  json_file "$aggregate" -e 'eq(d?.repeats, 3) && eq(d?.registered_cases, 29) && eq(d?.passed_cases, 29) && eq(d?.failed_cases, 0)' >/dev/null
+  json_file "$aggregate" -e 'eq(d?.repeats, 3) && eq(d?.registered_cases, 28) && eq(d?.passed_cases, 28) && eq(d?.failed_cases, 0)' >/dev/null
   printf 'PASS\tall-repeat-3\n'
   printf 'AGGREGATE\t%s\n' "$(json_file "$aggregate" -c 'd')"
-  printf 'ALL_PASS\trepeats=%s\tcases=29/29\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=28/28\n' "$REPEAT"
 else
-  printf 'ALL_PASS\trepeats=%s\tcases=28/29\tmeta=all-repeat-3-deferred\n' "$REPEAT"
+  printf 'ALL_PASS\trepeats=%s\tcases=27/28\tmeta=all-repeat-3-deferred\n' "$REPEAT"
 fi

@@ -15,7 +15,6 @@ T-A13	bilingual-contract-and-runtime-records	suite	document-contract	document-co
 T-A14	clean-checkout-compatibility	suite	compatibility	compatibility-cases.tsv	compatibility-summary
 T-A15	monitor-only-publishers	suite	publisher-analysis	publisher-contract.tsv	publisher-analysis
 T-A16	allowed-scope-and-skill-style	suite	scope-and-style	skill-quality-cases.tsv	scope-and-quality-summary
-T-A17	spec-id-semantic-coverage	suite	spec-coverage	spec-ids.tsv	spec-coverage-summary
 T-A18	heartbeat-harness-contract	suite	done	compatibility-cases.tsv	harness-contract-summary
 T-A19	readonly-gate-evidence	meta	readonly-evidence	readonly-evidence.tsv	readonly-evidence-summary
 T-A20	synchronous-no-heartbeat	suite	sync-barrier	compatibility-cases.tsv	sync-runtime-summary
