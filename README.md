@@ -326,6 +326,12 @@ A separate, more autonomous lane than the `/spec-*` flow above. **Prerequisite:*
 Works with any agent that supports the [SKILL.md](https://skills.sh) format:
 Claude Code, Cursor, Codex, Gemini CLI, OpenCode, and more.
 
+## Repository Instructions
+
+`AGENTS.md` holds the instructions for working in this repository. `CLAUDE.md` is a one-line
+import of it, so editing `CLAUDE.md` through an editor or `/memory` leaves `AGENTS.md`
+unchanged. Edit `AGENTS.md` instead.
+
 ## License
 
 [MIT](LICENSE)

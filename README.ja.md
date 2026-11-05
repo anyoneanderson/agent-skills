@@ -328,6 +328,11 @@ npx skills add anyoneanderson/agent-skills --skill harness-loop -g -y
 [SKILL.md](https://skills.sh) フォーマット対応の全エージェントで動作:
 Claude Code, Cursor, Codex, Gemini CLI, OpenCode など。
 
+## リポジトリの指示
+
+このリポジトリで作業するときの指示は `AGENTS.md` にある。`CLAUDE.md` はその import 1 行なので、
+エディタや `/memory` から `CLAUDE.md` を直しても `AGENTS.md` は変わらない。直すのは `AGENTS.md` の側である。
+
 ## ライセンス
 
 [MIT](LICENSE)
