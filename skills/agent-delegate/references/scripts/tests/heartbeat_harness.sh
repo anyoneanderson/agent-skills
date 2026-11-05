@@ -15,6 +15,13 @@ PROMPT_FILE=""
 KEEP=0
 FAIL_STAGE=""
 
+# Seconds allowed for each step of the handoff. One budget used to cover the
+# whole handoff, so a slow early step ate the later ones and the last wait, the
+# launcher's exit, timed out with nothing wrong. Each wait now starts its own
+# budget. The waits still poll rather than block, because this harness must stay
+# free of timed delays: run_tests.sh rejects it outright if it carries one.
+HANDOFF_WAIT=10
+
 usage() {
   printf '%s\n' \
     'Usage: heartbeat_harness.sh [--target codex|claude] [--scenario name]' \
@@ -139,7 +146,7 @@ AGENT_DELEGATE_TEST_FAIL_STAGE="$FAIL_STAGE" \
     > "$LAUNCHER_OUT" 2> "$LAUNCHER_ERR" &
 LAUNCHER_PID=$!
 printf '1\tlauncher-start\t%s\n' "$LAUNCHER_PID" > "$EVENTS_FILE"
-deadline=$(( $(now_epoch) + 10 ))
+deadline=$(( $(now_epoch) + HANDOFF_WAIT ))
 
 while :; do
   [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: owner readiness timeout\n' >&2; exit 1; }
@@ -161,6 +168,7 @@ while :; do
 done
 
 sentinel="$HANDOFF_DIR/handoff-sentinel.json"
+deadline=$(( $(now_epoch) + HANDOFF_WAIT ))
 while :; do
   [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: FIFO readiness timeout\n' >&2; exit 1; }
   if [ -f "$sentinel" ] && json_file "$sentinel" -e --arg run "$expected_run" --argjson launcher "$LAUNCHER_PID" \
@@ -186,13 +194,13 @@ exec 7>"$HANDOFF_DIR/harness-to-monitor.fifo"
 exec 8<"$HANDOFF_DIR/monitor-to-harness.fifo"
 CONTROL_OPEN=1
 printf 'harness-ready %s\n' "$expected_run" >&7
-remaining=$((deadline - $(now_epoch))); [ "$remaining" -gt 0 ] || remaining=1
-IFS= read -r -t "$remaining" ready_ack <&8
+IFS= read -r -t "$HANDOFF_WAIT" ready_ack <&8
 [ "$ready_ack" = "harness-observed ready $expected_run $MONITOR_PID" ] || {
   printf 'heartbeat-harness: invalid ready acknowledgement: %s\n' "$ready_ack" >&2; exit 1;
 }
 printf '4\tharness-ready\t%s\n' "$expected_run" >> "$EVENTS_FILE"
 
+deadline=$(( $(now_epoch) + HANDOFF_WAIT ))
 while process_alive "$LAUNCHER_PID"; do
   [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: launcher handoff timeout\n' >&2; exit 1; }
 done
@@ -204,6 +212,7 @@ printf '5\tlauncher-exit\t%s\n' "$launcher_exit" >> "$EVENTS_FILE"
 
 if [ "$SCENARIO" = monitor-kill-before-heartbeat ]; then
   owner_after_worker="$OUT_DIR/$LABEL-owner-before-first-heartbeat.json"
+  deadline=$(( $(now_epoch) + HANDOFF_WAIT ))
   while :; do
     [ "$(now_epoch)" -lt "$deadline" ] || { printf 'heartbeat-harness: worker owner publication timeout\n' >&2; exit 1; }
     if [ ! -e "$HEARTBEAT_FILE" ] && json_file "$OWNER_FILE" -e --arg run "$expected_run" '
@@ -257,7 +266,7 @@ case "$SCENARIO" in
       beat_two="$(epoch_rfc3339 "$((base_epoch + 60))")"
       for beat in "$beat_one" "$beat_two"; do
         printf 'beat %s\n' "$beat" >&7
-        IFS= read -r -t 10 observed <&8
+        IFS= read -r -t "$HANDOFF_WAIT" observed <&8
         observed_sequence="$(printf '%s\n' "$observed" | awk '{print $2}')"
         [ "$observed" = "observed $observed_sequence running $beat" ] || {
           printf 'heartbeat-harness: invalid beat acknowledgement: %s\n' "$observed" >&2; exit 1;
@@ -280,7 +289,7 @@ case "$SCENARIO" in
       esac
       printf '%s\n' "$terminal_input" >&7
     fi
-    IFS= read -r -t 10 terminal_ack <&8
+    IFS= read -r -t "$HANDOFF_WAIT" terminal_ack <&8
     terminal_status="$(printf '%s\n' "$terminal_ack" | awk '{print $2}')"
     [ "$(printf '%s\n' "$terminal_ack" | awk '{print $3}')" = "$expected_run" ] || {
       printf 'heartbeat-harness: invalid terminal acknowledgement: %s\n' "$terminal_ack" >&2; exit 1;
