@@ -25,6 +25,7 @@ Reusable AI agent skills for specification-driven and autonomous (harness) devel
 | [cmux-fork](skills/cmux-fork/) | Fork Claude Code conversation into a new cmux pane or workspace |
 | [cmux-delegate](skills/cmux-delegate/) | Delegate a task to another AI agent in a separate cmux pane or workspace |
 | [cmux-second-opinion](skills/cmux-second-opinion/) | Get an independent code or spec review from a different AI agent via cmux |
+| [session-coordination](skills/session-coordination/) | Coordinate named Claude Code and Codex sessions across repositories with explicit assignments and approval boundaries |
 | [agent-delegate](skills/agent-delegate/) | Delegate a task to, or get an adversarial review from, the other AI agent headlessly (no cmux); returns a parseable report.json |
 | [magi](skills/magi/) | Put a question to three independent LLM CLIs from different vendors and return a tallied verdict or a cross-checked research report, with a matrix of who said what |
 | [skill-suggest](skills/skill-suggest/) | Auto-detect project tech stack and suggest optimal skills from skills.sh registry |
