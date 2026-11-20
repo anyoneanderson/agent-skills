@@ -66,6 +66,23 @@ Join sentences that are related, and write the relation into the sentence.
 - Take the target for sentence length from the sample. Write down the sample's mean sentence length, its share of sentences of 80 characters or more, and its share of sentences that join clauses with a conjunctive particle, then write toward those figures. With no sample, set no target and apply only the two rules above.
 - This is a different operation from the compression under Removing Redundancy. Compression removes information; joining keeps it and adds the relation.
 
+## Explainers for Readers New to the Field (when the caller says so)
+
+Apply this section only when the calling skill or the request says the text is an explainer for readers new to the field: a company media article, for example, that readers reach from a search without knowing the terms or the background. Without that instruction, do not apply it.
+
+These readers cannot hold a condition and its conclusion in one sentence at the same time. Parts of "Joining Sentences" and "Removing Redundancy" make the relation clear between experts, but leave this reader to unpack conditions packed into one sentence. Replace them as follows.
+
+- Do not apply "join a reason, condition, contrast or consequence into one sentence" or "rebuild three sentences as a main clause with subordinate clauses" from "Joining Sentences", nor "put parallel facts in one sentence" or "compress several sentences into one" from "Removing Redundancy".
+- Take no sentence-length target from the voice sample. Use the sample for vocabulary and attitude toward the reader only.
+- Put one fact in each sentence. When two or more conditions such as 「〜なら」「〜場合は」「〜ときは」 fall in one sentence, split it into the situation, the condition and the conclusion.
+- Define a technical term in one sentence where it first appears (「〜とは、〜のことだ（です）」), then use it.
+- State the point of a paragraph in its first sentence. Do not open a paragraph with a scene or a question.
+- Carry an example through to what the reader sees, does and ends up with. Do not leave the result for the reader to supply.
+- After comparing two or more things, do not refer back with 「前者」「後者」「これ」; repeat the noun. Each paragraph should read on its own when quoted alone.
+- When the calling skill sets paragraph length or how to split sentences, follow it.
+
+Do not drop information. Splitting means more sentences for the same ground.
+
 ## Section Endings and Comparisons
 
 - Do not end every section on a caution (「〜する必要がある」) or a plan (「〜したい」). When a section ends on a sentence, make it the verdict the writer reached from that section's material (「要するに〜が現状である」). When the material holds no verdict, do not make one up; ask the writer "What is the conclusion you want the reader to take from this section?" A section that needs no closing sentence ends on its last fact.
