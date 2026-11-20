@@ -335,6 +335,35 @@ API基盤であれば、業務システムからHTTPなどでAPIを呼び出し�
 
 Expected detection: `comparison-without-consequence` on the before with its heading (`scripts/tests/fixtures/compare-before.md`), plus `rhythm-mismatch` when the after is passed as `--voice`. This section alone has one denial closer and one section, so `negation-closer` and `section-closer-repeat` are not reported. The after (`article-confirmed.md`) reports none of the four.
 
+## An Explainer for Readers New to the Field (splitting a paragraph of stacked conditions)
+
+From the ZenchainWeb article 「古いシステムを使い続ける条件」, the paragraph on what to check on the day a vulnerability alert arrives. The before is the version an AI wrote and ja-humanizer processed; the after was rewritten after comparing the article with media articles written by a professional writer, with the caller naming the text an explainer for readers new to the field. It goes the opposite way from the same writer's argument sample (the after of "A Comparison Without Its Consequence" above), because the readers differ.
+
+### before
+
+```text
+まず、対象のソフトがどこで動き、誰が修正を適用できるかを確かめる。今回NGINXで公表された問題のうち、CVE-2026-123007とCVE-2026-123633はHTTP/2の処理に関係し、該当する版と構成では、外部から認証を経ずにサーバー上でコードを実行されるおそれがある。インターネットからの通信を最初に受けるのがクラウド事業者で、その先を自社のNGINXが受け持つなら、それぞれがどこでHTTP/2を処理するかによって確認先が決まる。
+```
+
+### after
+
+```text
+注意喚起が出たら、まず確かめるのは、対象のソフトがどこで動き、誰が修正を適用できるかである。
+
+今回のNGINXの問題のうち2件（CVE-2026-123007、CVE-2026-123633）は、HTTP/2の処理に関わるものだ。HTTP/2とは、ブラウザとWebサーバーがやり取りするときの通信方式の一つである。該当する版と設定では、外部の誰かがログインせずに、サーバー上で任意のプログラムを動かせるおそれがある。
+
+注意したいのは、HTTP/2を処理する場所が自社のサーバーとは限らない点だ。クラウド事業者が通信を最初に受け、その後ろで自社のNGINXが動く構成なら、両方がHTTP/2を扱っている可能性がある。この場合は、自社のNGINXに加えて、クラウド事業者の公表も確認する必要がある。
+```
+
+### Classification
+
+- Automatic (when the caller names an explainer): split a sentence of stacked conditions. The before's third sentence stacks two conditions (「〜で、〜なら、〜によって」) before its conclusion; the after splits it into the setup, the condition and where to check. One paragraph of three sentences becomes three paragraphs of two or three.
+- Automatic (when the caller names an explainer): define a term where it first appears. The before uses HTTP/2 without explaining it.
+- To 「要確認」: the definition of HTTP/2 in the after is not in the before, so a write job lists it under 「要確認」.
+- Unchanged: the CVE numbers, the limitation to affected versions and configurations, and the conclusion that the configuration decides where to check. No information was dropped.
+
+Expected detection: the checker reports no Tier 1 finding on either version. The difference is for contextual reading.
+
 ## Unverified Facts in a First Draft (from the A/B comparison)
 
 The same prompt was given twice: once with the old norm alone, once with ja-humanizer. The ja-humanizer version had no wording or structure problems (the checker reported zero at every tier) and stated, unprompted and with confidence, facts that were not in the request. The writer confirmed the following two sentences to be wrong or unverified.
