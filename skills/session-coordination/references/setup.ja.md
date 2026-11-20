@@ -10,7 +10,7 @@ Codex を使うプロジェクトでは `AGENTS.md`、Claude Code では `CLAUDE
 
 独立して起動した担当セッションも、どの親からどの範囲の割り当てを受けてよいかを特定できるようにする。ユーザーが担当側にも適用される指示で委任の範囲を決めておくか、参加時に一度伝える。
 
-> Issue 42 の API 実装担当として参加してください。私が指定した親から、この Issue の作業を受けてください。登録済みの参加者への連絡と、担当 worktree での実装から Draft PR 作成までを任せます。共有テスト環境の利用と PR の公開は親の合図を待ち、担当範囲の変更は親に戻してください。
+> Issue 42 の API 実装担当として参加してください。親は端末 `〈端末名〉` のセッション `〈照合済みの親ID〉` です。この親から Issue 42 の作業を受けてください。登録済みの参加者への連絡と、担当 worktree での実装から Draft PR 作成までを任せます。共有テスト環境の利用と PR の公開は親の合図を待ち、担当範囲の変更は親に戻してください。
 
 担当側で親の身元、対象作業、委任の範囲を確認できれば、親から割り当てが届いた時点で着手する。毎回ユーザーに同じ許可を求める必要はない。「今回はレビューのみ」など、個別の指示で範囲が狭ければそれに従う。
 
@@ -23,8 +23,19 @@ Codex を使うプロジェクトでは `AGENTS.md`、Claude Code では `CLAUDE
 | 経路 | 割り当て前に確認すること |
 | --- | --- |
 | Claude Code 同士 | 両セッションで同じ claude.ai アカウントにログインし、初回送信前に双方を Remote Control に接続する。これで相手に返信先が伝わる。一覧から登録済みの相手を照合し、受信側の `crossSessionInbound` と、`isolatePeerMachines` による承認の要否を確認する。[Claude Code のセッション間通信](https://code.claude.com/docs/en/cross-session-messaging#message-sessions-on-other-machines) |
-| Codex 同士 | 相手のスレッドを扱う app-server に接続できることと、そのサーバー上のスレッド UUID を確かめる。サーバーの認証設定に従い、`codex queue --remote <endpoint> --thread <uuid> --message <text>` で送る。返信する担当にも、親やもう一人の担当のスレッドを扱う接続先と UUID が必要。キューに入った後、相手の応答を確認する。[Codex CLI のコマンド](https://learn.chatgpt.com/docs/developer-commands?surface=cli#codex-queue) |
+| Codex 同士 | 相手のスレッドを扱う app-server に接続できることと、そのサーバー上のスレッド UUID を確かめる。サーバーの認証設定に従い、`codex queue --remote <endpoint> --thread <uuid> --message <text>` で送る。返信する担当にも、親やもう一人の担当のスレッドを扱う接続先と UUID が必要。送る前に下記の方法で送信元を照合できることを確かめ、送った後は相手の応答を確認する。[Codex CLI のコマンド](https://learn.chatgpt.com/docs/developer-commands?surface=cli#codex-queue) |
 | Telepathy（Claude Code・Codex 間も可） | 両方のPCで `telepathy bridge` が起動していることを確認する。同一 Tailscale ユーザーの端末同士は自動で信頼される。それ以外の到達可能な端末は、初回に両画面のコードを照合してペアリングする。`telepathy bridge status` で接続を確認し、`codex:api@laptop` のように端末名を含む登録済みの宛先を選ぶ。[Telepathy の端末間接続](https://github.com/Winterrks/telepathy/blob/main/docs/behaviour/devices.md) |
+
+同じPCでも別PCでも、Codex のキューを使うときは、受け手が依頼の発行元を本文とは別に確認できるようにする。たとえば開始時に、登録済みの親だけが更新でき、担当が読める割り当て表を指定する。親は依頼 42-A に今回の作業、宛先、依頼内容、着手状況を記録し、キューで 42-A を知らせる。担当は表を直接開き、記入者と委任範囲を照合し、表と自分の作業記録を見て 42-A が未着手なら、記載された操作を一度だけ実行する。他の担当からの依頼や返信も、その担当自身が記録した内容と照合する。メッセージだけに書かれた追加依頼は保留する。本文中の名前や UUID、返信先、受領の返信だけでは送信元を照合できない。照合手段がなければ、割り当てを送る前に送信元が分かる経路を選ぶ。
+
+依頼 42-A の返信がタイムアウトしたら、登録済みの相手に、直接または親を通じて「42-A を受け取りましたか。もう着手しましたか」と受信状況だけを尋ねる。その間は同じ依頼の再送と再割り当てを保留する。親から相手に確認できない場合や、担当から親に連絡できない場合は、どの依頼の配信が不明かをユーザーに伝える。着手済みなら結果を待つ。元の依頼が後から実行される余地がなくなってから再送・再割り当てする。たとえば、相手がキューに残った依頼の取り消しを確認できれば再送できる。
+
+## 承認待ちをどこで確認するか
+
+- **Claude Code** を端末で使う場合は、対応するターミナルの通知設定と、OS がそのアプリに通知を許可しているかを確認する。スマートフォンから確認する場合は、担当で `/remote-control` を実行し、Claude で同じセッションを開く。[ターミナルの通知設定](https://code.claude.com/docs/en/terminal-config)・[Remote Control](https://code.claude.com/docs/en/remote-control)
+- **Codex** の CLI では、Codex の設定で `tui.notifications` を確認し、OS でターミナルの通知を許可する。既定ではターミナルにフォーカスがあると通知されないので、別の画面に切り替えて試す。スマートフォンの場合は対応するホストを接続し、ChatGPT で担当のスレッドを開く。[Codex の通知設定](https://learn.chatgpt.com/docs/config-file/config-reference)・[遠隔接続の手順](https://learn.chatgpt.com/docs/remote-connections)
+
+承認が必要になり得る作業を初めて割り当てる前に、担当から無害な質問や承認要求を出す。ユーザーの使う端末に実際に通知が届くか、どの担当が待っているか分かるか、どの画面で回答できるかを確かめる。テスト用の要求は取り消してよい。ブラウザ拡張が本人承認を求めた場合は、拡張のダイアログでの回答が必要なこともある。担当の承認待ちの報告が親に届くかは別に試し、それぞれ結果を記録する。通知が届かない場合や、ダイアログで担当が止まって報告できない場合は、割り当ての前に、ユーザーが確認する担当画面を伝える。
 
 ## 実装担当に任せる範囲の決め方
 
