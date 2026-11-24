@@ -106,6 +106,7 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Pattern | Detect | Fix |
 |---|---|---|
 | Label-plus-colon bullets | Items open with a bold label and a colon, 「**速度:** 処理速度が向上」 | If the label carries no information, drop it and keep the body. If it does, turn the item into a sentence |
+| Repeated count announcements | 「三つの問いになる」「五つの項目」「四つに分ける」「次の四つから一つを選ぶ」: announcing a count and then sorting into it, three or more times in one text. Previewing the number of points once up front is normal, so two are not reported | Keep the one up front; elsewhere name the items without the count (「更新できない理由には、互換性、業務の依存、テスト不足、担当者不在がある」), and keep counts out of headings |
 | Forced triads | Three reasons, three points, three decisions, always three. The checker reports two or more uses in a text when that is also one or more per 1,000 characters | Use the number the content needs. One or four is fine |
 | することができます | 「変更することができます」 | 「変更できます」 |
 | Summary section and expectation closers | A 「まとめ」 or 「おわりに」 heading that restates the body; endings in 「〜が期待されます」「今後の展開が注目されます」「〜と言えるでしょう」 | Delete the summary section; end on the last concrete fact. Keep the heading when the publishing venue requires it |

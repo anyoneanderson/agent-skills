@@ -74,6 +74,8 @@ const BOLD_PER_1000 = 3;
 const BULLET_RATIO = 0.16;
 const BULLET_MIN_CHARS = 500;
 const TRIAD_PER_1000 = 1.0;
+// A count announced once up front is a normal way to preview points; three or more announcements re-sort the text again and again.
+const COUNT_REPEAT_MIN = 3;
 // The whole heading, once its number and decoration are removed. 「リクエストをまとめて送信する」 is not one.
 const SUMMARY_HEADING = /^(?:まとめ|おわりに)$/u;
 const HEADING_DECORATION = /[\p{Extended_Pictographic}\uFE0F\s0-9０-９.．、:：()（）【】[\]「」*_-]/gu;
@@ -136,6 +138,7 @@ const TEMPLATE_OPENER = /^(?:近年|昨今|現代では)[、,]?[^。]*(?:注目|
 const TEMPLATE_CLOSER = /(?:が期待されます|が期待されています|今後の展開が注目されます|と言えるでしょう|といえるでしょう|ではないでしょうか)。?$/u;
 const SURU_KOTO_GA_DEKIMASU = /することができ(?:ます|る|ません)/u;
 const EMPTY_ADVERB = /(?:確実に|本質的に|シンプルに|適切に|柔軟に|明確に|大きく)(?:進|変|向上|改善|対応|管理|把握|整理)/u;
+const COUNT_ANNOUNCE = /(?:次の)?[2-9２-９二三四五六七八九](?:つ|点|種類)(?:の|に|から|を|が|あります|です)/gu;
 const TRIAD = /(?:[3３三]つ|[3３三]点|[3３三]種類)(?:の|あります|です|に)/gu;
 const GENERIC_MEASURE = /徹底|こまめ|意識(?:する|して|を高め)|強化|注意(?:する|して)|共有を/u;
 const MEASURE_TRIGGER = /(?:場合|とき|際|時)(?:に|は|の)|に対する|に対して|発生した|変更(?:が|の)(?:あった|入った|生じ)|ごとに|前に|後に/u;
@@ -485,6 +488,9 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
   const wholeChars = prose.reduce((n, p) => n + countChars(p.text), 0);
   const triadRate = wholeChars === 0 ? 0 : (triads / wholeChars) * 1000;
   if (triads >= 2 && triadRate >= TRIAD_PER_1000) push(2, "triad", 1, `"three" used ${triads} times as a structuring device (${triadRate.toFixed(1)} per 1,000 characters)`);
+  const countLines = [];
+  for (const { line, text } of prose) for (const m of text.matchAll(COUNT_ANNOUNCE)) countLines.push(`${m[0]}@${line}`);
+  if (countLines.length >= COUNT_REPEAT_MIN) push(2, "count-repeat", Number(countLines[1].split("@")[1]), `counts announced ${countLines.length} times (${countLines.join(", ")}); keep one up front and name the items elsewhere`);
 
   // Vocabulary that spread by 2026: one word proves nothing, so report only when several distinct words appear.
   const incidentReport = sections.some((s) => INCIDENT_SECTION.test(s.heading));

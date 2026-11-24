@@ -279,7 +279,7 @@ The test: how an engineer on the job would actually say the word aloud.
 - Code, APIs, reserved words, type names, proper nouns, commands → keep the original (Latin letters). Do not katakana-ize (do not write `after_create` as 「アフタークリエイト」 or the `users` table as 「ユーザーズテーブル」).
 - Established loanwords → katakana is fine (テーブル / コミット / デプロイ / マージ / リンク / レビュー / リクエスト).
 - Ordinary words and English phrasings that translate → translate into Japanese. Do not paste the original (small/focused→小さく集中して, what not why→何をだけでなくなぜ, link to context→文脈へのリンク, humanize→人間らしく).
-- Do not replace an established loanword with a Sino-Japanese word. The test above applies in the other direction too: when people on the job say 「デフォルト」 and 「ポイント」, write those, not 「既定」 and 「要点」. Use the Sino-Japanese word where it is the formal name, as in a setting name or a term from a standard.
+- Do not replace an established loanword with a Sino-Japanese word. The test above applies in the other direction too: when people on the job say 「デフォルト」 and 「ポイント」, write those, not 「既定」 and 「要点」. The same holds in articles for general readers: 「バージョン」 and 「チェック」, which television and newspapers use, stay as they are rather than becoming 「版」 and 「点検」. Phrases where the Sino-Japanese form is itself established, such as 「修正版」 or 「設備の点検」, stay. Use the Sino-Japanese word where it is the formal name, as in a setting name or a term from a standard.
 
 ## Source
 
