@@ -271,6 +271,7 @@ thresholds are in `references/patterns.md`):
 | `bold-density` | 2 | `article` and `narrative` only: three or more bold spans in body text, at three or more per 1,000 characters |
 | `bullet-ratio` | 2 | `article` and `narrative` only: bullets are 16% or more of a text of 500 characters or more |
 | `rhythm-mismatch` | 2 | With `--voice`: the draft's mean sentence length is below 0.75 times the sample's, or its share of connective sentences is 20 points or more lower |
+| `count-repeat` | 2 | Counts announced three or more times (「三つの問い」「五つの項目」「次の四つから」); one preview up front is fine |
 | `negation-closer` | 2 | Two or more sentences end in 「〜ではない」「〜わけではない」「〜とは限らない」, at one or more per 1,000 characters |
 | `section-closer-repeat` | 2, with a question | Three or more sections end on the same form (「必要がある」「〜したい」「ことになる」「注意」) |
 | `comparison-without-consequence` | 2, with a question | A section headed 「A と B の違い／比較／使い分け／選び方」 or 「A か B か」 (noun phrases, no question word) names no language, speed, cost, effort, constraint, operation, safety, compatibility or fit in its text, bullets or subsections |
@@ -336,7 +337,7 @@ The full catalog with examples is `references/patterns.md`. The tiers:
   implementation-log residue in a PR or Issue body (review rounds, test
   counts, coverage values).
 - **Tier 2, strong Japanese fingerprints**: label-plus-colon bullets, forced
-  triads, 「することができます」, summary sections and expectation closers,
+  triads, repeated count announcements, 「することができます」, summary sections and expectation closers,
   template openers, stock evaluative phrases, empty adverbs, over-explicit
   subjects, uniform endings, mechanical connectives, contrast as weighting,
   headings written as sentences, calqued phrasing, three or more distinct

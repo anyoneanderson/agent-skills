@@ -312,6 +312,14 @@ expect_tier triad-short "$out" 2 triad
 out="$(check_text triad-long argument '理由は3つあります。' '要点は3つです。' "$(repeat 110 '設定ファイルの値を読み取って画面に出します。')")"
 expect_no_id triad-long "$out" triad
 
+# count-repeat: one count announced up front is fine; three announcements re-sort the text again and again.
+out="$(check_text count-once argument '要点は次の三つだ。' '一覧を作る。' '本番データを伏せる。' '委託先に渡す項目を減らす。')"
+expect_no_id count-once "$out" count-repeat
+out="$(check_text count-repeat argument '会社に当てはめると三つの問いになる。' '一覧に載せる五つの項目を書く。' '更新できない理由を四つに分ける。')"
+expect_id count-repeat "$out" count-repeat 2
+out="$(check_text count-quoted argument '「三つの問い」「五つの項目」「次の四つから」のような書き方を数える。')"
+expect_no_id count-quoted "$out" count-repeat
+
 # uniform-length: Tier 3, and a URL does not count toward a sentence's length.
 uniform=()
 for n in 1 2 3 4 5 6 7 8; do uniform+=("設定ファイル${n}の値を読み取って画面に出します。"); done
