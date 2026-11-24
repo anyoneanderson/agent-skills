@@ -317,6 +317,8 @@ out="$(check_text count-once argument '要点は次の三つだ。' '一覧を�
 expect_no_id count-once "$out" count-repeat
 out="$(check_text count-repeat argument '会社に当てはめると三つの問いになる。' '一覧に載せる五つの項目を書く。' '更新できない理由を四つに分ける。')"
 expect_id count-repeat "$out" count-repeat 2
+out="$(check_text count-quoted argument '「三つの問い」「五つの項目」「次の四つから」のような書き方を数える。')"
+expect_no_id count-quoted "$out" count-repeat
 
 # uniform-length: Tier 3, and a URL does not count toward a sentence's length.
 uniform=()

@@ -75,6 +75,7 @@ const BULLET_RATIO = 0.16;
 const BULLET_MIN_CHARS = 500;
 const TRIAD_PER_1000 = 1.0;
 // A count announced once up front is a normal way to preview points; three or more announcements re-sort the text again and again.
+// Quoted phrases (「三つの問い」) are being discussed, not announced, so they are not counted.
 const COUNT_REPEAT_MIN = 3;
 // The whole heading, once its number and decoration are removed. 「リクエストをまとめて送信する」 is not one.
 const SUMMARY_HEADING = /^(?:まとめ|おわりに)$/u;
@@ -489,7 +490,7 @@ export function analyzeText(text, { source = "text", mode = "argument", lang = "
   const triadRate = wholeChars === 0 ? 0 : (triads / wholeChars) * 1000;
   if (triads >= 2 && triadRate >= TRIAD_PER_1000) push(2, "triad", 1, `"three" used ${triads} times as a structuring device (${triadRate.toFixed(1)} per 1,000 characters)`);
   const countLines = [];
-  for (const { line, text } of prose) for (const m of text.matchAll(COUNT_ANNOUNCE)) countLines.push(`${m[0]}@${line}`);
+  for (const { line, text } of prose) for (const m of text.replace(/「[^」]*」/gu, "").matchAll(COUNT_ANNOUNCE)) countLines.push(`${m[0]}@${line}`);
   if (countLines.length >= COUNT_REPEAT_MIN) push(2, "count-repeat", Number(countLines[1].split("@")[1]), `counts announced ${countLines.length} times (${countLines.join(", ")}); keep one up front and name the items elsewhere`);
 
   // Vocabulary that spread by 2026: one word proves nothing, so report only when several distinct words appear.
