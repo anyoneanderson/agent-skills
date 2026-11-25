@@ -1,6 +1,6 @@
 # AI Tells in Japanese (Tiered Pattern Catalog)
 
-The list of patterns ja-humanizer uses when rewriting and checking. When the skill body or the checker disagrees with it, this table wins. The tier decides what to do on a single sighting.
+The list of patterns ja-humanizer uses when writing, rewriting and checking. When the skill body or the checker disagrees with it, this table wins. The tier decides what to do on a single sighting.
 
 - Tier 1: fix on one sighting. These are the things the writer fixes every time in their own text.
 - Tier 2: strong fingerprints specific to AI-written Japanese. One sighting may be fixed, but keep the form if the writer's voice sample uses it.
@@ -8,13 +8,15 @@ The list of patterns ja-humanizer uses when rewriting and checking. When the ski
 
 Each pattern lists how to detect it, how to fix it, and an example. The "before" in each example is an AI draft; the "after" is the writer's own rewrite.
 
+Before drafting, read [wording.md](wording.md) for usage distinctions, grounded alternatives and exceptions. These choices apply during generation as well as review. They are separate from the evidence-backed density list in `scripts/vocabulary.json`; a local preference is not frequency evidence.
+
 ## Tier 1 (fix on one sighting)
 
 ### Thin sentences
 
 Detect: an item ends in an evaluative word such as 「削減」「向上」「改善」「柔軟」「迅速」 and never says what becomes unnecessary, what it was like before, or why it happens. The facts a reader needs to decide the next action (what was done, which one, why it happens, who does it where, when it ends) are missing.
 
-Fix: the skill never adds facts. Return the missing fact as a question to the writer, and rewrite after the answer arrives. If no answer comes, delete the sentence that consists only of evaluative words.
+Fix: a concrete action or change can establish a benefit without a number; do not ask for a measurement just to fill a template. The skill never adds facts. Return the missing fact as a question to the writer, and rewrite after the answer arrives. If no answer comes, delete the sentence that consists only of evaluative words.
 
 Example:
 
@@ -26,7 +28,7 @@ Example:
 
 Detect: verbs that avoid saying what the process actually is. Metaphorical verbs: 「閉じる」「配る」「動く」「切り替わる」「揃う」「効く」「刺さる」「乗る」「噛ませる」「倒す」. Stiff predicates: 「実現する」「可能にする」「提供する」「機能する」「担う」「果たす」「寄与する」「担保する」「整備する」「明確化する」. Nominalized verbs (「〜の向上」「〜の実現」「〜の可視化」) count too.
 
-Fix: replace with a verb that says who does what to what. Use operations a program or a person actually performs: stop, permit, send, store, compare, reject.
+Fix: use the actor, action and object established by the material. Use operations a program or a person actually performs: stop, permit, send, store, compare, reject. Do not invent an actor or operation to make a metaphor concrete. Preserve literal uses and defined terms; see [wording.md](wording.md) for boundaries and examples.
 
 Example:
 
@@ -112,14 +114,14 @@ One sighting may be fixed. Keep the form if the writer's voice sample uses it. I
 | Summary section and expectation closers | A 「まとめ」 or 「おわりに」 heading that restates the body; endings in 「〜が期待されます」「今後の展開が注目されます」「〜と言えるでしょう」 | Delete the summary section; end on the last concrete fact. Keep the heading when the publishing venue requires it |
 | Template openers | 「近年、〜が注目されています」「本記事では〜を解説します」「〜をご存じでしょうか」 | Delete the opener and start with the point |
 | Stock evaluative phrases | 「浮き彫りにしており」「重要な示唆を与えている」「注目に値する」「画期的な」「多面的な」「包括的な」 | Write concretely what was seen and why it drew attention |
-| Empty adverbs | 「静かに」「確実に」「大きく」「本質的に」「シンプルに」「適切に」「柔軟に」「明確に」 | Delete. If something must remain, replace with a number or a condition |
+| Empty adverbs | 「静かに」「確実に」「大きく」「本質的に」「シンプルに」「適切に」「柔軟に」「明確に」 | Remove empty emphasis. Preserve a supported degree or condition; use supplied facts, not invented numbers. Do not remove lack of awareness or uncertainty carried by the phrase |
 | Over-explicit subjects | Every sentence opens with 「このツールは」「この記事では」「私は」 | Write the subject once when it repeats |
 | Uniform endings and sentence length | 「です」「ます」「できます」 three or more in a row | Review in context; preserve a natural sequence. Do not force fragments or inversions to vary endings. Match the writer's sample when provided |
 | Mechanical connectives | 「まず」「次に」「最後に」「そのうえで」「あわせて」「なお」 placed in every paragraph | Keep only words that show a logical relation; delete those that only show order |
 | Contrast as weighting | 「A ではなく B」「A だけでなく B」 where nobody claimed A | Keep only when it corrects a belief the reader actually holds; otherwise write B directly |
 | Translation-flavored function words | 「〜において」「〜の観点から」「〜という側面から」 | Delete or rewrite as a concrete condition |
 | Headings as sentences | A heading written as a sentence, 「同じ週に、Google と Anthropic も同じ方向へ動いた」 | Make it a noun phrase (「Google と Anthropic も同様の方針へ」) |
-| Calqued phrasing | English phrasing set down as is: 「静かに壊れる」 and 「黙って壊れる」 (silently break), 「黙って無視される」 (silently ignored), 「デプロイした瞬間」 (the moment). 「黙って」 matches when a passive follows, or one of 壊れる, 落ちる, 止まる, 失敗する, 消える, 捨てる, 無視する, 上書きする. A person's action such as 「黙って聞く」 is not matched | Write what happens: 「エラーを出さずに古い値を返す」「警告なしで読み飛ばす」「デプロイの直後に」 |
+| Calqued phrasing | English phrasing set down as is: 「静かに壊れる」 and 「黙って壊れる」 (silently break), 「黙って無視される」 (silently ignored), 「デプロイした瞬間」 (the moment). 「黙って」 matches when a passive follows, or one of 壊れる, 落ちる, 止まる, 失敗する, 消える, 捨てる, 無視する, 上書きする. A person's action such as 「黙って聞く」 is not matched | Write the supplied behavior. 「エラーを出さずに」 or 「警告なしで」 requires evidence about errors or warnings; lack of awareness alone does not establish either. Preserve breadth and uncertainty; use 「デプロイの直後に」 only for the same timing. See [wording.md](wording.md) |
 | Density of vocabulary that spread by 2026 | Three or more distinct words from `references/scripts/vocabulary.json` (実測, 土台, 落とし穴, 切り分ける, 定石, 効く, 正本 and others) in one text. One word alone is not reported. Compounds such as 「境界値」「既定値」 and 「事故」 in an incident report are not counted | Review the listed words. Replace a metaphor with the name of the thing or the operation, and an evaluation with the fact behind it. Keep a word where it is the formal term |
 | Two or more dashes | Clauses joined with 「—」「―」「——」. An en dash for a range and a dash between digits are not counted | Break with a comma or a full stop. Put an aside in parentheses or in its own sentence |
 | Bold density | In articles and narratives, three or more bold spans in body text that also make three or more per 1,000 characters | Keep bold for a first definition and for a fact that changes the reader's decision |
@@ -195,3 +197,5 @@ Calqued phrasing, vocabulary density, dashes, bold density, bullet ratio, the �
 Denial closers, repeated section closers, the comparison without its consequence and rhythm away from the sample come from comparing one explanatory article written by AI with the paragraph its writer rewrote. That is a single pair, so they are candidates; the thresholds are to be revisited when the next edit yields another pair.
 
 The vocabulary list lives in `references/scripts/vocabulary.json` with the word, its category, when it was observed, the share of articles before AI and in 2026, and the source. A word is added only with a source that shows its frequency before and after, or with the writer's own editing record.
+
+Usage-based alternatives and exceptions added for generation draw on yomiyasu v3.4.1 (MIT). Source links and the license notice are in [wording.md](wording.md). They are editorial guidance, not new authorship evidence or additions to the frequency-based vocabulary list.

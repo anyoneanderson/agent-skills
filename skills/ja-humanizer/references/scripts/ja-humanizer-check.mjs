@@ -21,6 +21,7 @@
 //
 // Usage:
 //   node ja-humanizer-check.mjs [--json] [--warn] [--mode article|mail|argument|narrative] [--voice SAMPLE] FILE...
+//   node ja-humanizer-check.mjs --doc-type manual --word-list words.json draft.md
 //   cat text.md | node ja-humanizer-check.mjs [--json] [--warn]
 // Exit: 0 = no Tier 1 finding (or --warn) | 1 = Tier 1 finding present | 2 = usage error
 
@@ -241,7 +242,7 @@ export function lintText(text, options = {}) {
 
 // Splits a text into prose lines, skipping frontmatter, fenced code, tables and disabled lines.
 // kind: heading | bullet | quote | other | body.
-function collectProse(text) {
+function collectProse(text, { protectedSpansMasked = false } = {}) {
   const lines = String(text).split(/\r?\n/u);
   let fenced = false;
   let inFrontmatter = false;
@@ -258,11 +259,11 @@ function collectProse(text) {
     if (trimmed) inList = isBullet;
     if (index === 0 && trimmed === "---") { inFrontmatter = true; return; }
     if (inFrontmatter) { if (trimmed === "---") inFrontmatter = false; return; }
-    if (/^(```|~~~)/u.test(trimmed)) { fenced = !fenced; return; }
+    if (!protectedSpansMasked && /^(```|~~~)/u.test(trimmed)) { fenced = !fenced; return; }
     if (fenced) return;
     if (DISABLE_NEXT_LINE.test(raw)) { disableNext = true; return; }
     if (disableNext) { disableNext = false; return; }
-    const cleaned = stripInlineCode(raw).replace(/<!--.*?-->/gu, "").trim();
+    const cleaned = (protectedSpansMasked ? raw : stripInlineCode(raw)).replace(/<!--.*?-->/gu, "").trim();
     if (!cleaned) return;
     if (/^\|.*\|$/u.test(cleaned)) return;
     let kind = "body";
@@ -340,14 +341,141 @@ export function readVoice(text) {
   return rhythmOf(rhythmSentences(entries));
 }
 
+// Document types refine stylistic candidates only; none disables a factual/logic rule.
+export const DOCUMENT_TYPES = ["pr", "spec", "incident", "minutes", "article", "proposal", "slides", "mail", "manual"];
+const STRUCTURED_STYLE = ["label-colon", "uniform-endings", "uniform-length", "bullet-ratio"];
+const DOCUMENT_SKIPS = {
+  spec: STRUCTURED_STYLE,
+  minutes: STRUCTURED_STYLE,
+  manual: STRUCTURED_STYLE,
+  slides: [...STRUCTURED_STYLE, "copy-fragments", "heading-sentence", "rhythm-mismatch"],
+  mail: ["uniform-endings"],
+};
+
+export function validateWordList(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("word list must be an object");
+  if (Object.keys(value).some((key) => !["allow", "flag"].includes(key))) throw new Error("word list accepts only allow and flag");
+  const result = {};
+  for (const key of ["allow", "flag"]) {
+    const words = value[key] ?? [];
+    if ((key in value && value[key] == null) || !Array.isArray(words) || words.some((word) => typeof word !== "string" || !word.trim() || /[\r\n]/u.test(word))) {
+      throw new Error(`word list ${key} must contain nonempty single-line literal strings`);
+    }
+    result[key] = [...new Set(words)];
+  }
+  return result;
+}
+
+// Keep newline and UTF-16 offsets while hiding protected spans. Only the new wording rules use
+// this view; historical findings and rhythm measurements retain their existing preprocessing.
+const maskWording = (text) => text.replace(/[^\r\n]/gu, (character) => " ".repeat(character.length));
+
+function protectedWording(text) {
+  let fence = null;
+  let frontmatter = false;
+  // Block code is hidden before scanning inline delimiters, so backticks in code cannot pair
+  // with backticks in prose. A backtick fence cannot have a backtick in its info string.
+  let masked = String(text).split(/(?<=\n)/u).map((line, index) => {
+    if (index === 0 && line.trim() === "---") { frontmatter = true; return maskWording(line); }
+    if (frontmatter) {
+      if (line.trim() === "---") frontmatter = false;
+      return maskWording(line);
+    }
+    if (fence) {
+      const closing = new RegExp(`^ {0,3}${fence.character}{${fence.length},}[ \t]*(?:\r?\n)?$`, "u");
+      if (closing.test(line)) fence = null;
+      return maskWording(line);
+    }
+    const opening = /^ {0,3}(`{3,})([^`\r\n]*)(?:\r?\n)?$|^ {0,3}(~{3,})[^\r\n]*(?:\r?\n)?$/u.exec(line);
+    if (opening) {
+      const delimiter = opening[1] ?? opening[3];
+      fence = { character: delimiter[0], length: delimiter.length };
+      return maskWording(line);
+    }
+    return line;
+  }).join("");
+  const runs = [...masked.matchAll(/`+/gu)];
+  const spans = [];
+  for (let i = 0; i < runs.length; i += 1) {
+    const opening = runs[i];
+    const before = masked.slice(0, opening.index);
+    if ((before.match(/\\+$/u)?.[0].length ?? 0) % 2 === 1) continue;
+    let close = i + 1;
+    while (close < runs.length && runs[close][0].length !== opening[0].length) close += 1;
+    if (close === runs.length) continue; // An unmatched run is literal prose, not protected code.
+    const end = runs[close].index + runs[close][0].length;
+    spans.push([opening.index, end]);
+    i = close;
+  }
+  for (let i = spans.length - 1; i >= 0; i -= 1) {
+    const [start, end] = spans[i];
+    masked = masked.slice(0, start) + maskWording(masked.slice(start, end)) + masked.slice(end);
+  }
+  return masked.replace(/「[^」]*」|『[^』]*』|“[^”]*”|"[^"\r\n]*"|'[^'\r\n]*'/gu, maskWording);
+}
+
+function allowedSpan(text, start, end, allow) {
+  return allow.some((word) => {
+    for (let at = text.indexOf(word); at >= 0; at = text.indexOf(word, at + 1)) {
+      if (at < end && at + word.length > start) return true;
+    }
+    return false;
+  });
+}
+
+function wordingCandidates(prose, rawLines, wordList, push) {
+  for (const { line, text, kind } of prose) {
+    if (kind === "quote" || kind === "other") continue;
+    const wording = shownText(rawLines[line - 1].replace(/<!--.*?-->/gu, maskWording).trim());
+    const report = (id, match, message, offset = 0) => {
+      const start = offset + match.index;
+      const end = start + match[0].length;
+      if (!allowedSpan(wording, start, end, wordList.allow)) {
+        push(2, id, line, message, { matched: match[0] });
+      }
+    };
+    for (const word of wordList.flag) {
+      for (let at = wording.indexOf(word); at >= 0; at = wording.indexOf(word, at + word.length)) {
+        report("project-word", { 0: word, index: at }, `project wording candidate: ${word}; check the intended usage`);
+      }
+    }
+    if (kind === "heading") {
+      const match = /[^\s:：]+とは[:：]\s*\S/u.exec(wording);
+      if (match) report("heading-colon", match, "definition-style colon in heading; name the topic directly when appropriate");
+    }
+    let offset = 0;
+    for (const part of wording.split(/(?<=[。！？!?])/u)) {
+      // Require a software object immediately before the predicate. Physical breakage and idioms stay.
+      const broken = /(?:データ|設定|システム|ソフトウェア|アプリ|コード|スキーマ|互換性)(?:が|は)(?:静かに|黙って)?壊れ(?:る|ます|た|て|ない|なく|そう|まし)/gu;
+      for (const match of part.matchAll(broken)) report("vague-breakage", match, "software breakage is underspecified; describe only the behavior established by the material", offset);
+      for (const match of part.matchAll(/地味に効(?:く|き|い)/gu)) report("vague-effect", match, "vague effect; name the supported change without adding a measurement", offset);
+      const opener = /^\s*(?:[-*+]\s+)?もちろん[、,]/u.exec(part);
+      if (opener) report("obvious-opener", opener, "of-course opener; keep only if the surrounding argument needs the concession", offset);
+      const fragment = /^\s*[^。、！？!?]{1,18}を、[^。、！？!?]{1,18}へ[。！!]\s*$/u.exec(part);
+      if (fragment) report("copy-fragments", fragment, "split slogan-like phrase; use a sentence when the document needs an explanation", offset);
+      offset += part.length;
+    }
+    // A deliberately narrow pattern: three short evaluative adjectives, not every short sentence.
+    const adjectives = /(?:^|[。！？!?]\s*)((?:(?:速い|早い|軽い|安い|強い|簡単|便利)[。！!]\s*){3,})/gu;
+    for (const match of wording.matchAll(adjectives)) report("copy-fragments", match, "three short evaluative fragments; explain the supported benefit");
+  }
+}
+
 // Returns the findings and the counts behind the summary line (sentences and commas in body text).
-export function analyzeText(text, { source = "text", mode = "argument", lang = "ja", voice = null } = {}) {
+export function analyzeText(text, { source = "text", mode = "argument", lang = "ja", voice = null, docType = null, wordList = {} } = {}) {
+  if (docType !== null && !DOCUMENT_TYPES.includes(docType)) throw new Error(`unknown document type: ${docType}`);
+  const words = validateWordList(wordList);
+  const skipped = new Set(DOCUMENT_SKIPS[docType] ?? []);
   const findings = [];
   const prose = collectProse(text);
   const push = (tier, id, line, message, extra = {}) => {
+    if (tier !== 1 && skipped.has(id)) return;
     findings.push({ tier, id, source, line, message, ...extra });
   };
   const question = (id) => (QUESTIONS[id] ? QUESTIONS[id][lang === "en" ? "en" : "ja"] : undefined);
+
+  const wordingText = protectedWording(text);
+  wordingCandidates(collectProse(wordingText, { protectedSpansMasked: true }), wordingText.split(/\r?\n/u), words, push);
 
   // Line-level patterns.
   for (const { line, text } of prose) {
@@ -631,6 +759,20 @@ async function readStdin() {
 
 async function main() {
   const args = process.argv.slice(2);
+  const switches = new Set(["--json", "--warn"]);
+  const valued = new Set(["--mode", "--lang", "--voice", "--doc-type", "--word-list"]);
+  for (let i = 0; i < args.length; i += 1) {
+    if (valued.has(args[i])) {
+      if (!args[i + 1] || args[i + 1].startsWith("--")) {
+        process.stderr.write(`JA_HUMANIZER_CHECK_USAGE\t${args[i]} requires a value\n`);
+        process.exit(2);
+      }
+      i += 1;
+    } else if (args[i].startsWith("--") && !switches.has(args[i])) {
+      process.stderr.write(`JA_HUMANIZER_CHECK_USAGE\tunknown option: ${args[i]}\n`);
+      process.exit(2);
+    }
+  }
   const json = args.includes("--json");
   const warn = args.includes("--warn");
   const modeIndex = args.indexOf("--mode");
@@ -640,6 +782,22 @@ async function main() {
   if (!["article", "mail", "argument", "narrative"].includes(mode)) {
     process.stderr.write("JA_HUMANIZER_CHECK_USAGE\t--mode must be article|mail|argument|narrative\n");
     process.exit(2);
+  }
+  const docIndex = args.indexOf("--doc-type");
+  const docType = docIndex >= 0 ? args[docIndex + 1] : null;
+  if (docType !== null && !DOCUMENT_TYPES.includes(docType)) {
+    process.stderr.write(`JA_HUMANIZER_CHECK_USAGE\t--doc-type must be ${DOCUMENT_TYPES.join("|")}\n`);
+    process.exit(2);
+  }
+  const wordIndex = args.indexOf("--word-list");
+  let wordList = {};
+  if (wordIndex >= 0) {
+    try {
+      wordList = validateWordList(JSON.parse(await readFile(args[wordIndex + 1] ?? "", "utf8")));
+    } catch (error) {
+      process.stderr.write(`JA_HUMANIZER_CHECK_USAGE\t--word-list needs a readable valid JSON word list (${error.code ?? error.message})\n`);
+      process.exit(2);
+    }
   }
   const voiceIndex = args.indexOf("--voice");
   let voice = null;
@@ -651,7 +809,7 @@ async function main() {
       process.exit(2);
     }
   }
-  const skip = new Set([modeIndex >= 0 ? modeIndex + 1 : -1, langIndex >= 0 ? langIndex + 1 : -1, voiceIndex >= 0 ? voiceIndex + 1 : -1]);
+  const skip = new Set([modeIndex >= 0 ? modeIndex + 1 : -1, langIndex >= 0 ? langIndex + 1 : -1, voiceIndex >= 0 ? voiceIndex + 1 : -1, docIndex >= 0 ? docIndex + 1 : -1, wordIndex >= 0 ? wordIndex + 1 : -1]);
   const files = args.filter((a, i) => !a.startsWith("--") && !skip.has(i));
   const findings = [];
   const stats = { sentences: 0, commas: 0, rhythmSentences: [] };
@@ -662,10 +820,10 @@ async function main() {
     stats.rhythmSentences.push(...result.stats.rhythmSentences);
   };
   if (files.length === 0) {
-    collect(analyzeText(await readStdin(), { source: "stdin", mode, lang, voice }));
+    collect(analyzeText(await readStdin(), { source: "stdin", mode, lang, voice, docType, wordList }));
   } else {
     for (const file of files) {
-      collect(analyzeText(await readFile(file, "utf8"), { source: file, mode, lang, voice }));
+      collect(analyzeText(await readFile(file, "utf8"), { source: file, mode, lang, voice, docType, wordList }));
     }
   }
   const commasPerSentence = stats.sentences === 0 ? 0 : Number((stats.commas / stats.sentences).toFixed(2));

@@ -517,6 +517,12 @@ expect_id comparison-url "$out" comparison-without-consequence 1
 node "$CHECKER" --lang en "$TMP_ROOT/comparison-hit.md" > "$TMP_ROOT/comparison-en.out" 2>&1 || true
 grep -Eq "change in the reader's choice" "$TMP_ROOT/comparison-en.out" && pass "comparison: English question" || fail "comparison: English question"
 
+if node "$TEST_DIR/generation-tests.mjs"; then
+  pass "generation wording and document profiles"
+else
+  fail "generation wording and document profiles"
+fi
+
 # Mutant: a checker that never sees a chained request must be caught by mail3-before.
 mutant="$TMP_ROOT/mutant.mjs"
 sed 's/if (refersToQuestion \&\& !isPrecondition) push(1, "chained-request"/if (false) push(1, "chained-request"/' "$CHECKER" > "$mutant"
