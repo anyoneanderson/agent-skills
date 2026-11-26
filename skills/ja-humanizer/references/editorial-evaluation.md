@@ -63,3 +63,7 @@ AI 臭を消す作業の実体は、言い回しの置き換えもですが、�
 Evaluation criteria: narrow the first claim to what an editing example can support; describe missing information directly. In the second, explain which wording follows the sample and which contradictions or missing explanations need correction. Do not preserve these sentences merely because they were once labeled after-text. An exact target sentence or zero detector findings is not the acceptance criterion.
 
 If a writer rejects a metaphor such as 「空振り」, record that preference for that writer and context. Do not infer that the word is absent from Japanese or always indicates a particular model. Contextual review can address an unclear metaphor without adding a blanket detector.
+
+## Generation-first evaluation
+
+When changing generation guidance, use [generation evaluation](generation-evaluation.md) in addition to these revision cases. It includes matched material-to-prose prompts and recorded limitations.
