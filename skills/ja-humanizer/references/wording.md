@@ -10,6 +10,8 @@ Read this catalog before writing or rewriting Japanese, together with the norms 
 4. Keep literal uses, quotations, titles, names, identifiers, discussed phrases and established technical terms. The writer's approved voice still determines vocabulary and rhythm; a current explicit preference overrides an older sample. Neither a sample nor a word list supplies facts about the topic.
 5. Judge the sentence again in its paragraph. Preserve negation, scope, timing, permission, obligation, confidence and who acts on whom. No new cause or consequence may be added to make a replacement sound convincing.
 
+These limits apply to replacing a word or phrase. They do not forbid the writer's own reasoning in `argument` mode: an inference that follows from the supplied facts may be written as the writer's inference.
+
 ## Metaphors and Their Referents
 
 The replacement column is conditional on the stated material. It is not a search-and-replace table.

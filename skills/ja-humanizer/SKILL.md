@@ -164,9 +164,10 @@ Rules for samples:
 
 Decide the job (write / rewrite / check), the mode, the input form (pasted
 text, a file path, or an embedded call from another skill) and the output
-contract the caller wants (see Output Contracts). Record the mode, document type,
-voice file and any wording preferences internally. Tell the user only when a
-material ambiguity needs a decision or when they ask to see the process.
+contract the caller wants (see Output Contracts). Record the decision in one
+line before doing anything else, so the user can correct it. Include the text
+kind, the document type and the voice file chosen for it, for example
+`write / argument / pr / voice: ~/.agents/voice/pr.md`.
 
 ### Step 2: Load references
 
@@ -185,7 +186,7 @@ material ambiguity needs a decision or when they ask to see the process.
 
 ### Step 3: Write (write job)
 
-1. Note internally who the reader is and what they should be able to decide or do after
+1. State who the reader is and what they should be able to decide or do after
    reading. Keep only what serves that. When the request gives no length, do
    not add sections that are in neither the request nor the material
    (background, cautions, future outlook, summary).
